@@ -1,0 +1,319 @@
+﻿//! M1 spike harness â€” answers S1, S2 and S6 against a live Steam client.
+//!
+//! ```powershell
+//! cargo run -p sgdb-core --example cdp_probe            # probe only
+//! cargo run -p sgdb-core --example cdp_probe -- --status # no connection, just report state
+//! ```
+//!
+//! **Read-only.** This never creates the sentinel, never restarts Steam, and never calls a
+//! `Set*` API. It reports what is reachable; enabling anything is a separate, explicit act.
+//!
+//! Everything here is destined for `sgdb-core::cdp`, so it is written to be promoted rather
+//! than thrown away: the target-selection rules and the "is this actually Steam" check below
+//! are the real ones.
+
+use std::io::{Read, Write};
+use std::net::TcpStream;
+use std::time::Duration;
+
+const DEBUG_HOST: &str = "127.0.0.1";
+const DEBUG_PORT: u16 = 8080;
+
+fn main() {
+    let status_only = std::env::args().any(|a| a == "--status");
+
+    println!("== environment ==");
+    let steam_path = steam_path();
+    match &steam_path {
+        Some(p) => println!("  steam root      : {p}"),
+        None => println!("  steam root      : NOT FOUND"),
+    }
+
+    let sentinel = steam_path
+        .as_ref()
+        .map(|p| std::path::Path::new(p).join(".cef-enable-remote-debugging"));
+    match &sentinel {
+        Some(s) => println!(
+            "  sentinel        : {} ({})",
+            if s.exists() { "present" } else { "ABSENT" },
+            s.display()
+        ),
+        None => println!("  sentinel        : unknown (no steam root)"),
+    }
+
+    let port_open = TcpStream::connect_timeout(
+        &format!("{DEBUG_HOST}:{DEBUG_PORT}").parse().unwrap_or_else(|_| unreachable!()),
+        Duration::from_millis(500),
+    )
+    .is_ok();
+    println!("  port {DEBUG_PORT}        : {}", if port_open { "open" } else { "closed" });
+
+    if !port_open {
+        println!("\nCEF debugging is not active. To enable it:");
+        println!("  1. create an empty file `.cef-enable-remote-debugging` in the Steam root");
+        println!("  2. fully restart Steam (`steam.exe -shutdown`, wait for exit, relaunch)");
+        return;
+    }
+    if status_only {
+        return;
+    }
+
+    println!("\n== targets ==");
+    let targets_json = match http_get(&format!("http://{DEBUG_HOST}:{DEBUG_PORT}/json")) {
+        Ok(body) => body,
+        Err(e) => {
+            println!("  failed to list targets: {e}");
+            return;
+        }
+    };
+
+    let targets: Vec<serde_json::Value> = match serde_json::from_str(&targets_json) {
+        Ok(t) => t,
+        Err(e) => {
+            println!("  /json was not a JSON array: {e}");
+            println!("  Something other than Steam is listening on {DEBUG_PORT}. Not injecting.");
+            return;
+        }
+    };
+
+    for t in &targets {
+        println!(
+            "  [{}] {}  {}",
+            t.get("type").and_then(|v| v.as_str()).unwrap_or("?"),
+            t.get("title").and_then(|v| v.as_str()).unwrap_or("<untitled>"),
+            t.get("url").and_then(|v| v.as_str()).unwrap_or(""),
+        );
+    }
+
+    let Some(shared) = pick_shared_js_context(&targets) else {
+        println!("\n  no SharedJSContext target found â€” is this really Steam on {DEBUG_PORT}?");
+        return;
+    };
+    let Some(ws_url) = shared.get("webSocketDebuggerUrl").and_then(|v| v.as_str()) else {
+        println!("\n  SharedJSContext has no webSocketDebuggerUrl");
+        return;
+    };
+
+    println!("\n== probing SharedJSContext ==");
+    println!("  {ws_url}");
+
+    match run_probe(ws_url) {
+        Ok(result) => {
+            println!("\n== results ==");
+            match serde_json::to_string_pretty(&result) {
+                Ok(s) => println!("{s}"),
+                Err(e) => println!("  (could not format result: {e})"),
+            }
+        }
+        Err(e) => println!("\n  probe failed: {e}"),
+    }
+}
+
+/// Target selection, in the order `sgdb-core::cdp` will use it.
+///
+/// The exact-title match is first because it is unambiguous; the fallbacks cover title
+/// changes across Steam builds. If none match we refuse rather than guess â€” evaluating
+/// arbitrary JS against whatever happens to be on port 8080 would be reckless, and 8080 is a
+/// very common dev-server port.
+fn pick_shared_js_context(targets: &[serde_json::Value]) -> Option<&serde_json::Value> {
+    let title = |t: &serde_json::Value| {
+        t.get("title").and_then(|v| v.as_str()).unwrap_or_default().to_string()
+    };
+    let url = |t: &serde_json::Value| {
+        t.get("url").and_then(|v| v.as_str()).unwrap_or_default().to_lowercase()
+    };
+
+    targets
+        .iter()
+        .find(|t| title(t) == "SharedJSContext")
+        .or_else(|| targets.iter().find(|t| url(t).contains("sharedjscontext")))
+        .or_else(|| {
+            targets.iter().find(|t| {
+                t.get("type").and_then(|v| v.as_str()) == Some("page")
+                    && url(t).contains("steamloopback.host")
+            })
+        })
+}
+
+fn run_probe(ws_url: &str) -> Result<serde_json::Value, String> {
+    let (mut socket, _) =
+        tungstenite::connect(ws_url).map_err(|e| format!("websocket connect: {e}"))?;
+
+    let args: Vec<String> = std::env::args().collect();
+    let probe_js = if args.iter().any(|a| a == "--probe10") {
+        include_str!("probe10.js")
+    } else if args.iter().any(|a| a == "--probe9") {
+        include_str!("probe9.js")
+    } else if args.iter().any(|a| a == "--probe8") {
+        include_str!("probe8.js")
+    } else if args.iter().any(|a| a == "--probe7") {
+        include_str!("probe7.js")
+    } else if args.iter().any(|a| a == "--probe6") {
+        include_str!("probe6.js")
+    } else if args.iter().any(|a| a == "--probe5") {
+        include_str!("probe5.js")
+    } else if args.iter().any(|a| a == "--probe4") {
+        include_str!("probe4.js")
+    } else if args.iter().any(|a| a == "--probe3") {
+        include_str!("probe3.js")
+    } else if args.iter().any(|a| a == "--probe2") {
+        include_str!("probe2.js")
+    } else {
+        include_str!("probe.js")
+    };
+
+    let evaluate = |id: u64, expr: &str| {
+        serde_json::json!({
+            "id": id,
+            "method": "Runtime.evaluate",
+            "params": {
+                "expression": expr,
+                "returnByValue": true,
+                "awaitPromise": true,
+                // The probe reads globals Steam defines; it must run in the page's own world.
+                "includeCommandLineAPI": false,
+            }
+        })
+        .to_string()
+    };
+
+    socket
+        .send(tungstenite::Message::Text(evaluate(1, probe_js).into()))
+        .map_err(|e| format!("send: {e}"))?;
+
+    let mut result = read_evaluate_result(&mut socket, 1)?;
+
+    // The image and fetch checks are asynchronous â€” give them a moment, then read the flags
+    // the probe parks on `window`.
+    let async_results = "JSON.stringify({\
+        sgdb: String(window.__sgdbProbeImage), \
+        control: String(window.__sgdbProbeControl), \
+        fetch: String(window.__sgdbProbeFetch)})";
+
+    std::thread::sleep(Duration::from_millis(2500));
+    socket
+        .send(tungstenite::Message::Text(evaluate(2, async_results).into()))
+        .map_err(|e| format!("send async check: {e}"))?;
+
+    if let Ok(v) = read_evaluate_result(&mut socket, 2)
+        && let Some(obj) = result.get_mut("sections").and_then(|s| s.get_mut("csp"))
+        && let Some(map) = obj.as_object_mut()
+    {
+        let parsed = v
+            .as_str()
+            .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+            .unwrap_or(v);
+        map.insert("asyncResults".into(), parsed);
+    }
+
+    let _ = socket.close(None);
+    Ok(result)
+}
+
+fn read_evaluate_result(
+    socket: &mut tungstenite::WebSocket<impl Read + Write>,
+    want_id: u64,
+) -> Result<serde_json::Value, String> {
+    // CDP interleaves events with responses; skip anything that isn't the reply we asked for.
+    for _ in 0..200 {
+        let msg = socket.read().map_err(|e| format!("read: {e}"))?;
+        let tungstenite::Message::Text(text) = msg else { continue };
+        let v: serde_json::Value =
+            serde_json::from_str(&text).map_err(|e| format!("bad frame: {e}"))?;
+
+        if v.get("id").and_then(|i| i.as_u64()) != Some(want_id) {
+            continue;
+        }
+        if let Some(err) = v.get("error") {
+            return Err(format!("CDP error: {err}"));
+        }
+        let res = v.get("result").and_then(|r| r.get("result"));
+        if let Some(thrown) = v.get("result").and_then(|r| r.get("exceptionDetails")) {
+            return Err(format!("probe threw: {thrown}"));
+        }
+        return Ok(res
+            .and_then(|r| r.get("value"))
+            .cloned()
+            .unwrap_or(serde_json::Value::Null));
+    }
+    Err("no matching response after 200 frames".into())
+}
+
+/// Minimal HTTP/1.1 GET. Loopback, plain HTTP, one small JSON body â€” a full HTTP client would
+/// be a heavier dependency than the task deserves.
+///
+/// **`Content-Length` is honoured rather than reading to EOF.** Steam's CEF DevTools HTTP
+/// server ignores `Connection: close` and holds the socket open after responding, so
+/// `read_to_end` blocks until the read timeout and the request looks like a connection
+/// failure even though the server answered immediately.
+/// `[VERIFIED-BOX 2026-07-27 â€” cost one confusing os error 10060]`
+fn http_get(url: &str) -> Result<String, String> {
+    let rest = url.strip_prefix("http://").ok_or("only http:// supported")?;
+    let (host_port, path) = match rest.find('/') {
+        Some(i) => (&rest[..i], &rest[i..]),
+        None => (rest, "/"),
+    };
+
+    let mut stream = TcpStream::connect(host_port).map_err(|e| format!("connect: {e}"))?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .map_err(|e| format!("set timeout: {e}"))?;
+    write!(
+        stream,
+        "GET {path} HTTP/1.1\r\nHost: {host_port}\r\nAccept: application/json\r\nConnection: close\r\n\r\n"
+    )
+    .map_err(|e| format!("write: {e}"))?;
+
+    // Read until the header terminator, then exactly `Content-Length` more bytes.
+    let mut buf = Vec::new();
+    let mut byte = [0u8; 1];
+    let header_end = loop {
+        let n = stream.read(&mut byte).map_err(|e| format!("read header: {e}"))?;
+        if n == 0 {
+            return Err("connection closed before headers completed".into());
+        }
+        buf.push(byte[0]);
+        if buf.len() >= 4 && &buf[buf.len() - 4..] == b"\r\n\r\n" {
+            break buf.len();
+        }
+        if buf.len() > 64 * 1024 {
+            return Err("header exceeded 64 KiB".into());
+        }
+    };
+
+    let headers = String::from_utf8_lossy(&buf[..header_end]).to_ascii_lowercase();
+    let content_length: usize = headers
+        .lines()
+        .find_map(|l| l.strip_prefix("content-length:"))
+        .and_then(|v| v.trim().parse().ok())
+        .ok_or("response had no Content-Length")?;
+
+    let mut body = vec![0u8; content_length];
+    stream.read_exact(&mut body).map_err(|e| format!("read body: {e}"))?;
+    String::from_utf8(body).map_err(|e| format!("body was not UTF-8: {e}"))
+}
+
+#[cfg(windows)]
+fn steam_path() -> Option<String> {
+    use winreg::RegKey;
+    use winreg::enums::HKEY_CURRENT_USER;
+
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let key = hkcu.open_subkey(r"Software\Valve\Steam").ok()?;
+    let raw: String = key.get_value("SteamPath").ok()?;
+    // HKCU stores this lowercased with forward slashes (`c:/program files (x86)/steam`).
+    // [VERIFIED-BOX 2026-07-27]
+    Some(raw.replace('/', "\\"))
+}
+
+#[cfg(not(windows))]
+fn steam_path() -> Option<String> {
+    None
+}
+
+
+
+
+
+
+

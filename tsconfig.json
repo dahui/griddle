@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "types": ["bun-types"],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": false,
+
+    "resolveJsonModule": true,
+    "allowJs": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "noEmit": true,
+
+    "baseUrl": ".",
+    "paths": {
+      "@sgdb/shared": ["packages/shared/src/index.ts"]
+    }
+  },
+  "include": ["packages/*/src/**/*", "apps/*/src/**/*", "apps/*/*.config.ts"]
+}

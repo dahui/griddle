@@ -1,0 +1,23 @@
+[package]
+name = "sgdb-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Desktop shell. Thin — all logic lives in sgdb-core."
+
+[dependencies]
+sgdb-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+# `protocol-asset` (for displaying locally cached art from disk) lands in M3, together with
+# the matching `assetProtocol` scope in tauri.conf.json. Tauri validates that the feature and
+# the config agree, so they must be added in the same change.
+tauri = { version = "2.11.5" }
+
+[lints]
+workspace = true
+
+[build-dependencies]
+tauri-build = "2.6.3"

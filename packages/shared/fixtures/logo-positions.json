@@ -1,0 +1,30 @@
+{
+  "_comment": [
+    "Golden table for logo position -> CSS percentages.",
+    "Consumed by BOTH the TypeScript tests (packages/shared/src/logo.test.ts) and the Rust",
+    "tests (crates/sgdb-core/src/logo.rs). The two implementations exist because the desktop",
+    "GUI and the Big Picture injection render in different runtimes; this file is what stops",
+    "them drifting apart. Add a case here before changing either implementation."
+  ],
+  "cases": [
+    { "pin": "UpperLeft", "w": 50, "h": 50, "top": 0, "left": 0 },
+    { "pin": "UpperLeft", "w": 100, "h": 100, "top": 0, "left": 0 },
+    { "pin": "UpperLeft", "w": 0.01, "h": 0.01, "top": 0, "left": 0 },
+
+    { "pin": "BottomLeft", "w": 50, "h": 50, "top": 50, "left": 0 },
+    { "pin": "BottomLeft", "w": 100, "h": 100, "top": 0, "left": 0 },
+    { "pin": "BottomLeft", "w": 25, "h": 20, "top": 80, "left": 0 },
+
+    { "pin": "UpperCenter", "w": 50, "h": 50, "top": 0, "left": 25 },
+    { "pin": "UpperCenter", "w": 100, "h": 40, "top": 0, "left": 0 },
+    { "pin": "UpperCenter", "w": 30, "h": 60, "top": 0, "left": 35 },
+
+    { "pin": "CenterCenter", "w": 50, "h": 50, "top": 25, "left": 25 },
+    { "pin": "CenterCenter", "w": 100, "h": 100, "top": 0, "left": 0 },
+    { "pin": "CenterCenter", "w": 40, "h": 20, "top": 40, "left": 30 },
+
+    { "pin": "BottomCenter", "w": 50, "h": 50, "top": 50, "left": 25 },
+    { "pin": "BottomCenter", "w": 60, "h": 80, "top": 20, "left": 20 },
+    { "pin": "BottomCenter", "w": 100, "h": 100, "top": 0, "left": 0 }
+  ]
+}

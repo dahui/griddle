@@ -1,0 +1,18 @@
+# Rust
+/target/
+
+# JS
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Tauri
+/crates/sgdb-app/gen/
+
+# Real Steam fixtures are NEVER committed — they contain home directory paths.
+# See crates/sgdb-core/tests/real_shortcuts.rs; point SGDB_REAL_SHORTCUTS at the live file.
+/crates/sgdb-core/fixtures/real/
+
+# Local scratch
+/scratch/
+*.local

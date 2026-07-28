@@ -1,0 +1,44 @@
+[workspace]
+resolver = "3"
+members = ["crates/sgdb-core", "crates/sgdb-app"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.90"
+license = "GPL-3.0-or-later"
+
+[workspace.dependencies]
+sgdb-core = { path = "crates/sgdb-core" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"
+
+# See CLAUDE.md "No silent failure". These are guarantees, not preferences:
+# an ignored Result must not compile, and a `let _ = ...` escape hatch is a build failure.
+[workspace.lints.rust]
+unused_must_use = "deny"
+unsafe_code = "warn"
+
+[workspace.lints.clippy]
+let_underscore_must_use = "deny"
+todo = "warn"
+dbg_macro = "warn"
+# This app's failure mode is corrupting a user's irreplaceable Steam config. A panic in the
+# middle of a grid write is not an acceptable way to find out an invariant was wrong.
+unwrap_used = "deny"
+expect_used = "deny"
+
+# Optimize *dependencies* even in dev builds, but keep our own crates unoptimized for fast
+# recompiles. Image decode (webp/png) and TLS are glacial in a debug build otherwise.
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+# NOT panic = "abort" — the apply path wraps its workers so a panic surfaces as a failed
+# step rather than killing the app mid-write.

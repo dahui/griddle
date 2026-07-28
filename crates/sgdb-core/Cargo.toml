@@ -1,0 +1,25 @@
+[package]
+name = "sgdb-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "All logic for the SteamGridDB artwork manager. No Tauri, no anyhow."
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+
+[dev-dependencies]
+tempfile = "3"
+# Spike-only, for `examples/cdp_probe.rs`. No TLS: the CEF debugger is plain ws:// on
+# loopback. When the CDP client is promoted out of the example this moves to [dependencies].
+tungstenite = { version = "0.28", default-features = false, features = ["handshake"] }
+
+[lints]
+workspace = true
