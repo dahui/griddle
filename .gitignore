@@ -9,6 +9,18 @@ dist/
 # Tauri
 /crates/sgdb-app/gen/
 
+# Secrets. The SteamGridDB API key is a PER-USER secret — every API endpoint 401s without
+# one, so a key WILL get pasted somewhere during development. Enforced by
+# scripts/check-secrets.sh (pre-commit hook + CI), which fails the build rather than trusting
+# this list to be exhaustive.
+.env
+.env.*
+!.env.example
+*.key
+*.secret
+secrets.json
+**/apikey.txt
+
 # Real Steam fixtures are NEVER committed — they contain home directory paths.
 # See crates/sgdb-core/tests/real_shortcuts.rs; point SGDB_REAL_SHORTCUTS at the live file.
 /crates/sgdb-core/fixtures/real/

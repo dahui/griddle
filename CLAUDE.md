@@ -141,6 +141,43 @@ must not compile, and `let _ = ...` is a build failure. `-D warnings` in CI.
 This project's failure mode is corrupting a user's irreplaceable Steam config. Keep the write
 surface small enough to audit by grep.
 
+### 🔑 Secrets never enter git
+
+The SteamGridDB API key is a **per-user secret**. Every API v2 endpoint 401s without one
+(verified), so a key *will* get pasted into a terminal, a test, or a config during
+development. This is enforced, not trusted:
+
+| Layer | What it does |
+|---|---|
+| `scripts/check-secrets.sh` | The single implementation. `--all` for CI, no arg for staged. |
+| `.githooks/pre-commit` | Thin wrapper. Enable once: `git config core.hooksPath .githooks` |
+| CI job `secrets` | Runs the same script **plus scans full history** — a fresh clone has no hooksPath, so CI must not depend on the hook. |
+| `.gitignore` | `.env*`, `*.key`, `*.secret`, `secrets.json`, `**/apikey.txt` |
+
+It catches four things: a 32-hex literal assigned to an API-key-shaped name; a literal
+`Authorization: Bearer <32hex>`; decky-steamgriddb's hardcoded key by value; and **the
+maintainer's own key by SHA-256**, which catches a bare paste with no surrounding context.
+Storing the *hash* lets the script name a specific key without containing it.
+
+All four paths were tested against real leak attempts, and the false-positive guard (a public
+`cdn2.steamgriddb.com` asset hash in a URL) was tested too. A guard that has never been fired
+is not known to work.
+
+**Dev-time key handling:** `SGDB_API_KEY` env var or a gitignored `.env`. At runtime it is
+DPAPI-wrapped under `%APPDATA%`, owned solely by `sgdb::client` — it must never reach the
+frontend or the injected bundle (that JS realm also runs Valve's code and CSS Loader's).
+
+> **Do not ship our own key.** decky-steamgriddb's hardcoded key — a 32-hex string that is
+> the hex encoding of an ASCII phrase naming the loader, findable in `src/constants.ts` of
+> that repo — now returns **401**. `[VERIFIED-BOX 2026-07-27]` A shared secret inside a
+> distributed binary gets scraped, abused and revoked, and then every install breaks at once.
+> That is the concrete argument for asking each user for their own key, and it is a better
+> one than "the ToS says so".
+>
+> The literal is deliberately *not* reproduced here: `scripts/check-secrets.sh` blocks it by
+> hash, so writing it into this file would make the documentation fail its own check. (It
+> did, on the first attempt.)
+
 ### Never destructively probe
 
 **Delete no file we did not write** — except the same-base-name art siblings inside `grid/`
@@ -188,12 +225,12 @@ sink the project.
 | **S6** | 🔴 **CSP probe.** WebSocket to loopback? `cdn2.steamgriddb.com` images? | 🟢 **PASS — best case.** Both allowed. |
 | **S5** | Wrap the context-menu factory to splice an item before Properties | 🟡 lead found, anchor not yet identified |
 | **S2b** | If not: does `keydown`/Gamepad API see controller input in SharedJSContext under BPM? | ⬜ not needed unless S2 render fails |
-| **S3** | Live apply over CDP on shortcut `4048848997`. Diff `grid/` before/after. | ⬜ |
+| **S3** | Live apply over CDP on shortcut `4048848997`. Diff `grid/` before/after. | 🟢 **PASS** — 28 ms, no restart |
 | **S4** | Animated WebP labelled `png` — animates in desktop library? in BPM? in WebView2? **Three separate answers.** | ⬜ |
 | **S8** | For a **real Steam app**, does `SetCustomArtworkForApp(..., Icon)` do anything on the modern `librarycache/<appid>/<sha1>.jpg` layout? Decky targets the *legacy flat* layout, `[INFERRED]` dead here. | ⬜ |
 | **S9** | Does a `shortcuts.vdf` write survive `-shutdown` → poll pid→0 → relaunch? **Read back after relaunch**, not before. | ⬜ |
 | **S10** | Unsigned Tauri exe — Defender? SmartScreen? | ⬜ |
-| **S11** | `reqwest` + descriptive UA + real key → SGDB `/search/autocomplete`: 200 or Cloudflare 403? | ⬜ |
+| **S11** | SGDB API through Cloudflare: 200 or 403? | 🟢 **PASS** — 200 either way; see below |
 
 ### Spike results `[VERIFIED-BOX @ CLSTAMP 10840511, 2026-07-27]`
 
@@ -390,6 +427,78 @@ maps mangled members to Steam's own art names:
 Since the *strings* survive minification but the member names do not, the durable finder is
 "the enum whose members are used alongside these asset-name strings" — record that predicate,
 not the mangled keys. `[VERIFIED-BOX @ CLSTAMP 10840511, 2026-07-27]`
+
+---
+
+### 🟢 S3 — live apply works. This is the whole thesis of the project.
+
+`[VERIFIED-BOX @ CLSTAMP 10840511, 2026-07-27 — probe 11, maintainer confirmed visually]`
+
+Applied a 149-byte magenta PNG to shortcut `4048848997` (EmulationStationDE) over CDP:
+
+```js
+await SteamClient.Apps.SetCustomArtworkForApp(4048848997, bareBase64, 'png', 0 /* Capsule */)
+```
+
+| Observation | Result |
+|---|---|
+| Call duration | **28 ms**, returns `undefined` |
+| `grid/4048848997p.png` | 10068 B → **149 B** (hash changed) |
+| Every other file in `grid/` | untouched |
+| **Library capsule updated with NO Steam restart** | ✅ **confirmed on screen by the maintainer** |
+
+**This is the entire justification for the project.** Steam Art Manager, SGDBoop, BoilR and
+every other Windows tool require a Steam restart to show new art. We do not.
+
+Three further facts from the same run:
+
+1. **The unsigned appid is the key for the JS API too**, not just for filenames.
+   `appStore.GetAppOverviewByAppID(4048848997)` returned `EmulationStationDE` with
+   `BIsShortcut() === true`. So `UnsignedAppId` is the type that crosses the CDP boundary.
+2. **Steam overwrites in place and does its own sibling cleanup** — it replaced the existing
+   `.png` rather than adding a `.jpg` alongside. Our *file-fallback* path still needs
+   `cleanup_siblings()`, because it writes to disk directly with no client involved.
+3. `appDetailsStore.GetCustomVerticalCapsuleURL` does **not** exist under that name — it
+   returned null. Another name-based guess that missed; the UI-refresh signal has to be found
+   by call site if we ever need it. (We do not: the client refreshed itself.)
+
+**Test hygiene:** `grid/` was backed up to `%TEMP%\sgdb_grid_backup` before the write and
+restored after, with all five files verified byte-identical by SHA-256. Any future test that
+writes to a real library must do the same — this directory holds artwork a user may have
+curated by hand and cannot regenerate.
+
+---
+
+### 🟢 S11 — SGDB API works, and the Cloudflare fear was overstated
+
+`[VERIFIED-BOX 2026-07-27]` Same request, three ways, with a real API key:
+
+| Request | Result |
+|---|---|
+| `/search/autocomplete/portal`, **default (bot-ish) UA** | **HTTP 200** |
+| `/search/autocomplete/portal`, descriptive UA | HTTP 200 |
+| `/grids/steam/620?dimensions=600x900&limit=3` | HTTP 200, real data |
+
+**Correction to the plan.** The design research said a bare HTTP client gets a Cloudflare 403
+and that a browser-like UA is required. **That is false for API v2 with a valid Bearer token** —
+a default client UA returned 200. The 403s seen during research were on browser-gated *pages*
+(`/api/v2` docs, `/faq`), not the API. Risk item "Cloudflare 403 on a bare HTTP client" is
+therefore lower than recorded; still send a descriptive UA as etiquette and for
+identifiability, but it is **not** load-bearing. `[INFERRED → corrected to VERIFIED-BOX]`
+
+**No rate-limit headers exist.** Full response header set is
+`Connection, Content-Length, Content-Type, Date, Set-Cookie, Server, expires, Cache-Control,
+pragma, Nel, cf-cache-status, Server-Timing, Report-To, CF-RAY, alt-svc` — no `RateLimit-*`,
+no `Retry-After`. So there is nothing to honour reactively: the concurrency cap (3), backoff
+on 429, and ETag caching have to be self-imposed, exactly as planned.
+
+Response shape confirmed: `data[]` with `id`, `width`, `height`, `mime`, `style`, `nsfw`,
+`humor`, `epilepsy`, `author.name`.
+
+🔑 **The API key is a user secret.** It is **not** in this repo and must never be committed —
+runtime storage is DPAPI-wrapped under `%APPDATA%`, per `settings`. Note this is also the
+reason we cannot be 1:1 with the Decky plugin, whose key is hardcoded and explicitly
+non-reusable.
 
 #### `showModal` — the name is a red herring
 

@@ -1,0 +1,6 @@
+#!/bin/sh
+# Enabled by: git config core.hooksPath .githooks
+#
+# Kept as a thin wrapper so CI and the hook run byte-identical logic — a check that only
+# runs locally is a check that eventually stops running.
+exec "$(dirname "$0")/../scripts/check-secrets.sh" staged

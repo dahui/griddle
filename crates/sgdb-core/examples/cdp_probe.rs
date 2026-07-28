@@ -140,7 +140,9 @@ fn run_probe(ws_url: &str) -> Result<serde_json::Value, String> {
         tungstenite::connect(ws_url).map_err(|e| format!("websocket connect: {e}"))?;
 
     let args: Vec<String> = std::env::args().collect();
-    let probe_js = if args.iter().any(|a| a == "--probe10") {
+    let probe_js = if args.iter().any(|a| a == "--probe11") {
+        include_str!("probe11.js")
+    } else if args.iter().any(|a| a == "--probe10") {
         include_str!("probe10.js")
     } else if args.iter().any(|a| a == "--probe9") {
         include_str!("probe9.js")
@@ -310,6 +312,7 @@ fn steam_path() -> Option<String> {
 fn steam_path() -> Option<String> {
     None
 }
+
 
 
 
