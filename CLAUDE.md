@@ -65,9 +65,33 @@ of `steamui/`. When a Steam update breaks something, the predicate is what you e
 | Steam dir writable | **Without elevation.** The `.cef-enable-remote-debugging` sentinel needs no admin. |
 | `libraryfolders.vdf` | Exists in **both** `config\` and `steamapps\`, byte-identical. Prefer `config\`. Modern nested format. |
 | `appmanifest_*.acf` | 51 installed. `StateFlags & 4` = fully installed. |
-| `appcache\librarycache\` | **2245** per-appid dirs vs 51 appmanifests — a superset (owned/browsed, not installed). Modern per-appid layout: `header.jpg`, `library_600x900.jpg`, `library_hero.jpg`, `library_hero_blur.jpg`, `logo.png`, `<sha1>.jpg`. **Read-only. Never write here** — Steam re-downloads over it. |
+| `appcache\librarycache\` | **2245** per-appid dirs vs 51 appmanifests — a superset (owned/browsed, not installed). Layout is **sha1-keyed**, see below. **Read-only. Never write here** — Steam re-downloads over it. |
 | `userdata\<id>\config\librarycache\<appid>.json` | **Achievement data, not art.** Same name, different thing. Do not confuse with the above. |
 | `userdata\<id>\config\licensecache` | Encrypted binary. Dead end for an owned-games list. |
+
+#### 🔴 `appcache\librarycache\` is sha1-keyed — earlier notes here were wrong
+
+Measured across all **2244** cached appid directories on this box
+`[VERIFIED-BOX 2026-07-27]`:
+
+| Shape | Appids |
+|---|---|
+| flat files only — `<appid>/<sha1>.jpg` | **1972** |
+| sha1 sub-directories only — `<appid>/<sha1>/<name>.ext` | 137 |
+| both | 135 |
+
+Names found *inside* the sha1 sub-directories: `header.jpg` (143), `library_header.jpg` (122),
+`library_hero.jpg` (108), `library_hero_blur.jpg` (108), `logo.png` (95),
+`library_capsule.jpg` (66), `library_600x900.jpg` (40), `markers.svg` (4). Flat files directly
+under `<appid>/`: 4445 `.jpg` + 528 `.png`, all sha1-named.
+
+Both the design research ("modern per-appid subfolder: `header.jpg`, `library_600x900.jpg`, …")
+and an earlier line in this file were **wrong** — they omitted the sha1 level entirely. Anything
+reading this cache must handle *all three* shapes and must not assume a filename.
+
+This is exactly why the cache is read-only for us: the naming is a Steam implementation detail
+that has now changed at least twice. Custom art goes in `userdata/<id>/config/grid/`, which is
+stable and documented by usage.
 
 **Parse `libraryfolders.vdf` defensively:** some client versions emit *scalar* siblings (e.g.
 `contentstatsid`) among the numbered object keys. Skip any child whose value is not a map. This
@@ -205,17 +229,17 @@ Filenames: `<id>p.png` portrait · `<id>.png` wide/header (no suffix) · `<id>_h
 
 ## Where we are
 
-**M0 in progress.** Workspace scaffolded, bun installed, Cargo workspace green.
+**M0 done. M1 spike COMPLETE — every question answered.** Nothing left that can change the
+architecture.
 
 | | State |
 |---|---|
-| **Done** | Cargo workspace (`sgdb-core` + `sgdb-app`), workspace lints, `vdf::binary` codec. **🟢 S7 PASSED** — the real 701-byte `shortcuts.vdf` round-trips byte-for-byte, 12 unit tests + 2 gated integration tests green. |
-| **Next** | Tauri shell (M0), then the **M1 spike** — S2 first, it's the only item that can change the shape of the project. |
+| **Done** | Cargo + bun workspaces; Tauri shell (PE subsystem = `WINDOWS_GUI`, no console flash); `vdf::binary` codec; shared filter/logo logic in Rust **and** TS against one fixture; secret scanning (pre-commit + CI); 19 Rust + 62 TS tests green. **All 11 spike items resolved.** |
+| **Next** | **M2** — `steam::locate`, `steam::library` (libraryfolders + appmanifest), `steam::apptype` (appinfo), `grid::store` (atomic write + sibling cleanup). All offline and unit-testable. Then **M3**, the first genuinely usable build. |
 
-### The M1 spike — answer these before building on them
+### M1 spike — all resolved
 
-Ordered by how much they'd cost to discover late. Each has a fallback, so none can silently
-sink the project.
+Ordered by how much they'd have cost to discover late.
 
 | # | Question | Status |
 |---|---|---|
@@ -226,10 +250,10 @@ sink the project.
 | **S5** | Wrap the context-menu factory to splice an item before Properties | 🟢 **PASS** — module `5808`, token `#GameAction_GameProperties` |
 | **S2b** | If not: does `keydown`/Gamepad API see controller input in SharedJSContext under BPM? | ⬜ not needed unless S2 render fails |
 | **S3** | Live apply over CDP on shortcut `4048848997`. Diff `grid/` before/after. | 🟢 **PASS** — 28 ms, no restart |
-| **S4** | Animated WebP labelled `png` — animates in desktop library? in BPM? in WebView2? **Three separate answers.** | ⬜ |
-| **S8** | For a **real Steam app**, does `SetCustomArtworkForApp(..., Icon)` do anything on the modern `librarycache/<appid>/<sha1>.jpg` layout? Decky targets the *legacy flat* layout, `[INFERRED]` dead here. | ⬜ |
-| **S9** | Does a `shortcuts.vdf` write survive `-shutdown` → poll pid→0 → relaunch? **Read back after relaunch**, not before. | ⬜ |
-| **S10** | Unsigned Tauri exe — Defender? SmartScreen? | ⬜ |
+| **S4** | Animated WebP labelled `png` — does it animate? | 🟢 **PASS** — animates in desktop **and** BPM |
+| **S8** | Does `SetCustomArtworkForApp(..., Icon)` work for a real Steam app? | 🔴 **NO** — silent no-op; see below |
+| **S9** | Does a `shortcuts.vdf` write survive `-shutdown` → poll pid→0 → relaunch? | 🟢 **PASS** — and it validated our writer |
+| **S10** | Unsigned Tauri exe — Defender? SmartScreen? | 🟡 **Defender clean**; SmartScreen untested |
 | **S11** | SGDB API through Cloudflare: 200 or 403? | 🟢 **PASS** — 200 either way; see below |
 
 ### Spike results `[VERIFIED-BOX @ CLSTAMP 10840511, 2026-07-27]`
@@ -483,18 +507,62 @@ Confirms three things at once: the base64 payload is **bare** (no `data:` prefix
 argument is **hardcoded `"png"` regardless of actual bytes**, and this is Valve's own code
 doing it — not just a Decky convention we were copying on faith.
 
-**Asset-type enum members can be de-mangled by their asset filenames.** The same call site
-maps mangled members to Steam's own art names:
+**Steam's own name mapping**, from the same module's `SetCustomArtwork` switch:
 
-| Mangled | Asset name |
-|---|---|
-| `vt.JoK` | `store_capsule_main` |
-| `vt.n4o` | `library_logo_transparent` |
-| `vt.b_A`, `vt.KoM` | (also used; names not yet captured) |
+```js
+case vt.b_A: n = "library_capsule"           // portrait capsule
+case vt.KoM: n = "library_hero"
+case vt.JoK: n = "store_capsule_main"        // wide capsule
+case vt.n4o: n = "library_logo_transparent"
+```
 
-Since the *strings* survive minification but the member names do not, the durable finder is
-"the enum whose members are used alongside these asset-name strings" — record that predicate,
-not the mangled keys. `[VERIFIED-BOX @ CLSTAMP 10840511, 2026-07-27]`
+The enum members are mangled but those *strings* survive minification, so "the enum whose
+members appear beside these asset-name strings" is the durable finder — record that predicate,
+never the mangled keys.
+
+---
+
+### 🟢 ELibraryAssetType ordinals — measured, not assumed
+
+`[VERIFIED-BOX @ CLSTAMP 10840511, 2026-07-27]` Each ordinal applied in turn, on **both** a
+non-Steam shortcut and a real Steam app, watching which file appeared. Identical results:
+
+| Ordinal | Name | File written |
+|---|---|---|
+| 0 | Capsule | `<appid>p.png` |
+| 1 | Hero | `<appid>_hero.png` |
+| 2 | Logo | `<appid>_logo.png` |
+| 3 | Header (wide capsule) | `<appid>.png` |
+| 4 | Icon | **nothing** |
+| 5 | HeroBlur | **nothing** |
+
+decky-frontend-lib's ordering is **correct** — a rare case where the typings held up. Worth
+having measured anyway: an off-by-one here would silently write hero art into the capsule slot.
+
+### 🟢 S8 — icons cannot be set through `SetCustomArtworkForApp`
+
+Ordinal 4 writes **no file at all**, for shortcuts *and* Steam apps. The call does not throw;
+it takes ~500 ms (vs ~30–50 ms for the working types) and returns normally. A silent no-op.
+
+Consequences for the product:
+
+- **Non-Steam shortcuts** — icons need the file path: write `<appid>_icon.<ext>` into `grid/`
+  **and** set the `icon` field in `shortcuts.vdf` (Steam must be shut down; then restart).
+  That is what decky-steamgriddb does, and it is why its icon flow prompts for a restart.
+- **Real Steam apps** — decky writes `appcache/librarycache/<appid>_icon.jpg`, the **legacy
+  flat** layout. This box's cache is sha1-keyed, so that path is `[INFERRED]` dead here.
+  Ship the Icon tab **disabled for Steam apps** with an explanation, rather than a control that
+  silently does nothing.
+
+⚠️ **One unexplained observation.** The first S8 run passed ordinal 4 against appid 1004640 and
+`1004640.png` (the *Header* file) appeared. The systematic sweep afterwards — 6 ordinals × 2 app
+types — never reproduced it: 4 wrote nothing and 3 wrote `<appid>.png`. The sweep is 12 data
+points against 1 and is treated as authoritative, but the anomaly is recorded rather than
+tidied away. If icons ever appear to half-work, start here.
+
+**Test hygiene:** `grid/` was snapshotted before and restored after; every file created for
+appid 1004640 was deleted (it had no custom art originally) and the shortcut's five files
+verified byte-identical by SHA-256.
 
 ---
 
@@ -534,6 +602,86 @@ Three further facts from the same run:
 restored after, with all five files verified byte-identical by SHA-256. Any future test that
 writes to a real library must do the same — this directory holds artwork a user may have
 curated by hand and cannot regenerate.
+
+---
+
+### 🟢 S4 — animated assets work, and the bytes must come from Rust
+
+`[VERIFIED-BOX @ CLSTAMP 10840511, 2026-07-27 — maintainer confirmed on screen]`
+
+A 45-frame animated WebP (601,648 bytes, VP8X animation flag set) applied with the mime
+argument set to the literal `"png"` lands at `grid/<appid>p.png` and **animates in the desktop
+library and in Big Picture**. Extension `.png`, content RIFF/WEBP — Chromium sniffs content, so
+Valve's hardcoded `"png"` is not a bug to work around but the mechanism to copy.
+
+SteamGridDB serves animated grids as WebP (full-size) with `.webm` thumbnails; some are APNG
+(verified one with `acTL` + 73 `fcTL` frames).
+
+#### 🔴 SharedJSContext cannot read image bytes — CORS
+
+A normal `fetch('https://cdn2.steamgriddb.com/...')` from SharedJSContext fails with
+**"Failed to fetch"**. Only `mode:'no-cors'` succeeds, and that response is **opaque**, so the
+body cannot be read. Images can be **displayed** there (`<img src>` works — S6) but never
+**read**.
+
+So the injected bundle can never fetch-and-encode an asset itself. **Rust downloads and hands
+over base64.** This is exactly why decky-steamgriddb ships a Python `download_as_base64`
+backend, and it confirms the architecture: `sgdb::client` owns all SGDB HTTP.
+
+The harness models this with `--payload <base64-file>`, which injects
+`window.__SGDB_PAYLOAD__` before the probe runs. An 802 KB base64 string crossed CDP fine and
+applied in 48 ms.
+
+---
+
+### 🟢 S9 — the shutdown/write/relaunch choreography works
+
+`[VERIFIED-BOX 2026-07-27]` Reproduce with
+`cargo run -p sgdb-core --example set_shortcut_icon -- <shortcuts.vdf> [<icon>|--show]`.
+
+Sequence: `steam.exe -shutdown` → poll until both `steam` and `steamwebhelper` are gone →
+read/modify/write with **our own `vdf::binary` codec** → relaunch → wait for
+`ActiveProcess\pid != 0` and ≥3 helpers → **read back**.
+
+| Check | Result |
+|---|---|
+| Write applied while Steam was down | 701 → 695 bytes |
+| Survived a full Steam startup | ✅ still 695 bytes |
+| Icon field after relaunch | ✅ our marker value |
+| Steam rejected or rewrote our file | ❌ no — it parsed and kept it |
+| Restore (second cycle) | ✅ back to 701 bytes, original SHA-256 |
+
+**This is the strongest test the codec has had.** The round-trip unit tests prove we can
+reproduce a file byte-for-byte; this proves the real Steam client accepts a file we *modified*.
+The example refuses to write at all if the round-trip check fails first.
+
+⚠️ **Restoring also needs Steam down.** After relaunch Steam holds the modified shortcuts in
+memory, so writing the backup while it runs would be overwritten on exit. The restore needed
+its own shutdown/relaunch cycle — worth knowing before building any "undo" feature.
+
+🔴 **The existing icon value contains literal quote characters:**
+`"C:\Users\...\EmulationStationDE.ico"` — quotes stored *inside* the string, not VDF syntax.
+EmuDeck wrote it that way. Steam evidently tolerates both forms (ours was written unquoted and
+was accepted), but **preserve whatever is there** rather than normalising, and match the
+surrounding convention when writing a new one. Same discipline as the mixed path separators in
+`StartDir`.
+
+---
+
+### 🟢 S10 — Defender clean; SmartScreen still unknown
+
+`[VERIFIED-BOX 2026-07-27]` Real-time protection **on**; an on-demand `Start-MpScan` over the
+unsigned release build completed with **no detections** and the binary intact.
+
+This is the expected outcome and worth noting *why*: we deliberately avoid the heuristics that
+flag Millennium — no DLL proxying, no patched Steam files, no injected `user32.dll`. The CEF
+debugger is Valve's own opt-in mechanism.
+
+⚠️ **SmartScreen is NOT covered by this test.** It triggers on Mark-of-the-Web, which a locally
+built exe does not carry (`Zone.Identifier` absent, confirmed). A *downloaded* unsigned
+installer with no reputation will very likely warn. Re-test with a real download at M8, and
+document the click-through. Signing is a v1.1 problem — Trusted Signing wants a 3-year-old
+legal entity.
 
 ---
 

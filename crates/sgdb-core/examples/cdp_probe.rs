@@ -161,6 +161,12 @@ fn run_probe(ws_url: &str) -> Result<serde_json::Value, String> {
         include_str!("bpm_mount.js") // S2: mount into Steam's focus tree (needs BPM open)
     } else if selected("--menu") {
         include_str!("context_menu.js") // S5: library context-menu entry point
+    } else if selected("--animated") {
+        include_str!("animated.js") // S4: animated WebP/APNG labelled "png" (WRITES)
+    } else if selected("--enum") {
+        include_str!("asset_enum.js") // de-mangle ELibraryAssetType
+    } else if selected("--icon") {
+        include_str!("icon.js") // S8: Icon asset type for a real Steam app (WRITES)
     } else {
         include_str!("env.js") // default: realm, apply API, CSP, webpack discovery
     };
@@ -179,6 +185,48 @@ fn run_probe(ws_url: &str) -> Result<serde_json::Value, String> {
         })
         .to_string()
     };
+
+    // `--payload <file>` injects a base64 blob as `window.__SGDB_PAYLOAD__` before the probe
+    // runs. This exists because **SharedJSContext cannot read image bytes itself**: a normal
+    // `fetch()` to cdn2.steamgriddb.com is CORS-blocked (only `mode:'no-cors'` succeeds, and
+    // that response is opaque). Images can be *displayed* from the CDN but not *read*.
+    //
+    // That is precisely why decky-steamgriddb has a Python `download_as_base64` backend, and
+    // it matches our architecture: Rust owns the SGDB client and hands base64 across.
+    if let Some(i) = args.iter().position(|a| a == "--payload") {
+        let path = args.get(i + 1).ok_or("--payload needs a file path")?;
+        let b64 = std::fs::read_to_string(path).map_err(|e| format!("read payload: {e}"))?;
+        let b64 = b64.trim();
+        let expr = format!(
+            "window.__SGDB_PAYLOAD__ = {}; window.__SGDB_PAYLOAD__.length",
+            serde_json::Value::String(b64.to_string())
+        );
+        socket
+            .send(tungstenite::Message::Text(evaluate(90, &expr).into()))
+            .map_err(|e| format!("send payload: {e}"))?;
+        let n = read_evaluate_result(&mut socket, 90)?;
+        println!("  injected payload: {n} base64 chars");
+    }
+
+    // `--appid <n>` selects the app a write probe targets.
+    if let Some(i) = args.iter().position(|a| a == "--appid") {
+        let id = args.get(i + 1).ok_or("--appid needs a number")?;
+        let expr = format!("window.__SGDB_APPID__ = {id}");
+        socket
+            .send(tungstenite::Message::Text(evaluate(91, &expr).into()))
+            .map_err(|e| format!("send appid: {e}"))?;
+        let _ = read_evaluate_result(&mut socket, 91)?;
+        println!("  target appid: {id}");
+    }
+
+    if let Some(i) = args.iter().position(|a| a == "--assettype") {
+        let n = args.get(i + 1).ok_or("--assettype needs a number")?;
+        let expr = format!("window.__SGDB_ASSET_TYPE__ = {n}");
+        socket
+            .send(tungstenite::Message::Text(evaluate(92, &expr).into()))
+            .map_err(|e| format!("send assettype: {e}"))?;
+        let _ = read_evaluate_result(&mut socket, 92)?;
+    }
 
     socket
         .send(tungstenite::Message::Text(evaluate(1, probe_js).into()))
