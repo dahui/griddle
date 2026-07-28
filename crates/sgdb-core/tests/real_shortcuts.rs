@@ -25,7 +25,10 @@ fn real_file() -> Option<(std::path::PathBuf, Vec<u8>)> {
     let path = std::path::PathBuf::from(path);
     match std::fs::read(&path) {
         Ok(bytes) => Some((path, bytes)),
-        Err(e) => panic!("SGDB_REAL_SHORTCUTS is set but unreadable: {} ({e})", path.display()),
+        Err(e) => panic!(
+            "SGDB_REAL_SHORTCUTS is set but unreadable: {} ({e})",
+            path.display()
+        ),
     }
 }
 
@@ -87,7 +90,9 @@ fn reports_the_real_shortcut_inventory() {
 
     eprintln!("{} shortcut(s):", shortcuts.len());
     for entry in shortcuts {
-        let Some(fields) = entry.value.as_map() else { continue };
+        let Some(fields) = entry.value.as_map() else {
+            continue;
+        };
         let appid = binary::get(fields, "appid").and_then(|v| v.as_i32());
         let name = binary::get(fields, "AppName")
             .or_else(|| binary::get(fields, "appname"))
@@ -96,7 +101,11 @@ fn reports_the_real_shortcut_inventory() {
 
         match appid {
             // Grid artwork filenames use the unsigned form of this signed field.
-            Some(id) => eprintln!("  [{}] {name}  appid={id} (grid name: {})", entry.key.escape_ascii(), id as u32),
+            Some(id) => eprintln!(
+                "  [{}] {name}  appid={id} (grid name: {})",
+                entry.key.escape_ascii(),
+                id as u32
+            ),
             None => eprintln!("  [{}] {name}  appid=<missing>", entry.key.escape_ascii()),
         }
 

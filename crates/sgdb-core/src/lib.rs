@@ -9,5 +9,8 @@
 //! 3. `steam://flushconfig` is banned outright — it has historically made Steam forget its
 //!    library folder locations.
 
+pub mod appid;
+pub mod grid;
 pub mod logo;
+pub mod steam;
 pub mod vdf;

@@ -51,11 +51,16 @@ fn main() {
     }
 
     let port_open = TcpStream::connect_timeout(
-        &format!("{DEBUG_HOST}:{DEBUG_PORT}").parse().unwrap_or_else(|_| unreachable!()),
+        &format!("{DEBUG_HOST}:{DEBUG_PORT}")
+            .parse()
+            .unwrap_or_else(|_| unreachable!()),
         Duration::from_millis(500),
     )
     .is_ok();
-    println!("  port {DEBUG_PORT}        : {}", if port_open { "open" } else { "closed" });
+    println!(
+        "  port {DEBUG_PORT}        : {}",
+        if port_open { "open" } else { "closed" }
+    );
 
     if !port_open {
         println!("\nCEF debugging is not active. To enable it:");
@@ -89,7 +94,9 @@ fn main() {
         println!(
             "  [{}] {}  {}",
             t.get("type").and_then(|v| v.as_str()).unwrap_or("?"),
-            t.get("title").and_then(|v| v.as_str()).unwrap_or("<untitled>"),
+            t.get("title")
+                .and_then(|v| v.as_str())
+                .unwrap_or("<untitled>"),
             t.get("url").and_then(|v| v.as_str()).unwrap_or(""),
         );
     }
@@ -126,10 +133,16 @@ fn main() {
 /// very common dev-server port.
 fn pick_shared_js_context(targets: &[serde_json::Value]) -> Option<&serde_json::Value> {
     let title = |t: &serde_json::Value| {
-        t.get("title").and_then(|v| v.as_str()).unwrap_or_default().to_string()
+        t.get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string()
     };
     let url = |t: &serde_json::Value| {
-        t.get("url").and_then(|v| v.as_str()).unwrap_or_default().to_lowercase()
+        t.get("url")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_lowercase()
     };
 
     targets
@@ -243,7 +256,9 @@ fn run_probe(ws_url: &str) -> Result<serde_json::Value, String> {
 
     std::thread::sleep(Duration::from_millis(2500));
     socket
-        .send(tungstenite::Message::Text(evaluate(2, async_results).into()))
+        .send(tungstenite::Message::Text(
+            evaluate(2, async_results).into(),
+        ))
         .map_err(|e| format!("send async check: {e}"))?;
 
     if let Ok(v) = read_evaluate_result(&mut socket, 2)
@@ -257,7 +272,11 @@ fn run_probe(ws_url: &str) -> Result<serde_json::Value, String> {
         map.insert("asyncResults".into(), parsed);
     }
 
-    let _ = socket.close(None);
+    // Closing is courtesy — the probe's result is already in hand — but the workspace lints
+    // forbid discarding a Result silently, so say something if it fails.
+    if let Err(e) = socket.close(None) {
+        eprintln!("  (note: websocket close failed: {e})");
+    }
     Ok(result)
 }
 
@@ -268,7 +287,9 @@ fn read_evaluate_result(
     // CDP interleaves events with responses; skip anything that isn't the reply we asked for.
     for _ in 0..200 {
         let msg = socket.read().map_err(|e| format!("read: {e}"))?;
-        let tungstenite::Message::Text(text) = msg else { continue };
+        let tungstenite::Message::Text(text) = msg else {
+            continue;
+        };
         let v: serde_json::Value =
             serde_json::from_str(&text).map_err(|e| format!("bad frame: {e}"))?;
 
@@ -299,7 +320,9 @@ fn read_evaluate_result(
 /// failure even though the server answered immediately.
 /// `[VERIFIED-BOX 2026-07-27 — cost one confusing os error 10060]`
 fn http_get(url: &str) -> Result<String, String> {
-    let rest = url.strip_prefix("http://").ok_or("only http:// supported")?;
+    let rest = url
+        .strip_prefix("http://")
+        .ok_or("only http:// supported")?;
     let (host_port, path) = match rest.find('/') {
         Some(i) => (&rest[..i], &rest[i..]),
         None => (rest, "/"),
@@ -319,7 +342,9 @@ fn http_get(url: &str) -> Result<String, String> {
     let mut buf = Vec::new();
     let mut byte = [0u8; 1];
     let header_end = loop {
-        let n = stream.read(&mut byte).map_err(|e| format!("read header: {e}"))?;
+        let n = stream
+            .read(&mut byte)
+            .map_err(|e| format!("read header: {e}"))?;
         if n == 0 {
             return Err("connection closed before headers completed".into());
         }
@@ -340,7 +365,9 @@ fn http_get(url: &str) -> Result<String, String> {
         .ok_or("response had no Content-Length")?;
 
     let mut body = vec![0u8; content_length];
-    stream.read_exact(&mut body).map_err(|e| format!("read body: {e}"))?;
+    stream
+        .read_exact(&mut body)
+        .map_err(|e| format!("read body: {e}"))?;
     String::from_utf8(body).map_err(|e| format!("body was not UTF-8: {e}"))
 }
 
@@ -361,19 +388,3 @@ fn steam_path() -> Option<String> {
 fn steam_path() -> Option<String> {
     None
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

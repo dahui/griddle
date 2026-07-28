@@ -14,9 +14,8 @@ const STUB: &str = r#"(() => {
 })();"#;
 
 fn main() {
-    let manifest_dir = PathBuf::from(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".into()),
-    );
+    let manifest_dir =
+        PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".into()));
     let bundle = manifest_dir.join("../../apps/bpm/dist/bpm.js");
 
     println!("cargo:rerun-if-changed={}", bundle.display());
@@ -34,8 +33,7 @@ fn main() {
         }
     };
 
-    let out = PathBuf::from(std::env::var("OUT_DIR").unwrap_or_else(|_| ".".into()))
-        .join("bpm.js");
+    let out = PathBuf::from(std::env::var("OUT_DIR").unwrap_or_else(|_| ".".into())).join("bpm.js");
     if let Err(e) = std::fs::write(&out, contents) {
         panic!("failed to stage BPM bundle at {}: {e}", out.display());
     }

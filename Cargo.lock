@@ -2765,6 +2765,7 @@ dependencies = [
  "thiserror 2.0.19",
  "tracing",
  "tungstenite",
+ "windows-sys 0.61.2",
  "winreg",
 ]
 

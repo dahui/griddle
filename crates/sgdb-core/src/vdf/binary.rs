@@ -86,7 +86,10 @@ pub struct Document {
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum Error {
     #[error("unexpected end of input at byte {offset} (expected {expected})")]
-    UnexpectedEof { offset: usize, expected: &'static str },
+    UnexpectedEof {
+        offset: usize,
+        expected: &'static str,
+    },
 
     #[error("unknown type marker {marker:#04x} at byte {offset}")]
     UnknownMarker { marker: u8, offset: usize },
@@ -97,7 +100,9 @@ pub enum Error {
     #[error("unclosed map opened at byte {offset}")]
     UnclosedMap { offset: usize },
 
-    #[error("trailing garbage at byte {offset}: expected only 0x08 terminators, found {found:#04x}")]
+    #[error(
+        "trailing garbage at byte {offset}: expected only 0x08 terminators, found {found:#04x}"
+    )]
     TrailingGarbage { offset: usize, found: u8 },
 
     #[error("nesting deeper than {limit} at byte {offset}")]
@@ -118,13 +123,19 @@ pub fn parse(input: &[u8]) -> Result<Document, Error> {
     let mut trailing_terminators = 0;
     while let Some(&b) = p.input.get(p.pos) {
         if b != T_END {
-            return Err(Error::TrailingGarbage { offset: p.pos, found: b });
+            return Err(Error::TrailingGarbage {
+                offset: p.pos,
+                found: b,
+            });
         }
         trailing_terminators += 1;
         p.pos += 1;
     }
 
-    Ok(Document { entries, trailing_terminators })
+    Ok(Document {
+        entries,
+        trailing_terminators,
+    })
 }
 
 /// Encode a document. Inverse of [`parse`].
@@ -181,7 +192,10 @@ impl<'a> Parser<'a> {
     /// file-level terminators are counted separately by [`parse`]); nested callers do not.
     fn parse_entries(&mut self, depth: usize) -> Result<Vec<Entry>, Error> {
         if depth > MAX_DEPTH {
-            return Err(Error::TooDeep { offset: self.pos, limit: MAX_DEPTH });
+            return Err(Error::TooDeep {
+                offset: self.pos,
+                limit: MAX_DEPTH,
+            });
         }
 
         let mut entries = Vec::new();
@@ -224,7 +238,10 @@ impl<'a> Parser<'a> {
                 T_INT32 => Value::Int32(i32::from_le_bytes(self.read_array::<4>("i32")?)),
                 T_UINT64 => Value::UInt64(u64::from_le_bytes(self.read_array::<8>("u64")?)),
                 other => {
-                    return Err(Error::UnknownMarker { marker: other, offset: marker_offset });
+                    return Err(Error::UnknownMarker {
+                        marker: other,
+                        offset: marker_offset,
+                    });
                 }
             };
 
@@ -246,7 +263,10 @@ impl<'a> Parser<'a> {
         let slice = self
             .input
             .get(self.pos..self.pos + N)
-            .ok_or(Error::UnexpectedEof { offset: self.pos, expected })?;
+            .ok_or(Error::UnexpectedEof {
+                offset: self.pos,
+                expected,
+            })?;
         let mut buf = [0u8; N];
         buf.copy_from_slice(slice);
         self.pos += N;
@@ -302,7 +322,10 @@ pub fn get<'a>(entries: &'a [Entry], key: &str) -> Option<&'a Value> {
 impl fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Value::Map(entries) => f.debug_map().entries(entries.iter().map(|e| (Bytes(&e.key), &e.value))).finish(),
+            Value::Map(entries) => f
+                .debug_map()
+                .entries(entries.iter().map(|e| (Bytes(&e.key), &e.value)))
+                .finish(),
             Value::Str(s) => write!(f, "{:?}", Bytes(s)),
             Value::Int32(v) => write!(f, "{v}"),
             Value::UInt64(v) => write!(f, "{v}"),
@@ -419,8 +442,14 @@ mod tests {
         let doc = parse(&synthetic()).unwrap();
         let shortcuts = get(&doc.entries, "shortcuts").unwrap().as_map().unwrap();
         let first = get(shortcuts, "0").unwrap().as_map().unwrap();
-        let keys: Vec<_> = first.iter().map(|e| String::from_utf8_lossy(&e.key).into_owned()).collect();
-        assert_eq!(keys, ["appid", "AppName", "StartDir", "FlatpakAppID", "tags"]);
+        let keys: Vec<_> = first
+            .iter()
+            .map(|e| String::from_utf8_lossy(&e.key).into_owned())
+            .collect();
+        assert_eq!(
+            keys,
+            ["appid", "AppName", "StartDir", "FlatpakAppID", "tags"]
+        );
     }
 
     #[test]
@@ -441,13 +470,22 @@ mod tests {
     #[test]
     fn rejects_unknown_type_marker() {
         let err = parse(&[0x42, b'k', 0]).unwrap_err();
-        assert_eq!(err, Error::UnknownMarker { marker: 0x42, offset: 0 });
+        assert_eq!(
+            err,
+            Error::UnknownMarker {
+                marker: 0x42,
+                offset: 0
+            }
+        );
     }
 
     #[test]
     fn rejects_unterminated_string() {
         let input = [T_STRING, b'k', 0, b'n', b'o', b'e', b'n', b'd'];
-        assert!(matches!(parse(&input), Err(Error::UnterminatedString { .. })));
+        assert!(matches!(
+            parse(&input),
+            Err(Error::UnterminatedString { .. })
+        ));
     }
 
     #[test]
@@ -460,7 +498,10 @@ mod tests {
     fn rejects_trailing_garbage() {
         let mut input = synthetic();
         input.push(0x99);
-        assert!(matches!(parse(&input), Err(Error::TrailingGarbage { found: 0x99, .. })));
+        assert!(matches!(
+            parse(&input),
+            Err(Error::TrailingGarbage { found: 0x99, .. })
+        ));
     }
 
     #[test]

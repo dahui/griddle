@@ -1,5 +1,8 @@
 //! Valve KeyValues codecs.
 //!
-//! - [`binary`] — the binary KV1 encoding used by `shortcuts.vdf`.
+//! - [`binary`] — binary KV1, used by `shortcuts.vdf`. Read **and** write, byte-exact.
+//! - [`text`] — text KV1, used by `libraryfolders.vdf`, `appmanifest_*.acf`,
+//!   `loginusers.vdf`. Read-only.
 
 pub mod binary;
+pub mod text;

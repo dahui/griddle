@@ -234,8 +234,98 @@ architecture.
 
 | | State |
 |---|---|
-| **Done** | Cargo + bun workspaces; Tauri shell (PE subsystem = `WINDOWS_GUI`, no console flash); `vdf::binary` codec; shared filter/logo logic in Rust **and** TS against one fixture; secret scanning (pre-commit + CI); 19 Rust + 62 TS tests green. **All 11 spike items resolved.** |
-| **Next** | **M2** — `steam::locate`, `steam::library` (libraryfolders + appmanifest), `steam::apptype` (appinfo), `grid::store` (atomic write + sibling cleanup). All offline and unit-testable. Then **M3**, the first genuinely usable build. |
+| **M0** | Cargo + bun workspaces; Tauri shell (PE subsystem = `WINDOWS_GUI`, no console flash); secret scanning (pre-commit + CI); encoding guard. |
+| **M1** | **All 11 spike items resolved.** Nothing left that can change the architecture. |
+| **M2** | **Offline layer done, including the `shortcuts.vdf` writer** — see the module map below. 112 Rust + 62 TS tests green, clippy clean at `-D warnings`. Verified end-to-end against the real install with `cargo run -p sgdb-core --example scan`. |
+| **Next** | `sgdb::client`, `cdp`, `settings`, `steam::apptype`, then **M3** — the first genuinely usable build. |
+
+### `sgdb-core` module map
+
+| Module | What it is |
+|---|---|
+| `appid` | `AppId` newtype. Signed in `shortcuts.vdf`, unsigned in filenames **and** in the CDP APIs. **Contains no CRC32 function, deliberately** — the folklore algorithm is disproven and the way to never regress is for it not to exist. |
+| `vdf::binary` | Binary KV1. Read **and** write, byte-exact, including the extra trailing `0x08`. Validated against the live client in S9. |
+| `vdf::text` | Text KV1, read-only. Skips scalar siblings among numbered keys (`contentstatsid`); case-insensitive lookup; handles escapes, comments, `[$WIN32]` conditionals. |
+| `logo` | 5-anchor position maths. Mirrors `packages/shared/src/logo.ts`; **both test against one JSON fixture** so they cannot drift. |
+| `grid::names` | Filename rules + `AssetType` with Steam's measured ordinals. `siblings()` is the delete-set that keeps exactly one file per asset. |
+| `grid::store` | **The only artwork writer.** Sibling cleanup → temp → fsync → rename. Writes a default logo position when a logo has none. Clearing a logo takes its `.json`; clearing the header does not. |
+| `steam::locate` | Registry cascade with the lowercase/forward-slash normalisation. `locate_with()` takes the override as a parameter so tests need no `unsafe` env mutation. |
+| `steam::account` | `ActiveUser` → `loginusers.vdf` → sole `userdata/` dir. **Refuses to guess** between several accounts. |
+| `steam::library` | `libraryfolders.vdf` + `appmanifest_*.acf`. One corrupt manifest never empties the library. |
+| `steam::process` | ToolHelp process enumeration; `-shutdown` → poll → relaunch. **The only minter of `SteamStopped`.** Waits on *processes*, never on the registry pid. |
+| `steam::shortcuts` | Read/edit/write `shortcuts.vdf`. Round-trip verified on **load**; write needs a `SteamStopped` token *and* re-checks it. Mutation surface is `set_icon` / `clear_icon` only. |
+
+**Verified on this machine 2026-07-27:** Steam found via HKCU, account `16274804` via `ActiveUser`,
+1 library, 51 manifests → 51 fully installed → 50 after dropping `228980`, the one shortcut
+round-trip verified with its icon resolved and present on disk, and its five artwork files
+correctly identified with no ambiguous pairs.
+
+#### The `SteamStopped` token, and why it is not enough on its own
+
+`shortcuts.vdf` writes are gated by a token whose field is private and which has no public
+constructor, so only `steam::process` can produce one. Forgetting the check is a **compile
+error**.
+
+But a token proves a *past* observation — the user can relaunch Steam a second later. So
+`save()` calls `token.reconfirm()` immediately before writing. **The type prevents forgetting to
+check; the reconfirm prevents having checked too long ago.** Neither is sufficient alone, and
+the distinction is worth keeping when this code is touched.
+
+🔴 **Do not use `ActiveProcess\pid` for this.** It goes to `0` early in shutdown *while
+`steam.exe` is still alive* `[VERIFIED-BOX 2026-07-27]` — precisely the window in which Steam
+still holds the file and will still rewrite it on the way out. Wait on `steam.exe` **and**
+`steamwebhelper.exe`; the helpers outlive the main process. Live check on this box: the gate
+refused a real write and named all 8 processes, leaving the file byte-identical.
+
+Two error cases, deliberately distinct because the remedy differs: `StillRunning` ("close Steam")
+vs `ShutdownTimedOut` ("we asked; a game may still be closing, or a prompt is waiting").
+
+**The pristine file is preserved once**, at `shortcuts.vdf.sgdb-orig`, and never overwritten
+afterwards — later backups would only preserve our own output. A backup failure aborts the save.
+After the write the file is **read back and compared**; our own output is also re-parsed and
+checked against the document we meant to write before it ever reaches disk.
+
+#### 🟢 `shortcuts.vdf` field shape — measured, not assumed
+
+`[VERIFIED-BOX 2026-07-27]` Full field dump of the real file:
+
+| Field | Type | Note |
+|---|---|---|
+| `appid` | `0x02` i32 | signed; `0xF1548865` |
+| `appname` | `0x01` str | **lowercase key** |
+| `exe` | `0x01` str | **lowercase key**; quoted, and contains embedded `"` and `&&` |
+| `StartDir` | `0x01` str | **CamelCase key**; quoted; mixed `\` and `/` separators |
+| `icon` | `0x01` str | quoted |
+| `ShortcutPath`, `LaunchOptions`, `DevkitGameID`, `FlatpakAppID`, `sortas` | `0x01` str | empty here |
+| `IsHidden`, `AllowDesktopConfig`, `AllowOverlay`, `OpenVR`, `Devkit`, `DevkitOverrideAppID`, `LastPlayTime` | `0x02` i32 | |
+| `tags` | `0x00` map | `"0" → "favorite"` |
+
+Two rules fall out of this, and both are enforced in code:
+
+1. **Key casing is inconsistent** — `appid`/`appname`/`exe` lowercase, `StartDir`/`ShortcutPath`
+   CamelCase. Every lookup is case-insensitive, and an existing key keeps the casing it had.
+2. **Path values carry literal quote characters *inside* the string.** `exe`, `StartDir` and
+   `icon` are all `"C:\..."` here — EmuDeck wrote them that way and Steam accepts both forms.
+   A new icon therefore **matches the convention already in the file** (existing `icon` first,
+   else `exe`) rather than imposing one.
+
+#### Three test bugs worth remembering
+
+**`Path::ends_with` matches whole components, not string suffixes.** `p.ends_with("_icon.ico")`
+is always false for `4048848997_icon.ico`. Compare `file_name()` instead.
+
+**`StateFlags` is a bitfield, not an enum.** `6` = `StateFullyInstalled | StateUpdateRequired` —
+installed *and* update-pending, which is playable; FINAL FANTASY TACTICS reads `6` here. A test
+asserting `6` meant "not installed" failed against correct code.
+
+**🔴 `\0` followed by a digit is an octal-looking escape, and a test passed anyway.** A binary
+fixture written as `b"contentstatsid\0778551\0"` does not mean NUL-then-`778551` — `\077` is read
+as one escape, so the intended NUL separator was never there. Clippy's `octal_escapes` caught it;
+the test did **not**, because it asserted only the outcome ("one shortcut found") and never
+checked that the malformed sibling it was supposed to skip actually existed. It now asserts the
+premise — two children, one of them a scalar — before asserting the behaviour. Same lesson as the
+focus-tree probes: **a test that cannot fail when its fixture is wrong is not testing anything.**
+Write `\x00` in binary fixtures.
 
 ### M1 spike — all resolved
 
@@ -636,8 +726,10 @@ applied in 48 ms.
 
 ### 🟢 S9 — the shutdown/write/relaunch choreography works
 
-`[VERIFIED-BOX 2026-07-27]` Reproduce with
-`cargo run -p sgdb-core --example set_shortcut_icon -- <shortcuts.vdf> [<icon>|--show]`.
+`[VERIFIED-BOX 2026-07-27]` Reproduce with `cargo run -p sgdb-core --example set_shortcut_icon`
+(read-only; add `--appid <id> --icon <path> [--shutdown]` to write, `--restore` to put the
+pristine backup back). The harness now runs on `steam::shortcuts` + `steam::process` rather than
+the throwaway code S9 used, so **what shipped is what was tested**.
 
 Sequence: `steam.exe -shutdown` → poll until both `steam` and `steamwebhelper` are gone →
 read/modify/write with **our own `vdf::binary` codec** → relaunch → wait for

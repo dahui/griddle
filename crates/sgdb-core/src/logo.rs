@@ -61,7 +61,9 @@ impl PinnedPosition {
     pub fn is_horizontally_centered(self) -> bool {
         matches!(
             self,
-            PinnedPosition::UpperCenter | PinnedPosition::CenterCenter | PinnedPosition::BottomCenter
+            PinnedPosition::UpperCenter
+                | PinnedPosition::CenterCenter
+                | PinnedPosition::BottomCenter
         )
     }
 }
@@ -96,7 +98,10 @@ pub const DEFAULT_POSITION: LogoPosition = LogoPosition {
 
 impl LogoPosition {
     pub fn for_app(self) -> LogoPositionForApp {
-        LogoPositionForApp { version: 1, logo_position: self }
+        LogoPositionForApp {
+            version: 1,
+            logo_position: self,
+        }
     }
 
     /// CSS `top`/`left` percentages for this position.
@@ -107,11 +112,26 @@ impl LogoPosition {
         let (w, h) = (self.width_pct, self.height_pct);
         let centered_left = (100.0 - w) / 2.0;
         match self.pinned_position {
-            PinnedPosition::UpperLeft => Css { top: 0.0, left: 0.0 },
-            PinnedPosition::BottomLeft => Css { top: 100.0 - h, left: 0.0 },
-            PinnedPosition::UpperCenter => Css { top: 0.0, left: centered_left },
-            PinnedPosition::CenterCenter => Css { top: (100.0 - h) / 2.0, left: centered_left },
-            PinnedPosition::BottomCenter => Css { top: 100.0 - h, left: centered_left },
+            PinnedPosition::UpperLeft => Css {
+                top: 0.0,
+                left: 0.0,
+            },
+            PinnedPosition::BottomLeft => Css {
+                top: 100.0 - h,
+                left: 0.0,
+            },
+            PinnedPosition::UpperCenter => Css {
+                top: 0.0,
+                left: centered_left,
+            },
+            PinnedPosition::CenterCenter => Css {
+                top: (100.0 - h) / 2.0,
+                left: centered_left,
+            },
+            PinnedPosition::BottomCenter => Css {
+                top: 100.0 - h,
+                left: centered_left,
+            },
         }
     }
 }
@@ -259,9 +279,16 @@ mod tests {
             for w in 1..=100 {
                 for h in 1..=100 {
                     let (w, h) = (f64::from(w), f64::from(h));
-                    let css = LogoPosition { pinned_position: pin, width_pct: w, height_pct: h }
-                        .to_css();
-                    assert!(css.top >= 0.0 && css.left >= 0.0, "{pin:?} {w}x{h} went negative");
+                    let css = LogoPosition {
+                        pinned_position: pin,
+                        width_pct: w,
+                        height_pct: h,
+                    }
+                    .to_css();
+                    assert!(
+                        css.top >= 0.0 && css.left >= 0.0,
+                        "{pin:?} {w}x{h} went negative"
+                    );
                     assert!(
                         css.top + h <= 100.0 + 1e-9 && css.left + w <= 100.0 + 1e-9,
                         "{pin:?} {w}x{h} overflowed the container",
