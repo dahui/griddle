@@ -221,9 +221,9 @@ sink the project.
 |---|---|---|
 | **S7** | Real `shortcuts.vdf` round-trips byte-exactly | 🟢 **PASS** — 701 bytes, 1 file-level terminator |
 | **S1** | Sentinel + restart → is there a `SharedJSContext` on 8080? | 🟢 **PASS** — see below |
-| **S2** | 🔴 **Crown jewel.** Capture `__webpack_require__`, find a gamepad `Focusable` + `showModal`, render a box in BPM and **move controller focus onto it.** | 🟡 **mechanism PASS**, render+focus still unproven |
+| **S2** | 🔴 **Crown jewel.** Capture `__webpack_require__`, find a gamepad `Focusable`, render in BPM and join the focus tree. | 🟢 **PASS** — see "S2 PASSES" below |
 | **S6** | 🔴 **CSP probe.** WebSocket to loopback? `cdn2.steamgriddb.com` images? | 🟢 **PASS — best case.** Both allowed. |
-| **S5** | Wrap the context-menu factory to splice an item before Properties | 🟡 lead found, anchor not yet identified |
+| **S5** | Wrap the context-menu factory to splice an item before Properties | 🟢 **PASS** — module `5808`, token `#GameAction_GameProperties` |
 | **S2b** | If not: does `keydown`/Gamepad API see controller input in SharedJSContext under BPM? | ⬜ not needed unless S2 render fails |
 | **S3** | Live apply over CDP on shortcut `4048848997`. Diff `grid/` before/after. | 🟢 **PASS** — 28 ms, no restart |
 | **S4** | Animated WebP labelled `png` — animates in desktop library? in BPM? in WebView2? **Three separate answers.** | ⬜ |
@@ -396,6 +396,74 @@ Module `36437` export `L` is the modal **host** component, taking
 BPM: a portal is how you render into a different window's tree while staying inside the React
 tree that owns the focus contexts. `[INFERRED — VERIFY]`
 
+---
+
+### 🟢 S2 PASSES — the Big Picture deliverable is viable
+
+`[VERIFIED-BOX @ CLSTAMP 10840511, 2026-07-27 — probes 13-18]`
+
+Our `Focusable`, mounted through Steam's own `ModalManager`, joins Steam's gamepad focus
+navigation. Proven **positively**, by tree membership:
+
+```
+tree[0] 'GamepadUI_Full_Root'                             nodes=216  ours=YES  steam-control=YES
+tree[1] 'GamepadUI_Full_Root/PartnerEventOverlayContainer' nodes=1    ours=no   steam-control=no
+tree[2] 'GamepadUI_Full_Root/ModalDialogOverlay_Modal_11'  nodes=2    ours=YES
+```
+
+Steam allocated a **dedicated child tree for our modal** (`ModalDialogOverlay_Modal_11`),
+exactly as it does for its own — and our element also appears in the root tree beside
+Steam-rendered controls.
+
+#### The working recipe
+
+```js
+// 1. Capture the module registry (no factories executed — read require.m[id].toString()).
+let req; window.webpackChunksteamui.push([[marker], {}, r => { req = r; }]);
+
+// 2. React 19.1.1 = module 51745 · Focusable factory = module 28869 export HR
+const React = req('51745'), Focusable = req('28869').HR('div');
+
+// 3. Walk the React fiber graph for a prop named /modalmanager/i whose value has ShowModal.
+//    CRITICAL: take the one whose BUsePopups() === false — that is the inline manager that
+//    renders into the DISPLAYED window. The BUsePopups()===true one renders into
+//    SharedJSContext's own document, which is never shown.
+// 4. ShowModal takes ONE argument and returns { Close, Update, ClosedPromise }.
+const handle = mgr.ShowModal(React.createElement(Body));
+```
+
+#### 🔴 Five wrong turns — do not repeat them
+
+1. **A detached `createRoot` never integrates**, in *either* document (probes 6, 8). Rendering
+   into BPM's document is necessary but not sufficient; you need Steam's React *tree*.
+2. **`28869.sl` is a hook, not a component.** Its destructured props are exactly Focusable's,
+   but it returns `{elemProps, navOptions, gamepadEvents}`. Matching prop names is not enough —
+   confirm it returns JSX.
+3. **`ShowModal` has arity 1.** `showModal(modal, parent?, props?)` is decky-frontend-lib's
+   *wrapper* signature, not Steam's method. There is no parent argument; the manager you pick
+   *is* the routing decision.
+4. **`showModal` as a search term is a red herring** — every literal occurrence in the bundle is
+   the native `HTMLDialogElement.showModal()` DOM API.
+5. 🔴 **Focus nodes are NOT attached to DOM elements.** Probes 6-16 all reported
+   `treeNode: null` using `Object.keys(el)`. That check was meaningless: **Steam's own
+   `Focusable` elements show the same nothing** (2 own properties, both React fiber keys, no
+   symbols). Membership lives in `g_WindowFocusCoordinator.m_rgTrees[i].tree`, whose root node
+   carries `m_Root → m_rgChildren → m_element`.
+
+   **The lesson:** when a probe reports absence, run the identical probe against a
+   Steam-rendered control before believing it. Ten probes' worth of "not integrated" was a
+   broken measurement, and the control comparison exposed it in one run.
+
+#### Other facts worth keeping
+
+- Focus trees exist **only in Big Picture**: `m_rgTrees` is 0 in desktop mode, 2 with BPM open,
+  3 while a modal is up. Any focus test run in desktop mode is inconclusive by construction.
+- BPM's document is `SP BPM_uid0` in `g_PopupManager.m_mapPopups`; the desktop window is
+  `SP Desktop_uid0`. Steam's popups appear to be React portals rooted in SharedJSContext, which
+  is why walking up the fiber tree from a BPM element lands in SharedJSContext's tree.
+- Tree entries are `{name, tree, browserContext}`; nodes carry `m_Tree`, `m_Parent`,
+  `m_rgChildren`, `m_element`, `m_FocusRing`, `m_nDepth`, `m_FocusableIfEmptyAncestor`.
+
 #### ✅ Steam's own custom-artwork flow — module `87498`
 
 This module contains both `CloseModal` and `SetCustomArtworkForApp`: it is Steam's *own*
@@ -533,11 +601,44 @@ table.
 404. `<img>` `onerror` cannot tell the two apart — always pair it with a `fetch()` (whose
 rejection message names CSP) and a control URL that is known to load.
 
-**S5 — not yet answered.** Guessed anchors `#AppProperties_Title` and `#AppDetails_Properties`
-both scored **zero**; they do not exist on this build. Real lead: **`#AppDetails_ManageDLC` in
-module `3651`**, which is app-detail menu territory. The token scan is in `probe2.js` — widen
-its `interesting` regex and re-run. Not on the critical path: the entry-point fallback ladder
-(global hotkey → desktop-driven) does not depend on it.
+#### 🟢 S5 — the context-menu splice point
+
+`[VERIFIED-BOX @ CLSTAMP 10840511, 2026-07-27]` Run `cargo run -p sgdb-core --example
+cdp_probe -- --menu`.
+
+**Module `5808`** builds the game context menu (21.6 KB). The Properties item, rendered last:
+
+```js
+1 == e.length && !M.Ih.BKioskModeLocked() && (0,n.jsxs)(n.Fragment, { children: [
+  (0,n.jsx)(L.K5, {}),                                    // separator
+  (0,n.jsx)(L.kt, {                                       // MenuItem
+    onSelected: () => this.props.navigator.AppProperties(e[0].appid),
+    children: (0,Z.we)("#GameAction_GameProperties") }) ] })
+```
+
+| Piece | Meaning |
+|---|---|
+| `e` | `rgApps` — the selected apps; `e[0].appid` is the target |
+| `L.kt` / `L.K5` | MenuItem / separator components |
+| `Z.we` | the localization lookup |
+| `1 == e.length` | Properties only appears for a **single** selection |
+| `BKioskModeLocked()` | and not in kiosk mode — our item should respect both |
+
+The **whole menu in source order** — useful for choosing where "Change Artwork…" belongs:
+`ConfirmExitGameTitle`, `UnsavedDataWarning`, `ConfirmStopStreamingTitle`,
+`AddToCollectionOption_NewCollection`, `Manage`, `ViewCDKeys`, `ControllerConfiguration`,
+`DismissPlayNext`, `BrowseLocalFiles`, **`GameProperties`**, `AllowForChild`, `DenyForChild`,
+`FamilyMenu`, `MarkAsPrivate_NoShortcuts`, `RemoveGameLicense`, `DevMenu`,
+`DeleteProtonFiles`, `ClearSelectedControllerConfig` (all `#GameAction_*`).
+
+`showContextMenu` (lowercase) exists in exactly one module, **`39590`** — that is the opener.
+
+⚠️ **The anchor is `#GameAction_GameProperties`.** Earlier guesses `#AppProperties_Title` and
+`#AppDetails_Properties` scored **zero** — they do not exist on this build. Anchor on the
+token, never on `L.kt`/`L.K5`/`Z.we`, which are mangled and will differ next build.
+
+Still not on the critical path — the fallback ladder (global hotkey → desktop-driven) stands
+if a future build moves this.
 
 ---
 

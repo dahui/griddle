@@ -1,16 +1,25 @@
-﻿//! M1 spike harness â€” answers S1, S2 and S6 against a live Steam client.
+//! M1 spike harness — talks to a live Steam client over the CEF debugger.
 //!
 //! ```powershell
-//! cargo run -p sgdb-core --example cdp_probe            # probe only
-//! cargo run -p sgdb-core --example cdp_probe -- --status # no connection, just report state
+//! cargo run -p sgdb-core --example cdp_probe            # env: realm, apply API, CSP, webpack
+//! cargo run -p sgdb-core --example cdp_probe -- --status  # no connection, just report state
+//! cargo run -p sgdb-core --example cdp_probe -- --modules # module map + Steam's own call sites
+//! cargo run -p sgdb-core --example cdp_probe -- --bpm     # mount into the focus tree (BPM open)
+//! cargo run -p sgdb-core --example cdp_probe -- --apply   # S3 live apply — WRITES, see below
 //! ```
 //!
-//! **Read-only.** This never creates the sentinel, never restarts Steam, and never calls a
-//! `Set*` API. It reports what is reachable; enabling anything is a separate, explicit act.
+//! The harness never creates the sentinel, never restarts Steam, and never calls a `Set*` API —
+//! enabling anything is a separate, explicit act. **`--apply` is the exception: it replaces real
+//! artwork.** Back up `userdata/<id>/config/grid/` and restore it afterwards, verifying by hash;
+//! that directory can hold art a user curated by hand and cannot regenerate.
 //!
 //! Everything here is destined for `sgdb-core::cdp`, so it is written to be promoted rather
 //! than thrown away: the target-selection rules and the "is this actually Steam" check below
 //! are the real ones.
+//!
+//! Fourteen further probes existed during the spike and were deleted once their findings were
+//! recorded in CLAUDE.md — including the dead ends (detached React roots, name-based module
+//! searches), which are written up there specifically so they are not retried.
 
 use std::io::{Read, Write};
 use std::net::TcpStream;
@@ -86,7 +95,7 @@ fn main() {
     }
 
     let Some(shared) = pick_shared_js_context(&targets) else {
-        println!("\n  no SharedJSContext target found â€” is this really Steam on {DEBUG_PORT}?");
+        println!("\n  no SharedJSContext target found — is this really Steam on {DEBUG_PORT}?");
         return;
     };
     let Some(ws_url) = shared.get("webSocketDebuggerUrl").and_then(|v| v.as_str()) else {
@@ -112,7 +121,7 @@ fn main() {
 /// Target selection, in the order `sgdb-core::cdp` will use it.
 ///
 /// The exact-title match is first because it is unambiguous; the fallbacks cover title
-/// changes across Steam builds. If none match we refuse rather than guess â€” evaluating
+/// changes across Steam builds. If none match we refuse rather than guess — evaluating
 /// arbitrary JS against whatever happens to be on port 8080 would be reckless, and 8080 is a
 /// very common dev-server port.
 fn pick_shared_js_context(targets: &[serde_json::Value]) -> Option<&serde_json::Value> {
@@ -140,28 +149,20 @@ fn run_probe(ws_url: &str) -> Result<serde_json::Value, String> {
         tungstenite::connect(ws_url).map_err(|e| format!("websocket connect: {e}"))?;
 
     let args: Vec<String> = std::env::args().collect();
-    let probe_js = if args.iter().any(|a| a == "--probe11") {
-        include_str!("probe11.js")
-    } else if args.iter().any(|a| a == "--probe10") {
-        include_str!("probe10.js")
-    } else if args.iter().any(|a| a == "--probe9") {
-        include_str!("probe9.js")
-    } else if args.iter().any(|a| a == "--probe8") {
-        include_str!("probe8.js")
-    } else if args.iter().any(|a| a == "--probe7") {
-        include_str!("probe7.js")
-    } else if args.iter().any(|a| a == "--probe6") {
-        include_str!("probe6.js")
-    } else if args.iter().any(|a| a == "--probe5") {
-        include_str!("probe5.js")
-    } else if args.iter().any(|a| a == "--probe4") {
-        include_str!("probe4.js")
-    } else if args.iter().any(|a| a == "--probe3") {
-        include_str!("probe3.js")
-    } else if args.iter().any(|a| a == "--probe2") {
-        include_str!("probe2.js")
+    let selected = |name: &str| args.iter().any(|a| a == name);
+
+    // Four probes survive the M1 spike; the dead ends were removed once their findings were
+    // recorded in CLAUDE.md. Each of these is still worth re-running after a Steam update.
+    let probe_js = if selected("--modules") {
+        include_str!("modules.js") // module map, Steam's own artwork call sites, ModalManager
+    } else if selected("--apply") {
+        include_str!("apply.js") // S3: live artwork apply (WRITES — back up grid/ first)
+    } else if selected("--bpm") {
+        include_str!("bpm_mount.js") // S2: mount into Steam's focus tree (needs BPM open)
+    } else if selected("--menu") {
+        include_str!("context_menu.js") // S5: library context-menu entry point
     } else {
-        include_str!("probe.js")
+        include_str!("env.js") // default: realm, apply API, CSP, webpack discovery
     };
 
     let evaluate = |id: u64, expr: &str| {
@@ -185,7 +186,7 @@ fn run_probe(ws_url: &str) -> Result<serde_json::Value, String> {
 
     let mut result = read_evaluate_result(&mut socket, 1)?;
 
-    // The image and fetch checks are asynchronous â€” give them a moment, then read the flags
+    // The image and fetch checks are asynchronous — give them a moment, then read the flags
     // the probe parks on `window`.
     let async_results = "JSON.stringify({\
         sgdb: String(window.__sgdbProbeImage), \
@@ -241,14 +242,14 @@ fn read_evaluate_result(
     Err("no matching response after 200 frames".into())
 }
 
-/// Minimal HTTP/1.1 GET. Loopback, plain HTTP, one small JSON body â€” a full HTTP client would
+/// Minimal HTTP/1.1 GET. Loopback, plain HTTP, one small JSON body — a full HTTP client would
 /// be a heavier dependency than the task deserves.
 ///
 /// **`Content-Length` is honoured rather than reading to EOF.** Steam's CEF DevTools HTTP
 /// server ignores `Connection: close` and holds the socket open after responding, so
 /// `read_to_end` blocks until the read timeout and the request looks like a connection
 /// failure even though the server answered immediately.
-/// `[VERIFIED-BOX 2026-07-27 â€” cost one confusing os error 10060]`
+/// `[VERIFIED-BOX 2026-07-27 — cost one confusing os error 10060]`
 fn http_get(url: &str) -> Result<String, String> {
     let rest = url.strip_prefix("http://").ok_or("only http:// supported")?;
     let (host_port, path) = match rest.find('/') {
@@ -312,6 +313,14 @@ fn steam_path() -> Option<String> {
 fn steam_path() -> Option<String> {
     None
 }
+
+
+
+
+
+
+
+
 
 
 

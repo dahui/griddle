@@ -49,6 +49,19 @@ jobs:
             exit 1
           fi
           echo "write boundary respected"
+      - name: no mojibake (UTF-8 read as Latin-1)
+        run: |
+          # Windows PowerShell's Get-Content/Set-Content round-trip mangles non-ASCII: em
+          # dashes in doc comments became "â€”", and a careless repair turned them into "”.
+          # Cheap to check, silent and ugly if missed. Edit files with a UTF-8-aware tool.
+          if grep -rn 'â€\|Ã‚\|Ã©\|"”' --include='*.rs' --include='*.ts' --include='*.tsx' \
+               --include='*.md' --include='*.json' --include='*.toml' --include='*.sh' \
+               crates packages apps scripts *.md 2>/dev/null; then
+            echo "::error::encoding corruption — rewrite the file as UTF-8"
+            exit 1
+          fi
+          echo "encoding clean"
+
       - name: steam://flushconfig is banned
         run: |
           # It has historically made Steam forget its library folder locations.
