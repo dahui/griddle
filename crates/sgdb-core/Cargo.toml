@@ -12,6 +12,17 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
+# rustls rather than native-tls: no OpenSSL/schannel build dependency, and the Linux CI leg
+# builds this crate too. `json` is unused on purpose -- responses are read as text so the
+# content type can be checked first (a wrong path returns an HTML page, not JSON).
+reqwest = { version = "0.12", default-features = false, features = [
+    "rustls-tls",
+    "gzip",
+    "http2",
+] }
+tokio = { version = "1", features = ["sync", "time"] }
+url = "2"
+
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
 # Process enumeration for `steam::process`. The registry's ActiveProcess\pid is cleared early
@@ -24,6 +35,10 @@ windows-sys = { version = "0.61", features = [
 
 [dev-dependencies]
 tempfile = "3"
+# The SGDB client is tested against a local mock rather than the live API: 429/backoff, the
+# HTML-404 case and "no auth header on the CDN" are all impractical to provoke for real.
+wiremock = "0.6"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 # Spike-only, for `examples/cdp_probe.rs`. No TLS: the CEF debugger is plain ws:// on
 # loopback. When the CDP client is promoted out of the example this moves to [dependencies].
 tungstenite = { version = "0.28", default-features = false, features = ["handshake"] }

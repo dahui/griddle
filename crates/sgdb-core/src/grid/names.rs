@@ -97,7 +97,9 @@ impl AssetType {
 
 impl fmt::Display for AssetType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.label())
+        // `f.pad`, not `f.write_str`: the latter silently ignores width and alignment, so
+        // `{:<13}` in a table or log line would not pad at all.
+        f.pad(self.label())
     }
 }
 

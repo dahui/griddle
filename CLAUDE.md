@@ -254,6 +254,10 @@ architecture.
 | `steam::library` | `libraryfolders.vdf` + `appmanifest_*.acf`. One corrupt manifest never empties the library. |
 | `vdf::appinfo` | `appcache/appinfo.vdf` reader. **Not the same format as `vdf::binary`** — v29 keys are u32 string-table indices. Extracts only `common/{type,name,clienticon}`. |
 | `steam::apptype` | `common/type` → "does this belong in the library list". Every unknown resolves toward **showing** the app. |
+| `sgdb::key` | `ApiKey`. Custom `Debug` prints a fingerprint; **no `Display`, no `Serialize`** — leaking it is a compile error. |
+| `sgdb::model` | Response types, every field read off a real response. Only `id` and `url` are required. |
+| `sgdb::query` | Endpoint + filter selection. `Dimensions` is a closed set, every value probed. |
+| `sgdb::client` | **The only place the key is used.** Concurrency cap 3, backoff with jitter, content-type checked before parsing. |
 | `steam::process` | ToolHelp process enumeration; `-shutdown` → poll → relaunch. **The only minter of `SteamStopped`.** Waits on *processes*, never on the registry pid. |
 | `steam::shortcuts` | Read/edit/write `shortcuts.vdf`. Round-trip verified on **load**; write needs a `SteamStopped` token *and* re-checks it. Mutation surface is `set_icon` / `clear_icon` only. |
 
@@ -359,7 +363,52 @@ the floor. `AppType::Other` keeps the unrecognised string rather than collapsing
 game". A missing game is a bug report; a stray tool is a cosmetic annoyance, and the code
 should not treat those as equally bad.
 
-#### Three test bugs worth remembering
+#### 🟢 The SteamGridDB API, measured `[VERIFIED-BOX 2026-07-30]`
+
+Reproduce with `$env:SGDB_API_KEY = "<key>"; cargo run -p sgdb-core --example sgdb_probe`
+(read-only). The key is read from the environment and **never** from a file in this repo.
+
+| Probe | Result |
+|---|---|
+| `/games/steam/620`, `/grids`, `/heroes`, `/logos`, `/icons`, `/search/autocomplete` | 200 |
+| bad key, **and no key at all** | 401, **empty body** |
+| unknown Steam appid | 404, **empty body** |
+| a path that is not an endpoint | 404 with a **full HTML page** |
+| `?dimensions=1x1` | **400** — invalid filter values are rejected, not ignored |
+| `?page=1` | honoured; page 1 ≠ page 0, so infinite scroll works |
+| `ETag` on any endpoint | **absent** |
+
+🔴 **Correction to the plan: ETag revalidation is not available.** No endpoint sends an `ETag`,
+so the planned "JSON cache by URL+params with ETag revalidation" cannot work. Any cache must be
+**time-based**. Combined with the already-recorded absence of `RateLimit-*`/`Retry-After`, every
+politeness measure in this client is self-imposed: a concurrency cap of 3, exponential backoff
+with jitter, and retries only on 429/5xx/network.
+
+**The `Cache-Control: no-store, no-cache, must-revalidate` is not a considered policy.** It
+arrives with `expires: Thu, 19 Nov 1981` and `pragma: no-cache` on *every* endpoint including
+static game metadata — that exact trio is PHP's `session_start()` default. Worth knowing before
+someone decides we are obliged to honour it and re-fetches on every keystroke.
+
+**Three response envelopes, not one:** `/games/...` returns `data` as a single object;
+`/search/autocomplete` returns an array with **no** pagination fields; asset endpoints return an
+array with `page`/`total`/`limit`.
+
+🔴 **`icons` rejects `dimensions` outright** — every value 400s, including `8x8`, `16x16`,
+`32x32`, `64x64`, `128x128`, `256x256`, `512x512`, `1024x1024`. An earlier draft carried
+`512x512` and `1024x1024` as icon dimensions purely because they sounded right; the live probe
+caught both, and they are **deleted rather than commented out**. Same principle as the absent
+CRC32: a value that cannot be constructed cannot be sent.
+
+🔴 **`grids` serves two of our five slots.** Portrait capsule (`<id>p.png`) and wide header
+(`<id>.png`) come from the *same* endpoint, separated only by `dimensions`. Querying `grids`
+without dimensions for the Header tab fills it with portrait art that then gets written to the
+wide slot — it applies, and looks wrong, which is worse than failing.
+
+**Also verified:** icons legitimately report `width: 0, height: 0`, so never derive an aspect
+ratio without checking; `heroes?dimensions=1600x650` is valid but currently matches nothing, so
+an empty result there is not a bug.
+
+#### Six bugs worth remembering
 
 **`Path::ends_with` matches whole components, not string suffixes.** `p.ends_with("_icon.ico")`
 is always false for `4048848997_icon.ico`. Compare `file_name()` instead.
@@ -367,6 +416,22 @@ is always false for `4048848997_icon.ico`. Compare `file_name()` instead.
 **`StateFlags` is a bitfield, not an enum.** `6` = `StateFullyInstalled | StateUpdateRequired` —
 installed *and* update-pending, which is playable; FINAL FANTASY TACTICS reads `6` here. A test
 asserting `6` meant "not installed" failed against correct code.
+
+**🔴 `.trim()` before `strip_prefix("Bearer ")` eats the space the prefix needs.** `ApiKey::new`
+accepted the input `"Bearer "` as a six-character key literally called `Bearer`: trimming
+removed the trailing space, so the prefix no longer matched and the label was kept as the
+secret. Fixed by splitting on the first whitespace instead, which is also case-insensitive for
+free. The bug was found by a test asserting the *rejection* case — the happy path
+(`"Bearer <key>"`) worked perfectly throughout.
+
+**🔴 `f.write_str` in a `Display` impl silently ignores width and alignment.** `AssetType`'s
+`{:<13}` did not pad in any table or log line. Use `f.pad()`.
+
+**🔴 A mock cannot lie about `Content-Length`.** A test asserting the download size limit set a
+false header; hyper rejects the mismatch, so the test exercised a broken server rather than the
+limit. The limit became a config field instead, which is both testable and the right shape — a
+policy value, not a constant. It now has a passing control case too, so a limit of zero could
+not make it "pass".
 
 **🔴 `\0` followed by a digit is an octal-looking escape, and a test passed anyway.** A binary
 fixture written as `b"contentstatsid\0778551\0"` does not mean NUL-then-`778551` — `\077` is read

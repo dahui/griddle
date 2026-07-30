@@ -12,5 +12,6 @@
 pub mod appid;
 pub mod grid;
 pub mod logo;
+pub mod sgdb;
 pub mod steam;
 pub mod vdf;
