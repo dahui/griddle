@@ -10,7 +10,7 @@
 //! Set `SGDB_STEAM_PATH` to point at a different installation.
 
 use sgdb_core::grid::{AssetType, GridDir};
-use sgdb_core::steam::{account, library, locate};
+use sgdb_core::steam::{account, apptype, library, locate};
 
 fn main() {
     println!("== locate ==");
@@ -56,33 +56,59 @@ fn main() {
         Err(e) => eprintln!("  {e}"),
     }
 
+    println!("\n== appinfo.vdf ==");
+    let types = apptype::AppTypes::load_or_none(&install);
+    match &types {
+        Some(t) => println!(
+            "  {} apps, {} skipped, {:?}, entry list {}\n  {}",
+            t.len(),
+            t.skipped(),
+            t.version(),
+            if t.aligned() {
+                "ends exactly at the string table ✓"
+            } else {
+                "MISALIGNED — apps may have been missed"
+            },
+            t.path().display()
+        ),
+        None => println!("  unavailable — falling back to the id blocklist alone"),
+    }
+
     println!("\n== installed apps ==");
     match library::installed_apps(&install) {
         Ok(apps) => {
-            let installed: Vec<_> = apps.iter().filter(|a| a.is_fully_installed()).collect();
-            let games: Vec<_> = installed
-                .iter()
-                .filter(|a| !library::is_known_non_game(a.app_id))
-                .collect();
+            let installed: Vec<&library::InstalledApp> =
+                apps.iter().filter(|a| a.is_fully_installed()).collect();
+            let installed_count = installed.len();
+            let (shown, hidden): (Vec<&library::InstalledApp>, Vec<&library::InstalledApp>) =
+                installed
+                    .into_iter()
+                    .partition(|a| apptype::include_in_library(types.as_ref(), a.app_id));
             println!(
-                "  {} manifests, {} fully installed, {} after dropping known tools",
+                "  {} manifests, {} fully installed, {} shown / {} filtered out",
                 apps.len(),
-                installed.len(),
-                games.len()
+                installed_count,
+                shown.len(),
+                hidden.len()
             );
-            for a in games.iter().take(10) {
-                println!("    {:>8}  {}", a.app_id.get(), a.name);
+            for a in shown.iter().take(10) {
+                let kind = types
+                    .as_ref()
+                    .and_then(|t| t.app_type(a.app_id))
+                    .map_or("?".to_string(), |t| t.label().to_string());
+                println!("    {:>8}  [{kind}] {}", a.app_id.get(), a.name);
             }
-            if games.len() > 10 {
-                println!("    … and {} more", games.len() - 10);
+            if shown.len() > 10 {
+                println!("    … and {} more", shown.len() - 10);
             }
-            // Anything filtered out is worth showing: a wrongly-excluded game is a bug the
-            // user would otherwise just not notice.
-            for a in installed
-                .iter()
-                .filter(|a| library::is_known_non_game(a.app_id))
-            {
-                println!("    [tool] {:>8}  {}", a.app_id.get(), a.name);
+            // Anything filtered out is worth showing in full: a wrongly-excluded game is a bug
+            // the user would otherwise just never notice.
+            for a in &hidden {
+                let kind = types
+                    .as_ref()
+                    .and_then(|t| t.app_type(a.app_id))
+                    .map_or("blocklist".to_string(), |t| t.label().to_string());
+                println!("    [hidden: {kind}] {:>8}  {}", a.app_id.get(), a.name);
             }
         }
         Err(e) => eprintln!("  {e}"),

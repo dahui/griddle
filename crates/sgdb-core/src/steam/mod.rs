@@ -11,12 +11,14 @@
 //! while it runs is silently discarded.
 
 pub mod account;
+pub mod apptype;
 pub mod library;
 pub mod locate;
 pub mod process;
 pub mod shortcuts;
 
 pub use account::Account;
+pub use apptype::{AppType, AppTypes};
 pub use library::{InstalledApp, LibraryFolder};
 pub use locate::SteamInstall;
 pub use process::{SteamProcess, SteamStopped};

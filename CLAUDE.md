@@ -252,6 +252,8 @@ architecture.
 | `steam::locate` | Registry cascade with the lowercase/forward-slash normalisation. `locate_with()` takes the override as a parameter so tests need no `unsafe` env mutation. |
 | `steam::account` | `ActiveUser` → `loginusers.vdf` → sole `userdata/` dir. **Refuses to guess** between several accounts. |
 | `steam::library` | `libraryfolders.vdf` + `appmanifest_*.acf`. One corrupt manifest never empties the library. |
+| `vdf::appinfo` | `appcache/appinfo.vdf` reader. **Not the same format as `vdf::binary`** — v29 keys are u32 string-table indices. Extracts only `common/{type,name,clienticon}`. |
+| `steam::apptype` | `common/type` → "does this belong in the library list". Every unknown resolves toward **showing** the app. |
 | `steam::process` | ToolHelp process enumeration; `-shutdown` → poll → relaunch. **The only minter of `SteamStopped`.** Waits on *processes*, never on the registry pid. |
 | `steam::shortcuts` | Read/edit/write `shortcuts.vdf`. Round-trip verified on **load**; write needs a `SteamStopped` token *and* re-checks it. Mutation surface is `set_icon` / `clear_icon` only. |
 
@@ -308,6 +310,54 @@ Two rules fall out of this, and both are enforced in code:
    `icon` are all `"C:\..."` here — EmuDeck wrote them that way and Steam accepts both forms.
    A new icon therefore **matches the convention already in the file** (existing `icon` first,
    else `exe`) rather than imposing one.
+
+#### 🟢 `appinfo.vdf` — measured on this box `[VERIFIED-BOX 2026-07-30]`
+
+6,129,997 bytes. Magic `29 44 56 07` = `0x07564429` (**v29**), universe 1, string-table offset
+6,052,322. Parsed: **2930 apps, 0 skipped**, and 50/51 installed manifests typed `Game`.
+
+```text
+u32  magic  0x07564429  ·  u32 universe  ·  i64 string_table_offset   (v29+)
+repeating until appid == 0:
+  u32 appid · u32 size · then within `size`:
+  u32 info_state · u32 last_updated · u64 pics_token · [20] sha1_text
+  u32 change_number · [20] sha1_data (v28+) · binary KV blob
+at string_table_offset:  u32 count (9342) · count NUL-terminated strings
+```
+
+🔴 **In v29 the KV keys are u32 indices into the string table, not NUL-terminated strings.**
+This is why `vdf::binary` cannot be reused. The first app's blob decodes as:
+
+```text
+00 | 00 00 00 00                      map, key #0 -> "appinfo"
+  02 | 01 00 00 00 | 05 00 00 00      i32, key #1 -> "appid"       = 5
+  02 | 02 00 00 00 | 01 00 00 00      i32, key #2 -> "public_only" = 1
+08                                    end
+```
+
+A parser assuming inline keys would read four bytes of index as the start of a string and
+produce confident garbage. Type markers themselves are identical to `vdf::binary`.
+
+🔴 **String-table indices are per-file.** On this build `common`=3, `type`=5, `name`=4,
+`clienticon`=363 — properties of *this* file, not the format. The finder predicate is "the
+entry whose **resolved** key equals `type`", never "index 5".
+
+Two robustness properties that are worth keeping when this code is touched:
+
+- **Entries are length-prefixed, so a bad blob costs one app, not the file.** The reader
+  advances by `size` regardless of what the blob contained. `skipped` is the early-warning
+  counter — a blob that does not begin with a map marker counts as skipped rather than
+  silently yielding an app with no type, or the signal would never fire.
+- **`aligned` checks that the entry list ends exactly at the string-table offset.** If it does
+  not, we lost our place stepping through the entries and the app list is quietly incomplete —
+  which would reach the user as "some of my games are missing", the hardest kind of bug to
+  report. True on this box.
+
+**Failure direction is fixed: unknown means _show it_.** Missing file, unknown magic, app
+absent from the cache, or an unrecognised `type` → the app is shown, with the id blocklist as
+the floor. `AppType::Other` keeps the unrecognised string rather than collapsing to "not a
+game". A missing game is a bug report; a stray tool is a cosmetic annoyance, and the code
+should not treat those as equally bad.
 
 #### Three test bugs worth remembering
 
