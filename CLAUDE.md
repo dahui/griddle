@@ -258,6 +258,8 @@ architecture.
 | `sgdb::model` | Response types, every field read off a real response. Only `id` and `url` are required. |
 | `sgdb::query` | Endpoint + filter selection. `Dimensions` is a closed set, every value probed. |
 | `sgdb::client` | **The only place the key is used.** Concurrency cap 3, backoff with jitter, content-type checked before parsing. |
+| `settings` | `%APPDATA%\<AppName>\settings.json`, atomic. **Third and last writer.** A corrupt file is preserved, never overwritten. |
+| `settings::dpapi` | `CryptProtectData` round-trip for the API key. Windows-only, with **no plaintext fallback**. |
 | `steam::process` | ToolHelp process enumeration; `-shutdown` → poll → relaunch. **The only minter of `SteamStopped`.** Waits on *processes*, never on the registry pid. |
 | `steam::shortcuts` | Read/edit/write `shortcuts.vdf`. Round-trip verified on **load**; write needs a `SteamStopped` token *and* re-checks it. Mutation surface is `set_icon` / `clear_icon` only. |
 
@@ -408,7 +410,30 @@ wide slot — it applies, and looks wrong, which is worse than failing.
 ratio without checking; `heroes?dimensions=1600x650` is valid but currently matches nothing, so
 an empty result there is not a bug.
 
-#### Six bugs worth remembering
+#### 🔑 How the API key is actually protected
+
+Three layers, and the first is the one that cannot be forgotten:
+
+1. **`ApiKey` implements no `Serialize`.** So it *cannot* be written into `settings.json` by
+   accident — the only route in is `Settings::set_api_key`, which DPAPI-wraps it first. The
+   encryption is not something a later edit can skip, because the plaintext type will not
+   serialise at all. It has no `Display` either, so `format!("{key}")` does not compile, and a
+   custom `Debug` prints `ApiKey(e6e2…, 32 chars)`.
+2. **DPAPI at rest**, scoped to the current Windows user, with app-specific secondary entropy
+   so another process cannot simply call `CryptUnprotectData` on the blob. Off Windows there is
+   deliberately **no plaintext fallback** — that would be a build where the secret is silently
+   unprotected.
+3. **`scripts/check-secrets.sh`** keeps it out of git, by hash rather than by literal.
+
+A test reads the bytes actually on disk and asserts the key is not among them. Another asserts
+no `Authorization` header reaches `cdn2.steamgriddb.com` — auth is attached per request, never
+as a client default, precisely so image downloads cannot carry it.
+
+**An undecryptable key does not fail the whole load.** A settings file from a different Windows
+account still yields every tab preference and filter; only the key is reported as unreadable.
+Failing the load would look to the user like every setting had been lost.
+
+#### Seven bugs worth remembering
 
 **`Path::ends_with` matches whole components, not string suffixes.** `p.ends_with("_icon.ico")`
 is always false for `4048848997_icon.ico`. Compare `file_name()` instead.
@@ -416,6 +441,15 @@ is always false for `4048848997_icon.ico`. Compare `file_name()` instead.
 **`StateFlags` is a bitfield, not an enum.** `6` = `StateFullyInstalled | StateUpdateRequired` —
 installed *and* update-pending, which is playable; FINAL FANTASY TACTICS reads `6` here. A test
 asserting `6` meant "not installed" failed against correct code.
+
+**🔴 The encoding guard only scanned *tracked* files, so new files were unprotected until the
+moment they were committed.** A PowerShell `Get-Content -Raw` / `Set-Content` round-trip
+mangled every em-dash in a brand-new module, and `check-encoding.py` reported "encoding clean"
+— because `git ls-files` does not list untracked files. The window in which corruption is
+invisible was exactly the window in which it gets committed. Now uses
+`git ls-files --cached --others --exclude-standard`, and the fix was verified by re-creating
+the identical byte damage and watching it fail. **A guard that only covers committed files
+cannot prevent a bad commit.**
 
 **🔴 `.trim()` before `strip_prefix("Bearer ")` eats the space the prefix needs.** `ApiKey::new`
 accepted the input `"Bearer "` as a six-character key literally called `Bearer`: trimming

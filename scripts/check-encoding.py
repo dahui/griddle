@@ -33,10 +33,30 @@ SUFFIXES = (".rs", ".ts", ".tsx", ".js", ".md", ".json", ".toml", ".yml", ".sh",
 
 
 def tracked_files():
+    """Tracked files **and** untracked ones git would let you add.
+
+    `git ls-files` alone covers only tracked files, which meant a brand-new file could be
+    corrupted and pass this check right up until the moment it was committed -- precisely when
+    the damage becomes permanent. That happened: a PowerShell `Get-Content -Raw` /
+    `Set-Content` round-trip mangled every em-dash in a new, still-untracked module, and this
+    script reported "encoding clean".
+
+    `--others --exclude-standard` adds untracked-but-not-ignored files, so a file is checked
+    from the moment it exists rather than from the moment it is staged.
+    """
     out = subprocess.run(
-        ["git", "ls-files"], capture_output=True, text=True, check=True
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout
-    return [f for f in out.splitlines() if f.endswith(SUFFIXES)]
+    # `--cached --others` can list the same path twice; dedupe while keeping order.
+    seen, files = set(), []
+    for f in out.splitlines():
+        if f.endswith(SUFFIXES) and f not in seen:
+            seen.add(f)
+            files.append(f)
+    return files
 
 
 def main() -> int:

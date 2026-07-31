@@ -30,8 +30,11 @@ fi
 # version of this check flagged exactly that and would have trained us to ignore it.
 violations=$(
   for f in $(find crates/sgdb-core/src -name '*.rs'); do
+    # `settings/mod.rs` as well as `settings.rs`: the module gained a `dpapi` submodule and
+    # became a directory. Only the mod file is exempt -- `settings/dpapi.rs` encrypts bytes and
+    # has no business touching the filesystem, so it stays inside the boundary.
     case "$f" in
-      */grid/store.rs|*/steam/shortcuts.rs|*/settings.rs) continue ;;
+      */grid/store.rs|*/steam/shortcuts.rs|*/settings.rs|*/settings/mod.rs) continue ;;
     esac
     awk -v file="$f" '
       /#\[cfg\(test\)\]/ { exit }

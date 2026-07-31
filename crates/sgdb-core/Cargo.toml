@@ -31,6 +31,8 @@ winreg = "0.55"
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_System_Diagnostics_ToolHelp",
+    # DPAPI, for encrypting the API key at rest in `settings`.
+    "Win32_Security_Cryptography",
 ] }
 
 [dev-dependencies]
