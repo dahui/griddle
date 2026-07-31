@@ -24,6 +24,7 @@
 //!    so **arity is not a usable signal** — checking `fn.length` would reject working builds.
 
 pub mod client;
+pub mod modules;
 pub mod sentinel;
 pub mod target;
 
@@ -57,6 +58,11 @@ pub enum Error {
 
     #[error("refusing to apply empty image data")]
     EmptyImage,
+
+    /// The module scan could not even start. Distinct from "nothing matched", which would
+    /// otherwise look like Steam had removed every component at once.
+    #[error("could not scan Steam's modules: {0}")]
+    ModuleScan(String),
 }
 
 /// What the readiness probe found.
@@ -173,6 +179,24 @@ impl SteamJs {
             asset as u32
         );
         Ok(self.connection.evaluate_unit(&expr).await?)
+    }
+
+    /// Run every module finder against the live bundle.
+    ///
+    /// One round trip: the script captures the registry, reads every module's source **without
+    /// executing it**, and returns the matches. See [`modules`] for why the finders are
+    /// structural.
+    pub async fn resolve_modules(&mut self) -> Result<modules::Resolution, Error> {
+        let clstamp = self.clstamp().await?.unwrap_or_default();
+        let script = modules::resolve_script(modules::FINDERS);
+        let scan: modules::RawScan = self.connection.evaluate(&script).await?;
+
+        // A capture failure must not be reported as "every component is missing" — that would
+        // send someone hunting for a Steam change that never happened.
+        if let Some(err) = scan.error {
+            return Err(Error::ModuleScan(err));
+        }
+        Ok(modules::interpret(&clstamp, &scan, modules::FINDERS))
     }
 
     /// Whether Steam knows this appid, and what it calls it. Useful for confirming a shortcut

@@ -36,21 +36,21 @@ Full plan: `C:\Users\jeff\.claude\plans\i-want-to-start-valiant-shamir.md`
 | `[VERIFIED-BOX]` | Confirmed read-only on this machine, with the date. The strongest tag. |
 | `[VERIFIED-BOX @ CLSTAMP n]` | Read out of Steam's shipped JS bundle. **These expire** — Steam rewrites `steamui/` on update. The stamp says which build it was true for. |
 
-> ### 🔴 The CLSTAMP-tagged facts have already expired once
+> ### 🟢 Steam updated, and the module map was re-resolved against it
 >
-> Steam is on build **`10856968`** as of 2026-07-30. Every fact below tagged
-> `@ CLSTAMP 10840511` was measured on 2026-07-27 — **three days earlier**. The module ids
-> (`28869`, `3673`, `5808`, `4690`, `87498`, `51745`, `98131`, `39590`) and every mangled
-> export key are therefore **unverified on the current build** and must be re-resolved before
-> anything depends on them.
+> Steam went from `10840511` (2026-07-27) to **`10856968`** (2026-07-30) — three days. The
+> finders were run against the new build with
+> `cargo run -p sgdb-core --example cdp_check`: **11/11 resolved, all features available.**
 >
-> What *survived* the update, re-verified on `10856968`:
-> `SetCustomArtworkForApp` still present · `webpackChunksteamui` still present · `CLSTAMP`
-> still readable from both the live page and `steamui/changelist.txt`, and still equal.
+> 🔑 **Every module id was unchanged.** `FocusableFactory` 28869 · `ModalManager` 3673 ·
+> `ModalHost` 36437 · `AppContextMenu` 5808 · `ShowContextMenu` 39590 · `FocusTreeNode` 4690 ·
+> `SteamArtworkFlow` 87498 — all identical to the spike's values, and still 2564 modules with
+> 0 unreadable. So webpack module ids in Steam's bundle appear **stable across a build bump**
+> for modules that did not themselves change. Do not rely on that (it is one data point), but
+> it does mean a stamp change is not automatically a re-resolution emergency.
 >
-> This is the design working. Three days was enough — which is exactly why the module map is
-> keyed by build stamp and diffed rather than trusted, and why finders are structural rather
-> than name-based.
+> Newly recorded on `10856968`: `LogoPosition` 78057 · `SliderField` 64608 ·
+> `ArtworkApi` 80818, 81659, 87498.
 | `[VERIFIED-SOURCE]` | Read in someone's actual source (Valve's bundle, SGDBoop, decky-steamgriddb). Quote it. |
 | `[VERIFIED-DOCS]` | The project's own docs. Weaker — docs lie. |
 | `[INFERRED]` | Reasoning, analogy, or a third-party blog. **Must be promoted before it becomes load-bearing.** |
@@ -295,6 +295,7 @@ architecture.
 | `cdp::target` | Finds `SharedJSContext` and **refuses anything that is not Steam** — port 8080 is a very common dev-server port. |
 | `cdp::client` | Minimal CDP: `Runtime.evaluate` + `addScriptToEvaluateOnNewDocument`. A JS throw is a distinct error, not silent success. |
 | `cdp::SteamJs` | `probe` / `apply_artwork` / `clear_artwork` / `clstamp` / `app_name`. The live-apply path. |
+| `cdp::modules` | The structural finders, the CLSTAMP diff, and per-feature degradation. **The reliability idea.** |
 | `steam::process` | ToolHelp process enumeration; `-shutdown` → poll → relaunch. **The only minter of `SteamStopped`.** Waits on *processes*, never on the registry pid. |
 | `steam::shortcuts` | Read/edit/write `shortcuts.vdf`. Round-trip verified on **load**; write needs a `SteamStopped` token *and* re-checks it. Mutation surface is `set_icon` / `clear_icon` only. |
 
@@ -468,7 +469,35 @@ as a client default, precisely so image downloads cannot carry it.
 account still yields every tab preference and filter; only the key is reported as unreadable.
 Failing the load would look to the user like every setting had been lost.
 
-#### Nine bugs worth remembering
+#### 🟢 The module finders, and how each ambiguity was resolved
+
+`cargo run -p sgdb-core --example cdp_disambiguate -- <FinderName> --token <STR>` prints every
+candidate module with its size, an excerpt around the anchor, and whether each probe token is
+present. **Ambiguity is never resolved by taking the first match** — that freezes a coin-flip
+into the settings file, where it then looks resolved forever. `Outcome::Ambiguous` is a
+distinct, unusable state for exactly that reason.
+
+Four predicates were too loose on first contact with the real bundle:
+
+| Finder | Also matched | Discriminator | Why |
+|---|---|---|---|
+| `FocusableFactory` | 4690, 60291 | `gamepadEvents` | 4690 is the focus *tree node*; 60291 is a dropdown that merely uses `preferredFocus`. |
+| `SteamArtworkFlow` | 80818, 81659 | `CloseModal` | Both do the same base64 strip — see below. |
+| `AssetTypeNames` | 19807 | `SetCustomArtworkForApp` | 19807 is webpack's **asset manifest**, listing paths like `./google_chrome/library_capsule.png`. |
+| `ModalHost` | 91435 | `showModal` | 91435 only *passes* those props along; the host is what calls `<dialog>.showModal()`. |
+
+🔴 **Correction: the hardcoded `"png"` is one call site's choice, not a universal rule.** Module
+87498 really does call `SetCustomArtworkForApp(e,r,"png",t)` with the literal — but 80818 and
+81659 perform the identical `slice(indexOf("base64,")+7)` strip and pass a **variable** mime.
+The earlier note implied Valve always hardcodes it. What is actually verified is narrower, and
+still sufficient: 87498 hardcodes it, and S4 proved animated WebP labelled `"png"` animates in
+both the desktop library and Big Picture, because Chromium sniffs content.
+
+**Live apply needs no finders at all** — it calls `SteamClient.Apps.SetCustomArtworkForApp`,
+which the CEF host binds and Valve cannot rename without breaking their own client. The most
+valuable feature is the least exposed to a Steam update. Worth keeping true.
+
+#### Ten bugs worth remembering
 
 **`Path::ends_with` matches whole components, not string suffixes.** `p.ends_with("_icon.ico")`
 is always false for `4048848997_icon.ico`. Compare `file_name()` instead.
@@ -476,6 +505,16 @@ is always false for `4048848997_icon.ico`. Compare `file_name()` instead.
 **`StateFlags` is a bitfield, not an enum.** `6` = `StateFullyInstalled | StateUpdateRequired` —
 installed *and* update-pending, which is playable; FINAL FANTASY TACTICS reads `6` here. A test
 asserting `6` meant "not installed" failed against correct code.
+
+**🔴 A webpack chunk id of `{}` stringifies to `"[object Object]"`, so only the _first_ module
+scan of a Steam session worked.** webpack keys installed chunks by id; the second push found
+the chunk already installed and never invoked the callback, so `__webpack_require__` was never
+handed over. The scan failed with "the module registry was not handed over" — and had it
+returned *empty hits* instead of a distinct error, it would have looked exactly like Steam
+removing every component at once, which is the worst possible false alarm for this design. Now
+uses a fresh `Math.random()` marker per call, with a regression test on the generated script.
+The spike's snippet did use `Math.random()`; the *reason* was never recorded, so it got dropped
+in the rewrite — which is precisely what "record the predicate, not just the conclusion" is for.
 
 **🔴 A `\` at the end of a line in a Rust *raw* string is literal, and three tests passed
 anyway.** The CDP fixtures wrapped a long user-agent across lines inside `r#"..."#`, producing

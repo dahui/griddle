@@ -122,5 +122,51 @@ async fn main() {
         Ok(v) => println!("  🔴 a throw was NOT reported; got {v:?}"),
     }
 
+    // The first real exercise of the build-stamped module map: the spike measured these
+    // against CLSTAMP 10840511, and Steam has since updated.
+    println!("\n== module finders ==");
+    match steam.resolve_modules().await {
+        Ok(resolution) => {
+            println!(
+                "  build {} — {} modules, {} unreadable",
+                resolution.clstamp, resolution.total_modules, resolution.unreadable
+            );
+            println!(
+                "  {}/{} finders resolved",
+                resolution.usable(),
+                resolution.outcomes.len()
+            );
+            for (name, outcome) in &resolution.outcomes {
+                let detail = match outcome {
+                    sgdb_core::cdp::modules::Outcome::Found { ids } => {
+                        format!("ok      {}", ids.join(", "))
+                    }
+                    sgdb_core::cdp::modules::Outcome::Ambiguous { ids } => {
+                        format!("AMBIG   {} (predicate too loose)", ids.join(", "))
+                    }
+                    sgdb_core::cdp::modules::Outcome::NotFound => "NOT FOUND".to_string(),
+                };
+                println!("    {name:<20} {detail}");
+            }
+
+            println!("\n== features ==");
+            for feature in sgdb_core::cdp::modules::FEATURES {
+                if feature.available(&resolution) {
+                    println!("    {:<22} available", feature.name);
+                } else {
+                    println!(
+                        "    {:<22} UNAVAILABLE — {}",
+                        feature.name, feature.fallback
+                    );
+                }
+            }
+            println!(
+                "    {:<22} available (needs no modules at all)",
+                "Live apply"
+            );
+        }
+        Err(e) => println!("  {e}"),
+    }
+
     println!("\nread-only: nothing was applied or written");
 }
