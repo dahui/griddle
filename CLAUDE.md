@@ -265,8 +265,11 @@ architecture.
 |---|---|
 | **M0** | Cargo + bun workspaces; Tauri shell (PE subsystem = `WINDOWS_GUI`, no console flash); secret scanning (pre-commit + CI); encoding guard. |
 | **M1** | **All 11 spike items resolved.** Nothing left that can change the architecture. |
-| **M2** | **Offline layer done, including the `shortcuts.vdf` writer** — see the module map below. 112 Rust + 62 TS tests green, clippy clean at `-D warnings`. Verified end-to-end against the real install with `cargo run -p sgdb-core --example scan`. |
-| **Next** | `sgdb::client`, `cdp`, `settings`, `steam::apptype`, then **M3** — the first genuinely usable build. |
+| **M2** | **Offline layer done**, including the `shortcuts.vdf` writer. Verified against the real install with `cargo run -p sgdb-core --example scan`. |
+| **M3** | 🟢 **The app runs.** Library list with current art, five asset tabs, SteamGridDB browsing with infinite scroll, apply with the live→file ladder, first-run key flow, and a diagnostics screen. **256 Rust + 62 TS tests**, clippy clean at `-D warnings`, gate green. |
+| **Next** | M4 desktop parity (filters, details modal, zoom, logo positioner, non-Steam picker), then M5/M6. |
+
+**Run it:** `bun run build:desktop && cargo run -p sgdb-app`.
 
 ### `sgdb-core` module map
 
@@ -296,6 +299,23 @@ architecture.
 | `cdp::client` | Minimal CDP: `Runtime.evaluate` + `addScriptToEvaluateOnNewDocument`. A JS throw is a distinct error, not silent success. |
 | `cdp::SteamJs` | `probe` / `apply_artwork` / `clear_artwork` / `clstamp` / `app_name`. The live-apply path. |
 | `cdp::modules` | The structural finders, the CLSTAMP diff, and per-feature degradation. **The reliability idea.** |
+
+### `sgdb-app` — the desktop shell
+
+| Module | What it is |
+|---|---|
+| `error` | `UiError { kind, message, action }`. The **`kind` is what keeps "Steam is running" and "network timeout" distinguishable** across the boundary; `action` is what the user should actually do. |
+| `state` | Loaded once at startup. **Nothing here may stop the window opening** — no Steam, no key and an unreadable `appinfo.vdf` are all ordinary first-run states. |
+| `commands` | The `invoke` surface. Thin; every decision belongs to `sgdb-core`. |
+
+**The apply ladder lives in `commands::apply_asset`:** live first, file-write as the floor. The
+result says which path ran, so the UI can say whether a restart is needed rather than leaving
+the user staring at unchanged art. Falling back is *not* an error — it carries
+`fell_back_because` and renders as a note.
+
+The `asset:` protocol scope is granted **at runtime to exactly one directory**, the account's
+`grid/`. It cannot be set in `tauri.conf.json` because the path depends on the install and
+account id, and scoping it to that one directory keeps the webview unable to read anything else.
 | `steam::process` | ToolHelp process enumeration; `-shutdown` → poll → relaunch. **The only minter of `SteamStopped`.** Waits on *processes*, never on the registry pid. |
 | `steam::shortcuts` | Read/edit/write `shortcuts.vdf`. Round-trip verified on **load**; write needs a `SteamStopped` token *and* re-checks it. Mutation surface is `set_icon` / `clear_icon` only. |
 
@@ -497,7 +517,7 @@ both the desktop library and Big Picture, because Chromium sniffs content.
 which the CEF host binds and Valve cannot rename without breaking their own client. The most
 valuable feature is the least exposed to a Steam update. Worth keeping true.
 
-#### Ten bugs worth remembering
+#### Twelve bugs worth remembering
 
 **`Path::ends_with` matches whole components, not string suffixes.** `p.ends_with("_icon.ico")`
 is always false for `4048848997_icon.ico`. Compare `file_name()` instead.
@@ -505,6 +525,20 @@ is always false for `4048848997_icon.ico`. Compare `file_name()` instead.
 **`StateFlags` is a bitfield, not an enum.** `6` = `StateFullyInstalled | StateUpdateRequired` —
 installed *and* update-pending, which is playable; FINAL FANTASY TACTICS reads `6` here. A test
 asserting `6` meant "not installed" failed against correct code.
+
+**🔴 The gate did not run `tsc`, so a broken typecheck stayed green locally for three
+milestones.** `tsconfig.json` set `types: ["bun-types"]` but the package was never a dependency,
+so `bun run typecheck` — which **CI runs** — failed with `TS2688` while every local gate passed.
+That is exactly the drift the gate exists to prevent, and the fix is the gate running the same
+checks CI does, not a note to remember. `tsc typecheck` is now a gate step.
+
+**🔴 Removing a filter value because it 400'd on the wrong endpoint.** `512x512` and
+`1024x1024` were dropped from `Dimensions` after they failed against `icons` — but they are
+**valid for `grids`** (9 and 22 assets for Portal 2). The real rule is that dimension values
+are *endpoint-specific*: `heroes?dimensions=600x900` is also a 400. Both are back, each variant
+now knows its endpoint, and `AssetQuery::validate_for` refuses a mismatch locally rather than
+letting it surface as "SteamGridDB rejected the request". **A value that fails one endpoint has
+been disproved for that endpoint, not in general.**
 
 **🔴 A webpack chunk id of `{}` stringifies to `"[object Object]"`, so only the _first_ module
 scan of a Steam session worked.** webpack keys installed chunks by id; the second push found

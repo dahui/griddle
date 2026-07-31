@@ -21,7 +21,11 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost data: blob: https://cdn2.steamgriddb.com https://shared.steamstatic.com https://cdn.cloudflare.steamstatic.com; media-src 'self' blob: https://cdn2.steamgriddb.com; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost"
+      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost data: blob: https://cdn2.steamgriddb.com https://shared.steamstatic.com https://cdn.cloudflare.steamstatic.com; media-src 'self' blob: https://cdn2.steamgriddb.com; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost",
+      "assetProtocol": {
+        "enable": true,
+        "scope": []
+      }
     }
   },
   "bundle": {

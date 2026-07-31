@@ -255,6 +255,10 @@ impl Client {
         target: Target,
         query: &AssetQuery,
     ) -> Result<AssetPage, Error> {
+        // Caught locally: a dimension from the wrong endpoint is a 400, which would otherwise
+        // surface as "SteamGridDB rejected the request" and read like a service fault.
+        query.validate_for(kind).map_err(|_| Error::BadRequest)?;
+
         let (target_kind, target_id) = target.segments();
         let pairs = query.to_pairs();
         let borrowed: Vec<(&str, &str)> = pairs.iter().map(|(k, v)| (*k, v.as_str())).collect();

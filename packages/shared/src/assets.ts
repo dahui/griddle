@@ -51,7 +51,21 @@ export const ASSET_LABEL: Record<AssetType, string> = {
 /**
  * Selectable dimensions per asset type, with the subset that is on by default.
  *
- * `logo` deliberately has none — SteamGridDB does not offer a dimension filter for logos.
+ * 🔴 **Every value here was probed against the live API on 2026-07-30.** An unrecognised
+ * dimension is an HTTP 400, not an empty result, so a wrong entry breaks a whole tab the
+ * moment someone ticks it.
+ *
+ * Two corrections came out of that:
+ *
+ * - **`icon` takes no dimensions at all.** The endpoint 400s on *every* value — `8x8`,
+ *   `16x16`, `32x32`, `64x64`, `128x128`, `256x256`, `512x512`, `1024x1024` were each tried.
+ *   The bare-number list that used to be here (`'1024'`, `'768'`, …) was not even the right
+ *   *shape*, let alone accepted.
+ * - **Values are endpoint-specific.** `heroes?dimensions=600x900` is a 400. The grid sizes and
+ *   the hero sizes are not interchangeable, and `sgdb-core` enforces that before sending.
+ *
+ * `512x512` and `1024x1024` *are* valid for grids (9 and 22 assets for Portal 2), but are off
+ * by default: they match little and are not the shape Steam renders.
  */
 export const DIMENSIONS: Record<AssetType, { all: string[]; default: string[] }> = {
   grid_p: {
@@ -67,14 +81,7 @@ export const DIMENSIONS: Record<AssetType, { all: string[]; default: string[] }>
     default: ['1920x620', '3840x1240', '1600x650'],
   },
   logo: { all: [], default: [] },
-  icon: {
-    all: [
-      '1024', '768', '512', '310', '256', '194', '192', '180', '160', '152', '150', '144',
-      '128', '120', '114', '100', '96', '90', '80', '76', '72', '64', '60', '57', '56', '54',
-      '48', '40', '35', '32', '28', '24', '20', '16', '14', '10', '8',
-    ],
-    default: [],
-  },
+  icon: { all: [], default: [] },
 };
 
 /** Selectable styles per asset type. SteamGridDB calls `material` "Minimal" in the UI. */

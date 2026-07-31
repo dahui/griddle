@@ -14,19 +14,25 @@
 //! | `Logo` | `<id>_logo.png` | `logos` | *(none)* |
 //! | `Icon` | `<id>_icon.<ext>` | `icons` | *(none — see below)* |
 //!
-//! # 🔴 `icons` rejects `dimensions` outright
-//!
-//! Not "ignores it" — **every** value returns HTTP 400, including plausible icon sizes:
-//! `8x8`, `16x16`, `24x24`, `32x32`, `48x48`, `64x64`, `96x96`, `128x128`, `256x256`,
-//! `512x512` and `1024x1024` were each probed and each 400'd. `[VERIFIED-BOX 2026-07-30]`
-//!
-//! An earlier draft of this file carried `512x512` and `1024x1024` as icon dimensions on the
-//! strength of them merely sounding right. They are gone rather than commented out: a value
-//! that cannot be constructed cannot be sent.
-//!
 //! Querying `grids` without dimensions for the Header tab would fill it with portrait capsules
 //! that then get written to `<id>.png`, which is the wide slot. The art would apply and look
 //! wrong, which is worse than failing.
+//!
+//! # 🔴 Dimension values belong to one endpoint each
+//!
+//! They are not interchangeable, and a mismatch is an HTTP **400**, not an empty result:
+//!
+//! - `icons?dimensions=<anything>` — every value 400s. `8x8`, `16x16`, `24x24`, `32x32`,
+//!   `48x48`, `64x64`, `96x96`, `128x128`, `256x256`, `512x512` and `1024x1024` were each
+//!   probed. The endpoint simply does not take the parameter.
+//! - `heroes?dimensions=600x900` — 400. Grid sizes are not accepted there, and vice versa.
+//! - `grids?dimensions=512x512` and `1024x1024` — **valid** (9 and 22 assets for Portal 2).
+//!   An earlier draft removed these after they 400'd on *icons*; they were only ever wrong for
+//!   that endpoint. They are off by default because they match little and are not the shape
+//!   Steam renders.
+//!
+//! `[VERIFIED-BOX 2026-07-30]` [`Dimensions::endpoint`] encodes this, and
+//! [`AssetQuery::validate_for`] refuses a mismatch before it reaches the network.
 //!
 //! # Invalid filter values are rejected, not ignored
 //!
@@ -78,9 +84,15 @@ impl AssetKind {
 /// failure into a compile-time one.
 ///
 /// **Every variant here has been confirmed to return 200 against the live API**
-/// `[VERIFIED-BOX 2026-07-30]`. Two speculative icon sizes (`512x512`, `1024x1024`) were in an
-/// earlier draft and are deliberately gone — see [`AssetKind::Icon`] below. Do not add a value
-/// without probing it; the whole point of the type is that it cannot contain a 400.
+/// `[VERIFIED-BOX 2026-07-30]`. Do not add one without probing it; the whole point of the type
+/// is that it cannot contain a 400.
+///
+/// # 🔴 Values are endpoint-specific, not interchangeable
+///
+/// `heroes?dimensions=600x900` is a **400**, not an empty result — and so is
+/// `icons?dimensions=<anything>`. So each variant knows which endpoint it belongs to via
+/// [`Dimensions::endpoint`], and [`AssetQuery::validate_for`] refuses a mismatch locally
+/// rather than letting it become a confusing server error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Dimensions {
     // grids — portrait
@@ -90,7 +102,10 @@ pub enum Dimensions {
     // grids — wide
     D460x215,
     D920x430,
-    // heroes.  `1600x650` is valid but currently matches very little, so an empty result from
+    // grids — square. Fewer assets exist (9 and 22 for Portal 2), but both are accepted.
+    D512x512,
+    D1024x1024,
+    // heroes. `1600x650` is valid but currently matches very little, so an empty result from
     // it is not a bug.
     D1920x620,
     D3840x1240,
@@ -113,6 +128,10 @@ impl Dimensions {
         Dimensions::D1600x650,
     ];
 
+    /// Extra sizes a user may opt into for the grid slots. Off by default because they match
+    /// far fewer assets and are not the shape Steam renders.
+    pub const GRID_SQUARE: &'static [Dimensions] = &[Dimensions::D512x512, Dimensions::D1024x1024];
+
     pub const fn as_str(self) -> &'static str {
         match self {
             Dimensions::D600x900 => "600x900",
@@ -120,9 +139,28 @@ impl Dimensions {
             Dimensions::D660x930 => "660x930",
             Dimensions::D460x215 => "460x215",
             Dimensions::D920x430 => "920x430",
+            Dimensions::D512x512 => "512x512",
+            Dimensions::D1024x1024 => "1024x1024",
             Dimensions::D1920x620 => "1920x620",
             Dimensions::D3840x1240 => "3840x1240",
             Dimensions::D1600x650 => "1600x650",
+        }
+    }
+
+    /// Which endpoint this value is valid for. Sending it to any other is a 400.
+    pub const fn endpoint(self) -> AssetKind {
+        match self {
+            Dimensions::D600x900
+            | Dimensions::D342x482
+            | Dimensions::D660x930
+            | Dimensions::D460x215
+            | Dimensions::D920x430
+            | Dimensions::D512x512
+            | Dimensions::D1024x1024 => AssetKind::Grid,
+
+            Dimensions::D1920x620 | Dimensions::D3840x1240 | Dimensions::D1600x650 => {
+                AssetKind::Hero
+            }
         }
     }
 }
@@ -194,6 +232,32 @@ impl AssetQuery {
     pub fn limit(mut self, limit: u32) -> Self {
         self.limit = Some(limit);
         self
+    }
+
+    /// Reject dimensions that belong to a different endpoint.
+    ///
+    /// `heroes?dimensions=600x900` is a 400, and so is any `dimensions` on `icons`. Catching
+    /// it here turns "SteamGridDB rejected the request" — which reads like the service is
+    /// broken — into a specific, local, fixable message.
+    pub fn validate_for(&self, kind: AssetKind) -> Result<(), String> {
+        if self.dimensions.is_empty() {
+            return Ok(());
+        }
+        if matches!(kind, AssetKind::Logo | AssetKind::Icon) {
+            return Err(format!(
+                "the {} endpoint rejects `dimensions` entirely",
+                kind.path()
+            ));
+        }
+        if let Some(bad) = self.dimensions.iter().find(|d| d.endpoint() != kind) {
+            return Err(format!(
+                "dimension {} belongs to the {} endpoint, not {}",
+                bad.as_str(),
+                bad.endpoint().path(),
+                kind.path()
+            ));
+        }
+        Ok(())
     }
 
     /// Render to query-string pairs.
@@ -339,5 +403,67 @@ mod tests {
     #[test]
     fn an_empty_query_sends_nothing_at_all() {
         assert!(AssetQuery::default().to_pairs().is_empty());
+    }
+
+    #[test]
+    fn every_dimension_knows_which_endpoint_it_belongs_to() {
+        // Measured: grids accept 600x900/342x482/660x930/460x215/920x430/512x512/1024x1024;
+        // heroes accept only their own three and 400 on any grid value.
+        for d in Dimensions::PORTRAIT
+            .iter()
+            .chain(Dimensions::WIDE)
+            .chain(Dimensions::GRID_SQUARE)
+        {
+            assert_eq!(d.endpoint(), AssetKind::Grid, "{}", d.as_str());
+        }
+        for d in Dimensions::HERO {
+            assert_eq!(d.endpoint(), AssetKind::Hero, "{}", d.as_str());
+        }
+    }
+
+    #[test]
+    fn a_dimension_from_the_wrong_endpoint_is_refused_locally() {
+        // `heroes?dimensions=600x900` is an HTTP 400. Catching it here means the message names
+        // the actual mistake instead of blaming SteamGridDB.
+        let q = AssetQuery {
+            dimensions: vec![Dimensions::D600x900],
+            ..Default::default()
+        };
+        let err = q.validate_for(AssetKind::Hero).unwrap_err();
+        assert!(err.contains("600x900"), "{err}");
+        assert!(err.contains("heroes"), "{err}");
+
+        assert!(q.validate_for(AssetKind::Grid).is_ok(), "the control");
+    }
+
+    #[test]
+    fn any_dimension_on_icons_or_logos_is_refused() {
+        // Both endpoints 400 on every value, including plausible ones like 512x512.
+        let q = AssetQuery {
+            dimensions: vec![Dimensions::D512x512],
+            ..Default::default()
+        };
+        for kind in [AssetKind::Icon, AssetKind::Logo] {
+            let err = q.validate_for(kind).unwrap_err();
+            assert!(err.contains("rejects `dimensions` entirely"), "{err}");
+        }
+    }
+
+    #[test]
+    fn the_queries_we_build_ourselves_all_validate() {
+        // The guard must never fire on our own defaults — that would break every tab.
+        for t in [
+            AssetType::Capsule,
+            AssetType::Header,
+            AssetType::Hero,
+            AssetType::Logo,
+            AssetType::Icon,
+        ] {
+            let (kind, q) = AssetQuery::for_asset_type(t).unwrap();
+            assert!(
+                q.validate_for(kind).is_ok(),
+                "{t} produced an invalid query"
+            );
+        }
     }
 }

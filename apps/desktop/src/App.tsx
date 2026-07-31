@@ -1,80 +1,121 @@
-import { invoke } from '@tauri-apps/api/core';
-import { ASSET_LABEL, ASSET_TYPES, DEFAULT_LOGO_POSITION, defaultFilters, filtersToQuery } from '@sgdb/shared';
-import { useEffect, useState } from 'react';
-
 /**
- * M0 shell.
+ * M3 — the first genuinely usable build.
  *
- * Deliberately not a mock of the real UI — it exists to prove three wiring facts and then get
- * replaced in M3: the window opens, `@sgdb/shared` resolves across the workspace, and the
- * Rust `invoke` bridge answers.
+ * Library list with current art, the five asset tabs, SteamGridDB browsing with infinite
+ * scroll, and apply. The apply path tries live first and falls back to writing files; the UI's
+ * only job there is to say clearly whether a Steam restart is needed.
  */
-export function App() {
-  const [bundleLen, setBundleLen] = useState<number | null>(null);
-  const [bridgeError, setBridgeError] = useState<string | null>(null);
+import { useCallback, useEffect, useState } from 'react';
+import { ASSET_LABEL, ASSET_TYPES, type AssetType } from '@sgdb/shared';
+import { api, asUiError, type LibraryEntry, type Status, type UiError } from './api';
+import { ErrorNote, Spinner } from './components';
+import { Library } from './views/Library';
+import { AssetBrowser } from './views/AssetBrowser';
+import { ApiKeyPanel, Settings } from './views/Settings';
 
-  useEffect(() => {
-    invoke<number>('bpm_bundle_len')
-      .then(setBundleLen)
-      .catch((e: unknown) => setBridgeError(String(e)));
+type Tab = 'library' | 'settings';
+
+export function App() {
+  const [status, setStatus] = useState<Status | null>(null);
+  const [error, setError] = useState<UiError | null>(null);
+  const [tab, setTab] = useState<Tab>('library');
+  const [assetType, setAssetType] = useState<AssetType>('grid_p');
+  const [selected, setSelected] = useState<LibraryEntry | null>(null);
+
+  const refresh = useCallback(() => {
+    api
+      .status()
+      .then((s) => {
+        setStatus(s);
+        setError(null);
+      })
+      .catch((e: unknown) => setError(asUiError(e)));
   }, []);
 
-  const sampleQuery = filtersToQuery(defaultFilters('grid_p'));
+  useEffect(refresh, [refresh]);
 
+  if (error) return <Shell><ErrorNote error={error} onRetry={refresh} /></Shell>;
+  if (!status) return <Shell><Spinner label="Starting up…" /></Shell>;
+
+  // First run: nothing else is useful without a key, so ask for it rather than showing an
+  // empty library the user cannot explain.
+  if (!status.has_api_key) {
+    return (
+      <Shell>
+        <section className="welcome">
+          <h2>Welcome</h2>
+          <p>
+            Browse SteamGridDB and apply artwork to your Steam library. To start, this needs a
+            SteamGridDB API key.
+          </p>
+        </section>
+        <ApiKeyPanel status={status} onStatus={setStatus} />
+      </Shell>
+    );
+  }
+
+  return (
+    <Shell>
+      <nav className="tabs">
+        <div className="tab-group">
+          <button
+            type="button"
+            className={tab === 'library' ? 'tab active' : 'tab'}
+            onClick={() => setTab('library')}
+          >
+            Library
+          </button>
+          <button
+            type="button"
+            className={tab === 'settings' ? 'tab active' : 'tab'}
+            onClick={() => setTab('settings')}
+          >
+            Settings
+          </button>
+        </div>
+        {tab === 'library' && (
+          <div className="tab-group">
+            {ASSET_TYPES.map((t) => (
+              <button
+                type="button"
+                key={t}
+                className={assetType === t ? 'tab active' : 'tab'}
+                onClick={() => setAssetType(t)}
+              >
+                {ASSET_LABEL[t]}
+              </button>
+            ))}
+          </div>
+        )}
+      </nav>
+
+      {tab === 'settings' ? (
+        <Settings status={status} onStatus={setStatus} />
+      ) : selected ? (
+        <AssetBrowser
+          entry={selected}
+          assetType={assetType}
+          onBack={() => {
+            setSelected(null);
+            // Re-read on the way back so newly applied art shows in the list.
+            refresh();
+          }}
+        />
+      ) : (
+        <Library assetType={assetType} onPick={setSelected} />
+      )}
+    </Shell>
+  );
+}
+
+function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main>
       <header>
         <h1>SteamGridDB Artwork Manager</h1>
-        <p className="sub">M0 shell — the real library view lands in M3.</p>
+        <p className="sub">Artwork for your Steam library, without restarting Steam.</p>
       </header>
-
-      <section>
-        <h2>Wiring checks</h2>
-        <dl>
-          <dt>Rust bridge</dt>
-          <dd>
-            {bridgeError ? (
-              <span className="bad">failed: {bridgeError}</span>
-            ) : bundleLen === null ? (
-              'checking…'
-            ) : (
-              <span className="ok">
-                ok — BPM bundle embedded, {bundleLen} bytes
-                {bundleLen < 200 ? ' (stub — run `bun run build:bpm`)' : ''}
-              </span>
-            )}
-          </dd>
-
-          <dt>@sgdb/shared</dt>
-          <dd className="ok">
-            ok — {ASSET_TYPES.length} asset types: {ASSET_TYPES.map((t) => ASSET_LABEL[t]).join(', ')}
-          </dd>
-
-          <dt>Default grid_p query</dt>
-          <dd>
-            <code>
-              {Object.entries(sampleQuery)
-                .map(([k, v]) => `${k}=${v}`)
-                .join('&')}
-            </code>
-          </dd>
-
-          <dt>Default logo position</dt>
-          <dd>
-            <code>{JSON.stringify(DEFAULT_LOGO_POSITION)}</code>
-          </dd>
-        </dl>
-      </section>
-
-      <section>
-        <h2>Next</h2>
-        <p>
-          The M1 spike. <strong>S2</strong> first — capture <code>__webpack_require__</code> from
-          Steam's <code>SharedJSContext</code>, find a gamepad-focusable component, and move
-          controller focus onto it. Everything in the Big Picture deliverable is downstream of
-          that one answer.
-        </p>
-      </section>
+      {children}
     </main>
   );
 }

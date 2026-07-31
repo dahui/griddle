@@ -50,9 +50,17 @@ Step "cargo fmt"               { cargo fmt --all -- --check }
 Step "cargo clippy"            { cargo clippy -q -p sgdb-core --all-targets -- -D warnings }
 Step "cargo test"              { cargo test -q -p sgdb-core }
 
+$bun = Join-Path $env:USERPROFILE ".bun\bin\bun.exe"
+
 Step "bun test" {
-    $bun = Join-Path $env:USERPROFILE ".bun\bin\bun.exe"
     if (Test-Path $bun) { & $bun test } else { Write-Host "   (bun not installed, skipping)" }
+}
+
+# CI runs this and the gate did not, which is precisely the drift the gate exists to prevent:
+# `bun-types` was referenced by tsconfig but never installed, so typecheck had been failing
+# while every local run stayed green.
+Step "tsc typecheck" {
+    if (Test-Path $bun) { & $bun run typecheck } else { Write-Host "   (bun not installed, skipping)" }
 }
 
 Write-Host ""

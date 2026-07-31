@@ -11,10 +11,16 @@ sgdb-core = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
-# `protocol-asset` (for displaying locally cached art from disk) lands in M3, together with
-# the matching `assetProtocol` scope in tauri.conf.json. Tauri validates that the feature and
-# the config agree, so they must be added in the same change.
-tauri = { version = "2.11.5" }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio = { version = "1", features = ["sync"] }
+# Shared with sgdb-core's client so there is one connection pool, and so the CDP discovery and
+# the SteamGridDB client cannot disagree about timeouts.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+# `protocol-asset` renders existing artwork straight from Steam's `grid/` directory. The scope
+# is granted at runtime in main.rs to exactly one directory, because the path depends on the
+# install and account id. Tauri validates that the feature and the config agree, so
+# `assetProtocol` in tauri.conf.json must stay in step with this.
+tauri = { version = "2.11.5", features = ["protocol-asset"] }
 
 [lints]
 workspace = true
