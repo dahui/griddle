@@ -15,13 +15,20 @@ import {
 import {
   api,
   asUiError,
-  type Applied,
   type Asset,
   type GameMatch,
   type LibraryEntry,
   type UiError,
 } from '../api';
-import { Empty, ErrorNote, Flags, Spinner, StickyBar } from '../components';
+import {
+  Empty,
+  ErrorNote,
+  Flags,
+  Spinner,
+  StickyBar,
+  useErrorToast,
+  useToast,
+} from '../components';
 import { CurrentAssets } from './CurrentAssets';
 import { FilterPanel } from './FilterPanel';
 import { GameSearchModal } from './GameSearchModal';
@@ -54,7 +61,8 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<UiError | null>(null);
   const [applying, setApplying] = useState<number | null>(null);
-  const [applied, setApplied] = useState<Applied | null>(null);
+  const toast = useToast();
+  const toastError = useErrorToast();
   // One filter set for every tab. `null` until the stored value arrives — which is also the
   // gate on fetching, because a request built before then would use the wrong filters.
   //
@@ -189,7 +197,6 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
     setTotal(0);
     setHasMore(true);
     setError(null);
-    setApplied(null);
     void loadPage(0);
   }, [loadPage, ready, reloadKey]);
 
@@ -247,11 +254,20 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
 
   async function apply(asset: Asset) {
     setApplying(asset.id);
-    setApplied(null);
     try {
-      setApplied(await api.applyAsset(entry.app_id, assetType, asset.url));
+      const result = await api.applyAsset(entry.app_id, assetType, asset.url);
+      // The live path is invisible when it works — the art simply changes in Steam — so
+      // "Applied" is the whole message. A restart *being* needed is the only thing worth more.
+      toast({
+        kind: result.method === 'live' ? 'ok' : 'info',
+        message: result.method === 'live' ? 'Applied.' : 'Applied. Restart Steam to see it.',
+        action: result.fell_back_because,
+      });
     } catch (e: unknown) {
-      setError(asUiError(e));
+      // 🔴 A toast, not `setError`. That state drives the *load* failure display, and an apply
+      // that fails leaves the grid perfectly usable — putting it there replaced a working list
+      // with an error box, or sat below one that was about something else entirely.
+      toastError(e);
     } finally {
       setApplying(null);
     }
@@ -327,7 +343,6 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
         />
       )}
 
-      {browsing && applied && <AppliedNote applied={applied} />}
       {browsing && error && assets.length === 0 && (
         <ErrorNote error={error} onRetry={() => void loadPage(0)} />
       )}
@@ -415,27 +430,3 @@ function AssetPreview({ asset }: { asset: Asset }) {
   return <img src={src} alt="" loading="lazy" />;
 }
 
-/**
- * What the apply actually did.
- *
- * The live path is invisible when it works — the art simply changes in Steam — so "Applied" is
- * the whole message. Saying "no restart needed" every time draws attention to a caveat that does
- * not apply, and the replaced-file count told the user something they already knew.
- *
- * A restart *being* needed is the only thing worth more than one word.
- */
-function AppliedNote({ applied }: { applied: Applied }) {
-  if (applied.method === 'live') {
-    return (
-      <div className="note note-ok">
-        <p className="note-message">Applied.</p>
-      </div>
-    );
-  }
-  return (
-    <div className="note note-info">
-      <p className="note-message">Applied. Restart Steam to see it.</p>
-      {applied.fell_back_because && <p className="note-action">{applied.fell_back_because}</p>}
-    </div>
-  );
-}

@@ -10,7 +10,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { api, asUiError, type LibraryEntry, type Status, type UiError } from './api';
-import { ErrorNote, Spinner } from './components';
+import { ErrorNote, Spinner, ToastProvider } from './components';
 import { Library } from './views/Library';
 import { AssetBrowser } from './views/AssetBrowser';
 import { ApiKeyPanel, SetupNote, Settings } from './views/Settings';
@@ -98,14 +98,22 @@ export function App() {
   );
 }
 
+/**
+ * The frame every screen sits in.
+ *
+ * The toast host lives here rather than around one view, so a confirmation raised just before a
+ * navigation is not unmounted along with the thing that raised it.
+ */
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <main>
-      <header>
-        <h1>Griddle</h1>
-        <p className="sub">Artwork for your Steam library.</p>
-      </header>
-      {children}
-    </main>
+    <ToastProvider>
+      <main>
+        <header>
+          <h1>Griddle</h1>
+          <p className="sub">Artwork for your Steam library.</p>
+        </header>
+        {children}
+      </main>
+    </ToastProvider>
   );
 }

@@ -4,12 +4,11 @@ import {
   api,
   asUiError,
   type ModuleReport,
-  type ResetAll,
   type ResetPlan,
   type Status,
   type UiError,
 } from '../api';
-import { ErrorNote, ExternalLink, Spinner } from '../components';
+import { ErrorNote, ExternalLink, Spinner, useErrorToast, useToast } from '../components';
 
 const KEY_PAGE = 'https://www.steamgriddb.com/profile/preferences/api';
 
@@ -37,24 +36,23 @@ export function Settings({ status, onStatus }: { status: Status; onStatus: (s: S
  */
 function ResetAllPanel() {
   const [plan, setPlan] = useState<ResetPlan | null>(null);
-  const [done, setDone] = useState<ResetAll | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<UiError | null>(null);
-  // Distinct from `plan === null`: this is "we looked and there was nothing", which needs saying
-  // out loud, otherwise the button reads as broken.
-  const [nothing, setNothing] = useState(false);
+  const toast = useToast();
+  const toastError = useErrorToast();
 
   async function check() {
     setBusy(true);
-    setError(null);
-    setDone(null);
-    setNothing(false);
     try {
       const p = await api.resetAllPlan();
-      if (p.files === 0) setNothing(true);
-      else setPlan(p);
+      // "We looked, and there was nothing" has to be said out loud, or the button reads as
+      // broken — it is the one outcome with no visible consequence.
+      if (p.files === 0) {
+        toast({ kind: 'info', message: 'No custom artwork to reset.' });
+      } else {
+        setPlan(p);
+      }
     } catch (e: unknown) {
-      setError(asUiError(e));
+      toastError(e);
     } finally {
       setBusy(false);
     }
@@ -62,11 +60,26 @@ function ResetAllPanel() {
 
   async function confirm() {
     setBusy(true);
-    setError(null);
     try {
-      setDone(await api.resetAllArt());
+      const result = await api.resetAllArt();
+      const games = `${result.games} ${result.games === 1 ? 'game' : 'games'}`;
+      // Partial failure is never folded into a success message: it names the games and stays
+      // the full error duration.
+      toast(
+        result.failed.length > 0
+          ? {
+              kind: 'bad',
+              message: `Reset ${games}, but ${result.failed.length} could not be removed.`,
+              action: result.failed.join(', '),
+            }
+          : {
+              kind: result.method === 'live' ? 'ok' : 'info',
+              message: `Reset ${games}.${result.needs_restart ? ' Restart Steam to see it.' : ''}`,
+              action: result.fell_back_because,
+            },
+      );
     } catch (e: unknown) {
-      setError(asUiError(e));
+      toastError(e);
     } finally {
       setBusy(false);
       setPlan(null);
@@ -77,8 +90,7 @@ function ResetAllPanel() {
     <section>
       <h2>Reset all artwork</h2>
       <p>
-        Removes the custom artwork for every game and puts Steam&rsquo;s own back. Useful for
-        starting over, or before handing the machine to someone else.
+        Removes all custom artwork, reverting all gamesd back to Steam's default.
       </p>
 
       <div className="row">
@@ -86,10 +98,6 @@ function ResetAllPanel() {
           {busy ? 'Working…' : 'Reset all artwork…'}
         </button>
       </div>
-
-      {nothing && <p className="hint">No custom artwork to reset — every game is already on Steam&rsquo;s own.</p>}
-      {error && <ErrorNote error={error} />}
-      {done && <ResetDoneNote result={done} />}
 
       {plan && (
         <ConfirmReset
@@ -163,25 +171,6 @@ function ConfirmReset({
   );
 }
 
-/** Partial failure is stated rather than folded into a success message. */
-function ResetDoneNote({ result }: { result: ResetAll }) {
-  const games = `${result.games} ${result.games === 1 ? 'game' : 'games'}`;
-  return (
-    <div className={`note ${result.failed.length > 0 ? 'note-bad' : 'note-ok'}`}>
-      <p className="note-message">
-        Reset {games}.{result.needs_restart && ' Restart Steam to see it.'}
-      </p>
-      {result.fell_back_because && <p className="note-action">{result.fell_back_because}</p>}
-      {result.failed.length > 0 && (
-        <ul className="hint">
-          {result.failed.map((f) => (
-            <li key={f}>{f}</li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
 
 /**
  * What the app set up on its own, shown once on first run.
@@ -243,7 +232,7 @@ export function ApiKeyPanel({
     <section>
       <h2>SteamGridDB API key</h2>
       <p>
-        This app uses <strong>your own</strong> API key rather than shipping a shared one. Yours
+        This app uses <strong>your own</strong> API key rather than shipping a shared one. It
         is stored encrypted for your Windows account and only ever sent to SteamGridDB.
       </p>
       <p>

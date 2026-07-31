@@ -11,24 +11,31 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { useCallback, useEffect, useState } from 'react';
 import { steamCdnUrl, type AssetType } from '@griddle/shared';
-import { api, asUiError, type AssetSlot, type Cleared, type LibraryEntry, type UiError } from '../api';
-import { ArtImage, ContextMenu, ErrorNote, Spinner } from '../components';
+import { api, asUiError, type AssetSlot, type LibraryEntry, type UiError } from '../api';
+import {
+  ArtImage,
+  ContextMenu,
+  ErrorNote,
+  Spinner,
+  useErrorToast,
+  useToast,
+} from '../components';
 
 type Menu = { x: number; y: number; slot: AssetSlot };
 
 export function CurrentAssets({ entry }: { entry: LibraryEntry }) {
   const [slots, setSlots] = useState<AssetSlot[] | null>(null);
-  // Two error slots, deliberately. A load failure means there is nothing to show; a *reset*
-  // failure must not take the view with it — replacing the grid with an error box loses the
-  // context the user needs, and hides which slot failed.
+  // Only the *load* failure is held here, and only because it is the view: with no slots there
+  // is nothing to render but the error. A reset failure leaves the grid perfectly readable, so
+  // it goes to a toast rather than displacing what the user is looking at.
   const [loadError, setLoadError] = useState<UiError | null>(null);
-  const [resetError, setResetError] = useState<UiError | null>(null);
+  const toast = useToast();
+  const toastError = useErrorToast();
   const [menu, setMenu] = useState<Menu | null>(null);
   // The slot *type*, not the slot. A reset reloads `slots` into fresh objects, and holding one of
   // the old ones here would leave the preview showing artwork that is no longer there.
   const [preview, setPreview] = useState<AssetType | null>(null);
   const [busy, setBusy] = useState<AssetType | null>(null);
-  const [cleared, setCleared] = useState<{ slot: string; result: Cleared } | null>(null);
 
   const load = useCallback(() => {
     let cancelled = false;
@@ -53,16 +60,20 @@ export function CurrentAssets({ entry }: { entry: LibraryEntry }) {
   async function reset(slot: AssetSlot) {
     setMenu(null);
     setBusy(slot.asset_type);
-    setResetError(null);
-    setCleared(null);
     try {
       const result = await api.clearAsset(entry.app_id, slot.asset_type);
       // Nothing removed means nothing changed, so there is nothing worth saying. The menu does
       // not offer the action in that state anyway.
-      if (result.removed.length > 0) setCleared({ slot: slot.label, result });
+      if (result.removed.length > 0) {
+        toast({
+          kind: result.method === 'live' ? 'ok' : 'info',
+          message: `${slot.label} reset.${result.needs_restart ? ' Restart Steam to see it.' : ''}`,
+          action: result.fell_back_because,
+        });
+      }
       load();
     } catch (e: unknown) {
-      setResetError(asUiError(e));
+      toastError(e);
     } finally {
       setBusy(null);
     }
@@ -76,9 +87,6 @@ export function CurrentAssets({ entry }: { entry: LibraryEntry }) {
 
   return (
     <>
-      {resetError && <ErrorNote error={resetError} />}
-      {cleared && <ClearedNote slot={cleared.slot} result={cleared.result} />}
-
       <p className="hint">Click any artwork to see it larger, or right-click to reset it.</p>
 
       <ul className="slots">
@@ -243,24 +251,3 @@ function state(slot: AssetSlot): string {
   return 'None';
 }
 
-/**
- * The menu already named the files it would delete, so repeating them here is redundant — and
- * the state is visible in the grid behind this note anyway.
- */
-function ClearedNote({ slot, result }: { slot: string; result: Cleared }) {
-  if (result.method === 'live') {
-    return (
-      <div className="note note-ok">
-        <p className="note-message">{slot} reset.</p>
-      </div>
-    );
-  }
-  return (
-    <div className="note note-info">
-      <p className="note-message">
-        {slot} reset.{result.needs_restart && ' Restart Steam to see it.'}
-      </p>
-      {result.fell_back_because && <p className="note-action">{result.fell_back_because}</p>}
-    </div>
-  );
-}
