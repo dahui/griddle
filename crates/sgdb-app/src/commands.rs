@@ -630,11 +630,11 @@ pub async fn apply_asset(
 
     // Why the live path is not being taken, or `None` if it is about to be tried.
     let fell_back_because: Option<String> = if !live_enabled {
-        Some("Live apply is turned off.".to_owned())
+        Some("Live apply is off.".to_owned())
     } else if !asset.supports_live_apply() {
         // Icon and HeroBlur are silent no-ops through Steam's API — ordinal 4 takes ~500 ms
         // and writes nothing at all. Going straight to the file path is the honest choice.
-        Some(format!("{asset} cannot be set through Steam's live API."))
+        Some(format!("Steam can't set {asset} artwork live."))
     } else {
         match try_live_apply(&state, app, asset, &bytes).await {
             Ok(()) => {
@@ -687,7 +687,7 @@ async fn try_live_apply(
     if !readiness.can_apply() {
         return Err(UiError::new(
             Kind::LiveApplyUnavailable,
-            "Steam's artwork API is not available in this build.",
+            "Steam's artwork API isn't available in this build.",
         ));
     }
     steam
@@ -784,11 +784,9 @@ pub async fn clear_asset(
 
     let live_enabled = state.settings.lock().await.live_apply;
     let fell_back_because: Option<String> = if !live_enabled {
-        Some("Live apply is turned off.".to_owned())
+        Some("Live apply is off.".to_owned())
     } else if !asset.supports_live_apply() {
-        Some(format!(
-            "{asset} cannot be cleared through Steam's live API."
-        ))
+        Some(format!("Steam can't clear {asset} artwork live."))
     } else {
         match try_live_clear(&state, app, asset).await {
             Ok(()) => None,
@@ -822,7 +820,7 @@ async fn try_live_clear(
     if !readiness.can_apply() {
         return Err(UiError::new(
             Kind::LiveApplyUnavailable,
-            "Steam's artwork API is not available in this build.",
+            "Steam's artwork API isn't available in this build.",
         ));
     }
     steam.clear_artwork(app, asset).await.map_err(UiError::from)

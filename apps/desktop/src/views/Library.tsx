@@ -88,7 +88,7 @@ export function Library({ onPick }: { onPick: (entry: LibraryEntry) => void }) {
   }, [entries, filter]);
 
   if (error) return <ErrorNote error={error} onRetry={() => setReloadKey((k) => k + 1)} />;
-  if (!scope || !entries) return <Spinner label="Reading your Steam library…" />;
+  if (!scope || !entries) return <Spinner label="Loading your library…" />;
 
   return (
     <>
@@ -105,7 +105,7 @@ export function Library({ onPick }: { onPick: (entry: LibraryEntry) => void }) {
             type="button"
             className={scope === 'all' ? 'tab active' : 'tab'}
             onClick={() => view('all', sort)}
-            title="Everything Steam has a local record for. Not the same as everything you own."
+            title="Everything Steam has a record of on this PC — not everything you own."
           >
             All games
           </button>
@@ -139,9 +139,7 @@ export function Library({ onPick }: { onPick: (entry: LibraryEntry) => void }) {
 
       {shown.length === 0 ? (
         <Empty>
-          {entries.length === 0
-            ? 'No games or shortcuts were found.'
-            : `Nothing matches “${filter}”.`}
+          {entries.length === 0 ? 'No games found.' : `Nothing matches “${filter}”.`}
         </Empty>
       ) : (
         <ul className="library">

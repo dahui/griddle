@@ -90,7 +90,7 @@ export function GameSearchModal({
         <p className="hint">
           {current
             ? `Currently using “${current.name}”.`
-            : 'SteamGridDB has no automatic match for this app.'}
+            : 'SteamGridDB has no match for this game.'}
         </p>
 
         <input
@@ -109,8 +109,8 @@ export function GameSearchModal({
           {/* Always offered, so an override is never a one-way door. */}
           <li>
             <button type="button" className="match" onClick={() => void choose(null)}>
-              <span className="match-name">Use the automatic match</span>
-              <span className="match-meta">Match by Steam appid {appId}</span>
+              <span className="match-name">Match automatically</span>
+              <span className="match-meta">By Steam ID {appId}</span>
             </button>
           </li>
           {results?.map((game) => (

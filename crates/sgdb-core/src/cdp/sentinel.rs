@@ -56,18 +56,22 @@ pub enum State {
 }
 
 impl State {
-    /// What to tell the user.
+    /// A one-line status, for showing beside the live-apply control.
+    ///
+    /// 🔴 **This is a status line, not an explanation.** It used to spell out what
+    /// `.cef-enable-remote-debugging` is, that it is Valve's own setting and that Steam needs
+    /// restarting — all of which the settings panel says immediately above it, so the screen
+    /// said the same thing twice.
+    ///
+    /// A caller that shows this *without* that surrounding copy — the Big Picture UI, when it
+    /// gets one — has to supply the explanation itself. Only [`State::PresentSteamStopped`]
+    /// carries its own remedy, because "start Steam" is not something the panel can say in
+    /// advance.
     pub fn explain(self) -> &'static str {
         match self {
-            State::Absent => {
-                "Live apply is off. Turning it on creates an empty file in Steam's folder \
-                 (.cef-enable-remote-debugging) — Valve's own setting, which CSS Loader also \
-                 uses. Steam then needs restarting."
-            }
-            State::PresentSteamStopped => {
-                "Live apply is enabled, but Steam is not running. Start Steam to use it."
-            }
-            State::PresentSteamRunning => "Live apply is enabled.",
+            State::Absent => "Live apply is off.",
+            State::PresentSteamStopped => "Live apply is on, but Steam isn't running.",
+            State::PresentSteamRunning => "Live apply is on.",
         }
     }
 }
@@ -218,15 +222,37 @@ mod tests {
     }
 
     #[test]
-    fn the_state_explanations_say_what_the_user_should_do() {
-        // These strings are the UI, so assert they carry the two facts that matter: what the
-        // file is, and that Steam needs restarting.
-        let absent = State::Absent.explain();
-        assert!(absent.contains(".cef-enable-remote-debugging"), "{absent}");
-        assert!(absent.contains("Valve"), "{absent}");
-        assert!(absent.contains("restart"), "{absent}");
+    fn every_state_is_distinguishable_from_a_one_line_status() {
+        // These strings are the UI. They used to repeat the whole opt-in explanation, which the
+        // settings panel already carries a line above — so the screen said it twice. The
+        // property worth holding now is that each state reads differently and stays short.
+        let all = [
+            State::Absent.explain(),
+            State::PresentSteamStopped.explain(),
+            State::PresentSteamRunning.explain(),
+        ];
+        for s in all {
+            assert!(!s.is_empty(), "every state needs something to show");
+            assert!(s.len() < 60, "a status line, not a paragraph: {s}");
+        }
+        assert_eq!(
+            all.iter().collect::<std::collections::BTreeSet<_>>().len(),
+            3,
+            "the three states must not read the same: {all:?}",
+        );
+    }
 
-        assert!(State::PresentSteamStopped.explain().contains("not running"));
+    #[test]
+    fn the_one_state_with_a_remedy_names_it() {
+        // "Steam isn't running" is the only state the surrounding panel cannot anticipate, so
+        // it is the only one that has to carry its own remedy.
+        assert!(
+            State::PresentSteamStopped
+                .explain()
+                .contains("isn't running"),
+            "{}",
+            State::PresentSteamStopped.explain(),
+        );
     }
 
     #[test]

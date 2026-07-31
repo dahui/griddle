@@ -54,7 +54,9 @@ export function CurrentAssets({ entry }: { entry: LibraryEntry }) {
     setCleared(null);
     try {
       const result = await api.clearAsset(entry.app_id, slot.asset_type);
-      setCleared({ slot: slot.label, result });
+      // Nothing removed means nothing changed, so there is nothing worth saying. The menu does
+      // not offer the action in that state anyway.
+      if (result.removed.length > 0) setCleared({ slot: slot.label, result });
       load();
     } catch (e: unknown) {
       setResetError(asUiError(e));
@@ -71,7 +73,7 @@ export function CurrentAssets({ entry }: { entry: LibraryEntry }) {
       {resetError && <ErrorNote error={resetError} />}
       {cleared && <ClearedNote slot={cleared.slot} result={cleared.result} />}
 
-      <p className="hint">Right-click any artwork to reset it to Steam&rsquo;s own.</p>
+      <p className="hint">Right-click any artwork to reset it.</p>
 
       <ul className="slots">
         {slots.map((slot) => (
@@ -115,7 +117,7 @@ export function CurrentAssets({ entry }: { entry: LibraryEntry }) {
           ) : (
             <div className="menu-item menu-disabled">
               Nothing to reset
-              <span className="menu-note">This slot has no custom artwork.</span>
+              <span className="menu-note">You haven&rsquo;t set artwork here.</span>
             </div>
           )}
         </ContextMenu>
@@ -138,34 +140,27 @@ function sourcesFor(entry: LibraryEntry, slot: AssetSlot): string[] {
 }
 
 function state(slot: AssetSlot): string {
-  if (slot.custom_art) return 'Custom';
-  if (slot.steam_art) return "Steam's own";
-  return 'Not set';
+  if (slot.custom_art) return 'Yours';
+  if (slot.steam_art) return 'Steam default';
+  return 'None';
 }
 
+/**
+ * The menu already named the files it would delete, so repeating them here is redundant — and
+ * the state is visible in the grid behind this note anyway.
+ */
 function ClearedNote({ slot, result }: { slot: string; result: Cleared }) {
-  if (result.removed.length === 0) {
-    return (
-      <div className="note note-info">
-        <p className="note-message">{slot} had no custom artwork to remove.</p>
-      </div>
-    );
-  }
   if (result.method === 'live') {
     return (
       <div className="note note-ok">
-        <p className="note-message">
-          {slot} reset to Steam&rsquo;s artwork. Removed {result.removed.join(', ')} — no restart
-          needed.
-        </p>
+        <p className="note-message">{slot} reset.</p>
       </div>
     );
   }
   return (
     <div className="note note-info">
       <p className="note-message">
-        {slot} reset. Removed {result.removed.join(', ')}.
-        {result.needs_restart && ' Restart Steam to see it.'}
+        {slot} reset.{result.needs_restart && ' Restart Steam to see it.'}
       </p>
       {result.fell_back_because && <p className="note-action">{result.fell_back_because}</p>}
     </div>

@@ -64,8 +64,8 @@ impl UiError {
     }
 
     pub fn no_api_key() -> Self {
-        UiError::new(Kind::NoApiKey, "No SteamGridDB API key has been set yet.")
-            .with_action("Add your key in Settings to browse artwork.")
+        UiError::new(Kind::NoApiKey, "No SteamGridDB API key yet.")
+            .with_action("Add yours in Settings to start browsing.")
     }
 
     pub fn steam_not_found(detail: impl Into<String>) -> Self {
@@ -97,13 +97,13 @@ impl From<sgdb_core::sgdb::client::Error> for UiError {
         use sgdb_core::sgdb::client::Error as E;
         match &e {
             E::Unauthorized => UiError::new(Kind::Unauthorized, e.to_string())
-                .with_action("Check the key in Settings, or generate a new one."),
+                .with_action("Check your key in Settings, or generate a new one."),
             E::NotFound => UiError::new(Kind::NotOnSteamGridDb, e.to_string())
-                .with_action("Try searching for the game by name instead."),
+                .with_action("Try “Wrong game?” to search for it by name."),
             E::Timeout | E::Network(_) => UiError::new(Kind::Network, e.to_string())
                 .with_action("Check your connection and try again."),
             E::RateLimited => UiError::new(Kind::Network, e.to_string())
-                .with_action("SteamGridDB is busy. Wait a moment and try again."),
+                .with_action("SteamGridDB is busy — wait a moment and try again."),
             _ => UiError::unexpected(e),
         }
     }
@@ -139,9 +139,8 @@ impl From<sgdb_core::settings::Error> for UiError {
 
 impl From<sgdb_core::cdp::Error> for UiError {
     fn from(e: sgdb_core::cdp::Error) -> Self {
-        UiError::new(Kind::LiveApplyUnavailable, e.to_string()).with_action(
-            "Artwork will be written to disk instead; Steam needs a restart to show it.",
-        )
+        UiError::new(Kind::LiveApplyUnavailable, e.to_string())
+            .with_action("Artwork will be written to disk instead, so Steam needs a restart.")
     }
 }
 

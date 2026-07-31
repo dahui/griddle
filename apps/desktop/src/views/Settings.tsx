@@ -51,14 +51,12 @@ export function ApiKeyPanel({
     <section>
       <h2>SteamGridDB API key</h2>
       <p>
-        This app asks for <strong>your own</strong> key rather than shipping one. A shared key
-        inside a distributed program gets scraped and revoked, and then every install breaks at
-        once — which is exactly what happened to the Decky plugin&rsquo;s hardcoded key. It is
-        stored encrypted for your Windows account and never leaves this machine except as an
-        Authorization header to SteamGridDB.
+        This app uses <strong>your own</strong> key rather than shipping a shared one — shared
+        keys get scraped and revoked, which is what happened to the Decky plugin&rsquo;s. Yours
+        is stored encrypted for your Windows account and only ever sent to SteamGridDB.
       </p>
       <p>
-        Get one from{' '}
+        Grab one from{' '}
         <a href={KEY_PAGE} target="_blank" rel="noreferrer">
           your SteamGridDB preferences
         </a>
@@ -67,7 +65,7 @@ export function ApiKeyPanel({
 
       {status.has_api_key ? (
         <div className="row">
-          <span className="ok">A key is saved.</span>
+          <span className="ok">Key saved.</span>
           <button type="button" className="ghost" onClick={() => void clear()}>
             Remove it
           </button>
@@ -114,14 +112,12 @@ function LiveApplyPanel({ status, onStatus }: { status: Status; onStatus: (s: St
     <section>
       <h2>Live apply</h2>
       <p>
-        With this on, artwork changes appear in Steam <strong>immediately</strong>, with no
-        restart. Every other Windows tool needs one.
+        Artwork appears in Steam <strong>immediately</strong>, with no restart.
       </p>
       <p>
-        Turning it on creates an empty file called{' '}
-        <code>.cef-enable-remote-debugging</code> in Steam&rsquo;s folder. That is
-        Valve&rsquo;s own setting — CSS Loader uses the same one — and Steam then needs
-        restarting once. Removing the file undoes it completely.
+        Turning this on creates an empty <code>.cef-enable-remote-debugging</code> file in
+        Steam&rsquo;s folder, and Steam needs restarting once. It&rsquo;s Valve&rsquo;s own
+        setting — CSS Loader uses it too — and deleting the file undoes it.
       </p>
 
       <div className="row">
@@ -199,8 +195,8 @@ function DiagnosticsPanel({ status }: { status: Status }) {
         <dt>Known apps</dt>
         <dd>
           {status.app_types_loaded === null
-            ? 'appinfo.vdf unavailable — using the built-in blocklist'
-            : `${status.app_types_loaded} from appinfo.vdf`}
+            ? "Steam's app cache is unreadable — falling back to the built-in list"
+            : `${status.app_types_loaded}`}
         </dd>
         <dt>Cache</dt>
         <dd>{(status.cache_bytes / 1024 / 1024).toFixed(1)} MB</dd>
@@ -212,7 +208,7 @@ function DiagnosticsPanel({ status }: { status: Status }) {
         </button>
       </div>
 
-      {busy && <Spinner label="Reading Steam's modules…" />}
+      {busy && <Spinner label="Checking Steam…" />}
       {error && <ErrorNote error={error} />}
 
       {report && (
@@ -230,7 +226,7 @@ function DiagnosticsPanel({ status }: { status: Status }) {
             ))}
             <li>
               <span className="ok">✓</span> Live apply
-              <span className="hint"> — uses Steam&rsquo;s built-in API, unaffected by updates</span>
+              <span className="hint"> — built into Steam, so updates don&rsquo;t break it</span>
             </li>
           </ul>
           <details>

@@ -162,8 +162,8 @@ export function FilterPanel({
               and sees their results shrink deserves to know why. */}
           <p className="hint filter-hint">
             {filters.untagged
-              ? 'Showing untagged artwork, plus whichever tags are ticked above.'
-              : 'Showing only artwork that carries one of the ticked tags. Untagged artwork is hidden.'}
+              ? 'Untagged artwork, plus anything ticked above.'
+              : 'Only artwork carrying one of the ticked tags — untagged art is hidden.'}
           </p>
         </Group>
 

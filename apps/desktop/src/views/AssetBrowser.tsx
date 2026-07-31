@@ -265,11 +265,10 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
         </button>
         <strong className="browsing">{entry.name}</strong>
         {/* Loaded *and* total, not just total. A count that only ever showed the total is what
-            let "the browser is quietly showing 12 of 400" go unnoticed. */}
+            let "the browser is quietly showing 12 of 400" go unnoticed. The tab above already
+            says which kind of artwork these are. */}
         <span className="count">
-          {browsing && total > 0
-            ? `${assets.length} of ${total} ${ASSET_LABEL[assetType].toLowerCase()} options`
-            : ''}
+          {browsing && total > 0 ? `${assets.length} of ${total}` : ''}
         </span>
       </div>
 
@@ -416,24 +415,24 @@ function AssetPreview({ asset }: { asset: Asset }) {
 /**
  * What the apply actually did.
  *
- * The live path is invisible when it works — the art simply changes in Steam — so the only
- * thing worth saying is when a *restart* is needed, and why the slower path was taken.
+ * The live path is invisible when it works — the art simply changes in Steam — so "Applied" is
+ * the whole message. Saying "no restart needed" every time draws attention to a caveat that does
+ * not apply, and the replaced-file count told the user something they already knew.
+ *
+ * A restart *being* needed is the only thing worth more than one word.
  */
 function AppliedNote({ applied }: { applied: Applied }) {
   if (applied.method === 'live') {
     return (
       <div className="note note-ok">
-        <p className="note-message">Applied. Steam updated straight away — no restart needed.</p>
+        <p className="note-message">Applied.</p>
       </div>
     );
   }
   return (
     <div className="note note-info">
-      <p className="note-message">Artwork written to disk. Restart Steam to see it.</p>
+      <p className="note-message">Applied. Restart Steam to see it.</p>
       {applied.fell_back_because && <p className="note-action">{applied.fell_back_because}</p>}
-      {applied.replaced.length > 0 && (
-        <p className="note-action">Replaced {applied.replaced.length} existing file(s).</p>
-      )}
     </div>
   );
 }

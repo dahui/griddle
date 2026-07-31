@@ -47,8 +47,8 @@ export function App() {
         <section className="welcome">
           <h2>Welcome</h2>
           <p>
-            Browse SteamGridDB and apply artwork to your Steam library. To start, this needs a
-            SteamGridDB API key.
+            Browse SteamGridDB and apply artwork to your Steam library. You&rsquo;ll need a
+            SteamGridDB API key to get started.
           </p>
         </section>
         <ApiKeyPanel status={status} onStatus={setStatus} />
@@ -100,7 +100,7 @@ function Shell({ children }: { children: React.ReactNode }) {
     <main>
       <header>
         <h1>SteamGridDB Artwork Manager</h1>
-        <p className="sub">Artwork for your Steam library, without restarting Steam.</p>
+        <p className="sub">Artwork for your Steam library, without the restart.</p>
       </header>
       {children}
     </main>
