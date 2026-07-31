@@ -157,6 +157,45 @@ fn main() {
         }
     }
 
+    // What the "Current" tab and the reset action both read. If `existing` cannot see a file
+    // that is plainly on disk, every downstream symptom ("reset does nothing", "shows Not set")
+    // follows from here rather than from the UI.
+    println!("\n== custom artwork in grid/ ==");
+    {
+        let grid_dir = install.grid_dir(acct.id);
+        println!("  {}", grid_dir.display());
+        let grid = GridDir::new(grid_dir.clone());
+
+        // Every appid that has at least one file in grid/, taken from the filenames themselves
+        // so this does not depend on the library list being right.
+        let mut ids: Vec<u32> = std::fs::read_dir(&grid_dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|e| {
+                let name = e.file_name().to_str()?.to_owned();
+                let digits: String = name.chars().take_while(char::is_ascii_digit).collect();
+                digits.parse::<u32>().ok()
+            })
+            .collect();
+        ids.sort_unstable();
+        ids.dedup();
+
+        for id in ids {
+            let app = sgdb_core::appid::AppId::new(id);
+            let found: Vec<String> = AssetType::EDITABLE
+                .into_iter()
+                .flat_map(|asset| {
+                    grid.existing(app, asset)
+                        .into_iter()
+                        .filter_map(|p| Some(format!("{asset}={}", p.file_name()?.to_str()?)))
+                        .collect::<Vec<_>>()
+                })
+                .collect();
+            println!("  {:>10}  {}", id, found.join("  "));
+        }
+    }
+
     println!("\n== steam process ==");
     let procs = sgdb_core::steam::process::running();
     if procs.is_empty() {

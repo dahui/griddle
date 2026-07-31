@@ -1,5 +1,5 @@
 /** Small shared pieces. Kept together because none of them is big enough to earn a file. */
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { UiError } from './api';
 
 /**
@@ -81,10 +81,15 @@ export function Empty({ children }: { children: ReactNode }) {
 /**
  * A right-click menu anchored at the cursor.
  *
- * Closes on Escape, on a click anywhere, and on scroll — a menu that outlives what it points at
- * is worse than no menu, because the next click lands on an action the user has stopped looking
- * at. `position: fixed` so the coordinates are viewport-relative and no scroll offset maths is
- * needed.
+ * Closes on Escape, on a click outside it, and on scroll — a menu that outlives what it points
+ * at is worse than no menu, because the next click lands on an action the user has stopped
+ * looking at. `position: fixed` so the coordinates are viewport-relative.
+ *
+ * 🔴 **A click *inside* the menu must not close it here.** The dismiss listener is on `window`
+ * in the **capture** phase, so it runs before the click reaches the menu item's own handler. If
+ * it closes unconditionally, React unmounts the item mid-dispatch and its `onClick` never fires
+ * — every menu action silently does nothing, which is precisely how this shipped the first
+ * time. Letting the item's own handler close the menu is what actually runs the action.
  */
 export function ContextMenu({
   x,
@@ -97,26 +102,35 @@ export function ContextMenu({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const menu = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
-    const close = () => onClose();
+    const closeOutside = (e: Event) => {
+      // A click on the menu is the menu being *used*, not dismissed.
+      if (e.target instanceof Node && menu.current?.contains(e.target)) return;
+      onClose();
+    };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
-    // `capture` so the menu closes even if something below stops propagation.
-    window.addEventListener('click', close, true);
-    window.addEventListener('contextmenu', close, true);
-    window.addEventListener('scroll', close, true);
+    // Scrolling moves what the menu points at, so it always dismisses — no inside/outside test.
+    const onScroll = () => onClose();
+    // `capture` so the menu still closes when something below stops propagation.
+    window.addEventListener('click', closeOutside, true);
+    window.addEventListener('contextmenu', closeOutside, true);
+    window.addEventListener('scroll', onScroll, true);
     window.addEventListener('keydown', onKey);
     return () => {
-      window.removeEventListener('click', close, true);
-      window.removeEventListener('contextmenu', close, true);
-      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('click', closeOutside, true);
+      window.removeEventListener('contextmenu', closeOutside, true);
+      window.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('keydown', onKey);
     };
   }, [onClose]);
 
   return (
     <div
+      ref={menu}
       className="context-menu"
       role="menu"
       style={{

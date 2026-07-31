@@ -24,7 +24,11 @@ export function CurrentAssets({
   onBrowse: (type: AssetType) => void;
 }) {
   const [slots, setSlots] = useState<AssetSlot[] | null>(null);
-  const [error, setError] = useState<UiError | null>(null);
+  // Two error slots, deliberately. A load failure means there is nothing to show; a *reset*
+  // failure must not take the view with it — replacing the grid with an error box loses the
+  // context the user needs, and hides which slot failed.
+  const [loadError, setLoadError] = useState<UiError | null>(null);
+  const [resetError, setResetError] = useState<UiError | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
   const [busy, setBusy] = useState<AssetType | null>(null);
   const [cleared, setCleared] = useState<{ slot: string; result: Cleared } | null>(null);
@@ -36,11 +40,11 @@ export function CurrentAssets({
       .then((s) => {
         if (!cancelled) {
           setSlots(s);
-          setError(null);
+          setLoadError(null);
         }
       })
       .catch((e: unknown) => {
-        if (!cancelled) setError(asUiError(e));
+        if (!cancelled) setLoadError(asUiError(e));
       });
     return () => {
       cancelled = true;
@@ -52,22 +56,25 @@ export function CurrentAssets({
   async function reset(slot: AssetSlot) {
     setMenu(null);
     setBusy(slot.asset_type);
+    setResetError(null);
+    setCleared(null);
     try {
       const result = await api.clearAsset(entry.app_id, slot.asset_type);
       setCleared({ slot: slot.label, result });
       load();
     } catch (e: unknown) {
-      setError(asUiError(e));
+      setResetError(asUiError(e));
     } finally {
       setBusy(null);
     }
   }
 
-  if (error) return <ErrorNote error={error} onRetry={load} />;
+  if (loadError) return <ErrorNote error={loadError} onRetry={load} />;
   if (!slots) return <Spinner label="Reading current artwork…" />;
 
   return (
     <>
+      {resetError && <ErrorNote error={resetError} />}
       {cleared && <ClearedNote slot={cleared.slot} result={cleared.result} />}
 
       <p className="hint">Right-click any artwork to reset it to Steam&rsquo;s own.</p>

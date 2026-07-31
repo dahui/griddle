@@ -736,7 +736,23 @@ both the desktop library and Big Picture, because Chromium sniffs content.
 which the CEF host binds and Valve cannot rename without breaking their own client. The most
 valuable feature is the least exposed to a Steam update. Worth keeping true.
 
-#### Twenty bugs worth remembering
+#### Twenty-one bugs worth remembering
+
+**🔴 A dismiss-on-click listener in the *capture* phase eats the menu's own clicks.** The
+right-click menu closed on `window.addEventListener('click', close, true)`. Capture runs before
+the event reaches the menu item, so React unmounted the item mid-dispatch and its `onClick` never
+fired: every menu action silently did nothing. The menu looked perfect, which is what made it
+convincing — *"the UI renders nicely, but the revert function doesn't work."*
+
+The dismiss listener must ignore clicks **inside** the menu (`menu.contains(e.target)`) and let
+the item's own handler close it. Capture is still right for everything outside, so the menu
+closes even when something below stops propagation.
+
+**How it was found, because guessing was getting nowhere:** the grid directory was listed before
+and after the user tried a reset — **no file was deleted** — and `scan` was extended to print
+what `GridDir::existing` sees, which was every file including the shortcut's `.ico`. Backend
+correct, no error shown, nothing deleted ⇒ the click never arrived. Two read-only observations
+beat four rounds of plausible theorising.
 
 **🔴 Animated artwork's *thumbnail* is a `.webm` video, and an `<img>` renders it as a broken
 image.** SteamGridDB serves the full asset as WebP or APNG but the preview as a video. Dropping
