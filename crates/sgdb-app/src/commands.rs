@@ -546,18 +546,13 @@ pub async fn current_game_match(state: State<'_, AppState>, app_id: u32) -> Res<
             .cloned()
     };
 
-    // An override needs no network call at all: the name was stored when the user chose it.
-    //
-    // This used to synthesise `SteamGridDB game #17830` because only the id was kept — honest,
-    // but useless to read. Storing the name is also why there is no by-id lookup here: this
-    // project does not ship an endpoint it has not probed against the live API, and with the
-    // name in hand it does not need one.
-    if let Some(over) = over {
+    // The common case costs nothing: the name was stored when the user chose the override.
+    if let Some(over) = &over
+        && let Some(name) = &over.name
+    {
         return Ok(Some(GameMatch {
             id: over.id,
-            name: over
-                .name
-                .unwrap_or_else(|| format!("SteamGridDB game #{}", over.id)),
+            name: name.clone(),
             verified: false,
             types: Vec::new(),
         }));
@@ -565,6 +560,20 @@ pub async fn current_game_match(state: State<'_, AppState>, app_id: u32) -> Res<
 
     let guard = state.sgdb.lock().await;
     let client = guard.as_ref().ok_or_else(UiError::no_api_key)?;
+
+    // An override stored before the name was kept alongside it. `/games/id/{id}` is probed and
+    // works, so resolve it properly rather than showing `SteamGridDB game #17830`; fall back to
+    // that only if the lookup finds nothing.
+    if let Some(over) = over {
+        let resolved = client.game_by_id(over.id).await?.map(GameMatch::from);
+        return Ok(Some(resolved.unwrap_or_else(|| GameMatch {
+            id: over.id,
+            name: format!("SteamGridDB game #{}", over.id),
+            verified: false,
+            types: Vec::new(),
+        })));
+    }
+
     Ok(client
         .game_by_steam_appid(AppId::new(app_id))
         .await?

@@ -664,6 +664,12 @@ someone decides we are obliged to honour it and re-fetches on every keystroke.
 `/search/autocomplete` returns an array with **no** pagination fields; asset endpoints return an
 array with `page`/`total`/`limit`.
 
+🟢 **`GET /games/id/{id}` exists and returns a full record.** `[VERIFIED-BOX 2026-07-30]` Probed
+because a manual game override stores only SteamGridDB's id, and an override written before the
+name was stored alongside it would otherwise display as `SteamGridDB game #17830`. Current
+overrides need no request — the name is captured when the user picks it — so this is a
+fallback for old entries only.
+
 🔴 **`icons` rejects `dimensions` outright** — every value 400s, including `8x8`, `16x16`,
 `32x32`, `64x64`, `128x128`, `256x256`, `512x512`, `1024x1024`. An earlier draft carried
 `512x512` and `1024x1024` as icon dimensions purely because they sounded right; the live probe
@@ -730,7 +736,52 @@ both the desktop library and Big Picture, because Chromium sniffs content.
 which the CEF host binds and Valve cannot rename without breaking their own client. The most
 valuable feature is the least exposed to a Steam update. Worth keeping true.
 
-#### Eighteen bugs worth remembering
+#### Twenty bugs worth remembering
+
+**🔴 Animated artwork's *thumbnail* is a `.webm` video, and an `<img>` renders it as a broken
+image.** SteamGridDB serves the full asset as WebP or APNG but the preview as a video. Dropping
+that into `<img src>` produces a broken-image icon — which is indistinguishable from missing
+artwork, and got reported as "this game is missing a lot of entries". **23 of 200** Cyberpunk
+2077 capsules (12%) were affected. `[VERIFIED-BOX 2026-07-30]`
+
+🔴 **The obvious fix is wrong: do not key off the mime.** `mime === "image/webp"` misses a third
+of them, because an APNG is animated too and also gets a `.webm` preview. Measured cross-tab:
+
+| thumb | mime | count |
+|---|---|---|
+| `.jpg` | `image/png` | 139 |
+| `.jpg` | `image/jpeg` | 27 |
+| `.webm` | `image/webp` | 16 |
+| `.png` | `image/png` | 11 |
+| `.webm` | **`image/png`** | **7** |
+
+The predicate is the **thumbnail's extension** (`isVideoPreview`), and it reads the path so a
+query string can neither defeat nor fake it. Note the CSP already carried
+`media-src https://cdn2.steamgriddb.com` — the policy anticipated this and the renderer never
+caught up, which is its own lesson: a permission granted is not a feature implemented.
+
+**🔴 An `IntersectionObserver` fires on *change*, so a callback ignored once is a callback that
+may never come again.** The infinite-scroll observer starts observing during the page-0 fetch;
+its initial callback lands while that request is in flight, hits the in-flight guard, and does
+nothing. `setPage(0)` on page 0 changes nothing, so the effect did not re-run to try again — and
+from then on only the sentinel physically moving in or out of view could wake it. If the page
+that arrived was too short to push the sentinel past the 400px margin, the browser sat there
+showing a fraction of the results, with no error and no spinner. The symptom was "games with a
+lot of artwork are missing entries", which sounds like an API problem and is not.
+
+The fix is to stop waiting for a *change*: re-observe after every settled load (`assets.length`
+and `loading` in the dependencies) so there is always a fresh initial callback. Plus a visible
+**Load more** button, because infinite scroll depends on viewport geometry working out and when
+it does not there is otherwise nothing the user can do. The count now reads *"12 of 400"* rather
+than *"400"* — a total-only count is what let this stay invisible.
+
+🔴 **The `[INFERRED]` explanation attached to this was wrong, and probing killed it.** The guess
+was that SteamGridDB paginates before filtering, returning a short page 0. Measured against the
+live API: Cyberpunk 2077's filtered capsule query returns `total=728` with a **full 50 items on
+every page**, pages 0, 1 and 2 alike. There is no short page. The stall is real and proven from
+the code, but the thing that actually made this game look broken was the `.webm` thumbnails
+below. **An inference sitting next to a proven fact borrows its credibility — probe it or drop
+it.**
 
 **🔴 The shared filter set is clamped at *query* time, never on save.** `pruneToType` narrows the
 one shared `Filters` to what the current tab's endpoint accepts, and the result is deliberately

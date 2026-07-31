@@ -5,6 +5,7 @@ import {
   ASSET_TYPES,
   defaultFilters,
   fromStored,
+  isVideoPreview,
   queryFor,
   toStored,
   type AssetType,
@@ -24,17 +25,20 @@ import { Empty, ErrorNote, Flags, Spinner } from '../components';
 import { FilterPanel } from './FilterPanel';
 import { GameSearchModal } from './GameSearchModal';
 
-export function AssetBrowser({
-  entry,
-  assetType,
-  onAssetType,
-  onBack,
-}: {
-  entry: LibraryEntry;
-  assetType: AssetType;
-  onAssetType: (type: AssetType) => void;
-  onBack: () => void;
-}) {
+/**
+ * The tab every game opens on.
+ *
+ * Portrait capsule, because it is the one the library grid shows and so the one the user was
+ * looking at when they clicked. `Settings.tabs.default_tab` exists to make this a preference
+ * later; until then a constant is honest about what it is.
+ */
+const DEFAULT_TAB: AssetType = 'grid_p';
+
+export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: () => void }) {
+  // Held here, not in `App`, so it resets to the Capsule tab for every game. This component is
+  // unmounted whenever the library list is showing, which makes that structural — there is no
+  // "reset the tab" call anyone can forget when a new game is opened.
+  const [assetType, setAssetType] = useState<AssetType>(DEFAULT_TAB);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
@@ -178,9 +182,25 @@ export function AssetBrowser({
     void loadPage(0);
   }, [loadPage, ready, reloadKey]);
 
+  /**
+   * Infinite scroll.
+   *
+   * 🔴 **`assets.length` and `loading` are in the dependencies on purpose, and removing them
+   * strands the list.** An `IntersectionObserver` fires once when it starts observing and then
+   * only when the intersection *changes*. That initial callback lands while page 0 is still in
+   * flight, so it hits the guard below and does nothing — and `setPage(0)` on page 0 changes
+   * nothing, so this effect would not re-run to try again. From then on the only thing that
+   * could wake it is the sentinel moving in or out of view, which never happens if the page that
+   * arrived was too short to push it past the 400px margin.
+   *
+   * That is not a corner case: SteamGridDB pages before applying some filters, so a game with a
+   * lot of artwork can return a handful of items for page 0 while `total` still promises
+   * hundreds — and the browser sits there showing a fraction of them. Re-observing after every
+   * settled load replaces "wait for a change" with "ask again", which cannot get stuck.
+   */
   useEffect(() => {
     const node = sentinel.current;
-    if (!node || !hasMore || error || !ready) return undefined;
+    if (!node || !hasMore || error || !ready || loading) return undefined;
     const observer = new IntersectionObserver(
       (entries) => {
         // Only the observer needs this guard: without it, scrolling requests the same next page
@@ -193,7 +213,7 @@ export function AssetBrowser({
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [hasMore, error, page, loadPage, ready]);
+  }, [hasMore, error, page, loadPage, ready, loading, assets.length]);
 
   /**
    * Apply a filter change locally and persist it.
@@ -233,8 +253,12 @@ export function AssetBrowser({
           ← Library
         </button>
         <strong className="browsing">{entry.name}</strong>
+        {/* Loaded *and* total, not just total. A count that only ever showed the total is what
+            let "the browser is quietly showing 12 of 400" go unnoticed. */}
         <span className="count">
-          {total > 0 ? `${total} ${ASSET_LABEL[assetType].toLowerCase()} options` : ''}
+          {total > 0
+            ? `${assets.length} of ${total} ${ASSET_LABEL[assetType].toLowerCase()} options`
+            : ''}
         </span>
       </div>
 
@@ -246,7 +270,7 @@ export function AssetBrowser({
             type="button"
             key={t}
             className={assetType === t ? 'tab active' : 'tab'}
-            onClick={() => onAssetType(t)}
+            onClick={() => setAssetType(t)}
           >
             {ASSET_LABEL[t]}
           </button>
@@ -293,7 +317,7 @@ export function AssetBrowser({
               onClick={() => void apply(asset)}
               title={`Apply this ${ASSET_LABEL[assetType].toLowerCase()}`}
             >
-              <img src={asset.thumb ?? asset.url} alt="" loading="lazy" />
+              <AssetPreview asset={asset} />
               {applying === asset.id && <span className="applying">Applying…</span>}
             </button>
             <figcaption>
@@ -317,9 +341,51 @@ export function AssetBrowser({
         <Empty>SteamGridDB has no {ASSET_LABEL[assetType].toLowerCase()} artwork for this game.</Empty>
       )}
       {error && assets.length > 0 && <ErrorNote error={error} />}
+
+      {/* An explicit way to load the rest. Infinite scroll depends on the viewport geometry
+          working out, and when it does not there is otherwise nothing the user can do — the
+          remaining artwork is simply unreachable. Shown only when there is genuinely more. */}
+      {!loading && hasMore && !error && assets.length > 0 && (
+        <div className="load-more">
+          <button type="button" className="ghost" onClick={() => void loadPage(page + 1)}>
+            Load more
+          </button>
+        </div>
+      )}
+
       <div ref={sentinel} className="sentinel" />
     </>
   );
+}
+
+/**
+ * One asset's preview.
+ *
+ * 🔴 Animated artwork's thumbnail is a **`.webm` video**, not an image, and an `<img>` renders
+ * it as a broken-image icon — indistinguishable from missing artwork. 12% of Cyberpunk 2077's
+ * capsules are affected. See `isVideoPreview` for why the extension, not the mime, is the test.
+ *
+ * The `<video>` needs `muted` for `autoPlay` to be allowed at all, and the CSP already carries
+ * `media-src https://cdn2.steamgriddb.com` — someone anticipated this and the renderer did not
+ * catch up.
+ */
+function AssetPreview({ asset }: { asset: Asset }) {
+  const src = asset.thumb ?? asset.url;
+  if (isVideoPreview(src)) {
+    return (
+      <video
+        src={src}
+        autoPlay
+        loop
+        muted
+        playsInline
+        // `metadata` rather than `auto`: a page of these is tens of megabytes, and the first
+        // frame is enough to show what the artwork is.
+        preload="metadata"
+      />
+    );
+  }
+  return <img src={src} alt="" loading="lazy" />;
 }
 
 /**

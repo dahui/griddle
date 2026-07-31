@@ -67,10 +67,9 @@ export function FilterPanel({
       open={open}
       onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
     >
-      <summary>
-        Filters
-        {modified && <span className="filters-on"> · modified</span>}
-      </summary>
+      {/* No "modified" badge: the "Reset filters" button below already appears only when
+          something has been changed, so the badge said the same thing twice. */}
+      <summary>Filters</summary>
 
       <div className="filter-body">
         {styles.length > 0 && (

@@ -5,12 +5,11 @@
  * scroll, and apply. The apply path tries live first and falls back to writing files; the UI's
  * only job there is to say clearly whether a Steam restart is needed.
  *
- * `assetType` lives here rather than in `AssetBrowser` so the chosen tab survives going back to
- * the list and opening a different game — the tab bar itself is rendered by `AssetBrowser`,
- * because those tabs only mean anything for a single game.
+ * The selected asset tab lives in `AssetBrowser`, which is unmounted whenever the list is
+ * showing. That is what makes every game open on the Capsule tab: the reset is structural, not
+ * something this component has to remember to do when a game is picked.
  */
 import { useCallback, useEffect, useState } from 'react';
-import type { AssetType } from '@sgdb/shared';
 import { api, asUiError, type LibraryEntry, type Status, type UiError } from './api';
 import { ErrorNote, Spinner } from './components';
 import { Library } from './views/Library';
@@ -23,7 +22,6 @@ export function App() {
   const [status, setStatus] = useState<Status | null>(null);
   const [error, setError] = useState<UiError | null>(null);
   const [tab, setTab] = useState<Tab>('library');
-  const [assetType, setAssetType] = useState<AssetType>('grid_p');
   const [selected, setSelected] = useState<LibraryEntry | null>(null);
 
   const refresh = useCallback(() => {
@@ -84,8 +82,6 @@ export function App() {
       ) : selected ? (
         <AssetBrowser
           entry={selected}
-          assetType={assetType}
-          onAssetType={setAssetType}
           onBack={() => {
             setSelected(null);
             // Re-read on the way back so newly applied art shows in the list.

@@ -11,7 +11,15 @@
  */
 import { describe, expect, test } from 'bun:test';
 import vocabulary from '../fixtures/filter-vocabulary.json';
-import { ASSET_TYPES, DIMENSIONS, MIMES, STYLE_LABEL, STYLES, type AssetType } from './assets';
+import {
+  ASSET_TYPES,
+  DIMENSIONS,
+  MIMES,
+  STYLE_LABEL,
+  STYLES,
+  isVideoPreview,
+  type AssetType,
+} from './assets';
 import { PAGE_LIMIT } from './filters';
 import { STEAM_CDN_BASENAME, steamCdnUrl, steamIconUrl } from './steamArt';
 
@@ -62,6 +70,40 @@ describe('filter vocabulary matches the shared fixture', () => {
         expect(STYLE_LABEL[style]).toBeTruthy();
       }
     }
+  });
+});
+
+describe('animated previews', () => {
+  test('a .webm thumbnail is a video, not an image', () => {
+    // 🔴 SteamGridDB serves animated artwork with a `.webm` *thumbnail*. Rendering that in an
+    // <img> produces a broken-image icon, which is indistinguishable from missing artwork —
+    // 12% of Cyberpunk 2077's capsules looked broken because of exactly this.
+    expect(isVideoPreview('https://cdn2.steamgriddb.com/thumb/51f993d2.webm')).toBe(true);
+    expect(isVideoPreview('https://cdn2.steamgriddb.com/thumb/f39b7817.jpg')).toBe(false);
+    expect(isVideoPreview('https://cdn2.steamgriddb.com/grid/51f993d2.webp')).toBe(false);
+    expect(isVideoPreview('https://cdn2.steamgriddb.com/grid/abc.png')).toBe(false);
+  });
+
+  test('the extension is read from the path, not the whole URL', () => {
+    // A query string must neither defeat the check nor fake it.
+    expect(isVideoPreview('https://cdn2.steamgriddb.com/thumb/a.webm?v=2')).toBe(true);
+    expect(isVideoPreview('https://cdn2.steamgriddb.com/thumb/a.jpg?x=.webm')).toBe(false);
+    expect(isVideoPreview('https://cdn2.steamgriddb.com/thumb/a.webm#frag')).toBe(true);
+  });
+
+  test('a missing thumbnail is not a video', () => {
+    expect(isVideoPreview(null)).toBe(false);
+    expect(isVideoPreview(undefined)).toBe(false);
+    expect(isVideoPreview('')).toBe(false);
+  });
+
+  test('webp is NOT the signal — an APNG is animated too', () => {
+    // 🔴 The check that looks obviously right and is wrong. Of the 23 webm-thumbed capsules
+    // measured on Cyberpunk, 7 report `mime: image/png` because they are APNGs. Keying off the
+    // mime would leave a third of them rendering as broken images.
+    const apng = { mime: 'image/png', thumb: 'https://cdn2.steamgriddb.com/thumb/x.webm' };
+    expect(apng.mime).toBe('image/png');
+    expect(isVideoPreview(apng.thumb)).toBe(true);
   });
 });
 

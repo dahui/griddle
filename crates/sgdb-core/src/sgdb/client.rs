@@ -236,6 +236,20 @@ impl Client {
         }
     }
 
+    /// Look up a game by SteamGridDB's own id. `Ok(None)` when there is no such game.
+    ///
+    /// `GET /games/id/{id}` — **200 with a full record, probed against the live API**
+    /// `[VERIFIED-BOX 2026-07-30]`. Used only to name a manual override that was stored before
+    /// the name was kept alongside it; a current override needs no request at all.
+    pub async fn game_by_id(&self, id: u64) -> Result<Option<Game>, Error> {
+        let url = self.build_url(&["games", "id", &id.to_string()], &[])?;
+        match self.get_envelope::<Game>(url).await {
+            Ok(env) => Ok(env.data),
+            Err(Error::NotFound) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
     /// Search by name. Used by the "wrong game matched" flow.
     pub async fn search(&self, term: &str) -> Result<Vec<Game>, Error> {
         if term.trim().is_empty() {

@@ -127,6 +127,34 @@ export const ZOOM: Record<AssetType, { min: number; max: number; default: number
 };
 
 /**
+ * Whether a SteamGridDB preview URL is a **video** rather than an image.
+ *
+ * 🔴 Animated artwork is served with a `.webm` *thumbnail* — the full asset is a WebP or an
+ * APNG, but the preview is a video. Putting that in an `<img>` renders a broken-image icon,
+ * which is exactly what it looks like: missing artwork. On Cyberpunk 2077, **23 of 200**
+ * capsules (12%) hit this. `[VERIFIED-BOX 2026-07-30]`
+ *
+ * 🔴 **Test the extension, not the mime.** The obvious check — `mime === 'image/webp'` — misses
+ * a third of them: 7 of those 23 report `image/png`, because an APNG is animated too and also
+ * gets a `.webm` preview. Measured cross-tab on the same 200:
+ *
+ * | thumb | mime | count |
+ * |---|---|---|
+ * | `.jpg` | `image/png` | 139 |
+ * | `.jpg` | `image/jpeg` | 27 |
+ * | `.webm` | `image/webp` | 16 |
+ * | `.png` | `image/png` | 11 |
+ * | `.webm` | **`image/png`** | **7** |
+ */
+export function isVideoPreview(url: string | null | undefined): boolean {
+  if (!url) return false;
+  // Compare the path only: a query string or fragment must not defeat the check, and must not
+  // make a `.webm?foo=.jpg` look like an image either.
+  const path = url.split(/[?#]/, 1)[0] ?? '';
+  return path.toLowerCase().endsWith('.webm');
+}
+
+/**
  * A 1x1 fully transparent PNG, used by the "Use Invisible Asset" action to blank an asset
  * without leaving Steam's default art showing through.
  *

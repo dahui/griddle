@@ -275,6 +275,27 @@ mod tests {
     }
 
     #[test]
+    fn a_short_page_does_not_mean_the_end_of_the_results() {
+        // 🔴 A page can come back with far fewer than `limit` items while hundreds remain. Any
+        // logic that concludes "short page, therefore done" strands the rest of a large game's
+        // artwork — which is exactly how a browser ends up showing 12 of 400 and stopping.
+        let one: Asset =
+            serde_json::from_str(r#"{"id":1,"url":"https://cdn2.steamgriddb.com/grid/x.png"}"#)
+                .unwrap();
+        let short = AssetPage {
+            assets: vec![one],
+            page: 0,
+            total: 424,
+            limit: 50,
+        };
+        assert_eq!(short.assets.len(), 1, "premise: this page really is short");
+        assert!(
+            short.has_more(),
+            "a page far shorter than the limit must not end pagination"
+        );
+    }
+
+    #[test]
     fn has_more_is_derived_from_total_not_from_a_short_page() {
         // 424 total at 50 per page: pages 0..7 have more, page 8 does not.
         let page = |p: u32| AssetPage {

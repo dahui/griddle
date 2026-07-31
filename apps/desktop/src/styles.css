@@ -327,7 +327,9 @@ button.ghost:hover:not(:disabled) {
   border-color: var(--accent);
 }
 
-.asset-button img {
+/* Video covers the animated previews: SteamGridDB serves those thumbnails as .webm. */
+.asset-button img,
+.asset-button video {
   display: block;
   width: 100%;
   height: auto;
@@ -384,6 +386,12 @@ figcaption {
   height: 1px;
 }
 
+.load-more {
+  display: flex;
+  justify-content: center;
+  padding: 1.25rem 0 0.5rem;
+}
+
 /* -- filters -------------------------------------------------------------------------- */
 
 .filters {
@@ -398,11 +406,6 @@ figcaption {
   color: var(--text);
   font-size: 0.85rem;
   font-weight: 600;
-}
-
-.filters-on {
-  color: var(--accent);
-  font-weight: 400;
 }
 
 .filter-body {
