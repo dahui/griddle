@@ -19,7 +19,7 @@
 //! # Resolution order
 //!
 //! 1. `SGDB_STEAM_PATH` — an explicit override, and how the tests run on a machine with no
-//!    Steam (CI runs `sgdb-core` on Linux too).
+//!    Steam (CI runs `griddle-core` on Linux too).
 //! 2. `HKCU\Software\Valve\Steam\SteamPath` — per-user, the most accurate.
 //! 3. `HKLM\...\Valve\Steam\InstallPath` via the **32-bit registry view**, so the lookup works
 //!    regardless of our own process bitness.

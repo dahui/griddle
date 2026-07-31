@@ -12,7 +12,7 @@
  */
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { useEffect, useMemo, useState } from 'react';
-import { steamCdnUrl, type AssetType } from '@sgdb/shared';
+import { steamCdnUrl, type AssetType } from '@griddle/shared';
 import {
   api,
   asUiError,

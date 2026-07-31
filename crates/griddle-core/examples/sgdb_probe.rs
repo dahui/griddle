@@ -2,7 +2,7 @@
 //!
 //! ```powershell
 //! $env:SGDB_API_KEY = "<your key>"
-//! cargo run -p sgdb-core --example sgdb_probe
+//! cargo run -p griddle-core --example sgdb_probe
 //! ```
 //!
 //! Read-only: it fetches metadata and one thumbnail, and writes nothing anywhere.
@@ -18,9 +18,9 @@
 //!
 //! 🔑 The key is read from the environment and **never** from a file in this repo.
 
-use sgdb_core::appid::AppId;
-use sgdb_core::grid::names::AssetType;
-use sgdb_core::sgdb::{ApiKey, AssetQuery, Client, Dimensions, Target};
+use griddle_core::appid::AppId;
+use griddle_core::grid::names::AssetType;
+use griddle_core::sgdb::{ApiKey, AssetQuery, Client, Dimensions, Target};
 
 const PORTAL_2: u32 = 620;
 
@@ -135,8 +135,8 @@ async fn main() {
     ];
     for (endpoint, dim) in checks {
         let kind = match *endpoint {
-            "grids" => sgdb_core::sgdb::AssetKind::Grid,
-            _ => sgdb_core::sgdb::AssetKind::Hero,
+            "grids" => griddle_core::sgdb::AssetKind::Grid,
+            _ => griddle_core::sgdb::AssetKind::Hero,
         };
         let q = AssetQuery {
             dimensions: vec![*dim],
@@ -163,7 +163,7 @@ async fn main() {
     let q = AssetQuery::default().limit(5);
     match client
         .assets(
-            sgdb_core::sgdb::AssetKind::Grid,
+            griddle_core::sgdb::AssetKind::Grid,
             Target::Steam(AppId::new(PORTAL_2)),
             &q.clone().page(0),
         )
@@ -178,7 +178,7 @@ async fn main() {
             );
             match client
                 .assets(
-                    sgdb_core::sgdb::AssetKind::Grid,
+                    griddle_core::sgdb::AssetKind::Grid,
                     Target::Steam(AppId::new(PORTAL_2)),
                     &q.page(1),
                 )
@@ -212,7 +212,7 @@ async fn main() {
     let q = AssetQuery::default().limit(1);
     match client
         .assets(
-            sgdb_core::sgdb::AssetKind::Grid,
+            griddle_core::sgdb::AssetKind::Grid,
             Target::Steam(AppId::new(PORTAL_2)),
             &q,
         )

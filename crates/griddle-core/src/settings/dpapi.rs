@@ -21,7 +21,10 @@
 
 /// Application-specific secondary entropy. Changing this **invalidates every stored key**, so
 /// treat it as a format version: bump it only with a migration path.
-const ENTROPY: &[u8] = b"sgdb-core:api-key:v1";
+///
+/// It read `sgdb-core:api-key:v1` before the product had a name. Changing it cost one re-entry
+/// of the key and nothing else, because nothing had shipped — the only moment that is ever free.
+const ENTROPY: &[u8] = b"griddle:api-key:v1";
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

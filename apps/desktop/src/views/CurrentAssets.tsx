@@ -10,7 +10,7 @@
  */
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { useCallback, useEffect, useState } from 'react';
-import { steamCdnUrl, type AssetType } from '@sgdb/shared';
+import { steamCdnUrl, type AssetType } from '@griddle/shared';
 import { api, asUiError, type AssetSlot, type Cleared, type LibraryEntry, type UiError } from '../api';
 import { ArtImage, ContextMenu, ErrorNote, Spinner } from '../components';
 

@@ -11,12 +11,12 @@
 //!
 //! ```powershell
 //! $env:SGDB_REAL_SHORTCUTS = "C:\Program Files (x86)\Steam\userdata\16274804\config\shortcuts.vdf"
-//! cargo test -p sgdb-core --test real_shortcuts -- --nocapture
+//! cargo test -p griddle-core --test real_shortcuts -- --nocapture
 //! ```
 //!
 //! Read-only. This test never writes to the Steam directory.
 
-use sgdb_core::vdf::binary;
+use griddle_core::vdf::binary;
 
 /// Skips rather than fails when the env var is unset, so CI (which has no Steam install)
 /// stays green while a developer with a real client gets the stronger check.

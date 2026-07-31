@@ -1,4 +1,4 @@
-//! Desktop shell. Thin by design — every decision belongs to `sgdb-core`.
+//! Desktop shell. Thin by design — every decision belongs to `griddle-core`.
 //!
 //! `windows_subsystem = "windows"` is the whole reason this project exists in preference to
 //! running Decky on Windows: no console window flashes on launch. **Verify it by starting the
@@ -26,7 +26,7 @@ fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "sgdb_core=info,sgdb_app=info".into()),
+                .unwrap_or_else(|_| "griddle_core=info,griddle_app=info".into()),
         )
         .init();
 
@@ -86,7 +86,7 @@ fn main() {
             //
             // Never fatal: the apply ladder falls back to writing files, which needs no port.
             if let Ok(ctx) = state.steam() {
-                let sentinel = sgdb_core::cdp::Sentinel::for_install(&ctx.install);
+                let sentinel = griddle_core::cdp::Sentinel::for_install(&ctx.install);
                 match sentinel.enable() {
                     Ok(()) => tracing::info!(path = %sentinel.path().display(), "live apply ready"),
                     Err(e) => {

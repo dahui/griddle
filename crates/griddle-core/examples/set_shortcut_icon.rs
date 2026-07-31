@@ -3,11 +3,11 @@
 //!
 //! ```powershell
 //! # Read-only. Always safe, works while Steam is running.
-//! cargo run -p sgdb-core --example set_shortcut_icon
+//! cargo run -p griddle-core --example set_shortcut_icon
 //!
 //! # Write. Refuses unless Steam is stopped; --shutdown will stop and restart it.
-//! cargo run -p sgdb-core --example set_shortcut_icon -- --appid 4048848997 --icon C:\path\to.ico
-//! cargo run -p sgdb-core --example set_shortcut_icon -- --appid 4048848997 --icon C:\to.ico --shutdown
+//! cargo run -p griddle-core --example set_shortcut_icon -- --appid 4048848997 --icon C:\path\to.ico
+//! cargo run -p griddle-core --example set_shortcut_icon -- --appid 4048848997 --icon C:\to.ico --shutdown
 //! ```
 //!
 //! S9 proved the choreography works with a throwaway implementation. This is the same
@@ -21,8 +21,8 @@
 //! ⚠️ This writes to a **real** `shortcuts.vdf`. It keeps the original, but a backup you have
 //! not tested restoring is not a backup — `--restore` exists for that reason.
 
-use sgdb_core::appid::AppId;
-use sgdb_core::steam::{account, locate, process, shortcuts::Shortcuts};
+use griddle_core::appid::AppId;
+use griddle_core::steam::{account, locate, process, shortcuts::Shortcuts};
 use std::time::Duration;
 
 fn main() {

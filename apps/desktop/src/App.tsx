@@ -102,7 +102,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main>
       <header>
-        <h1>SteamGridDB Artwork Manager</h1>
+        <h1>Griddle</h1>
         <p className="sub">Artwork for your Steam library.</p>
       </header>
       {children}

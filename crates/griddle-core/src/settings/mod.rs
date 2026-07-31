@@ -39,9 +39,17 @@ use std::collections::BTreeMap;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
-/// 🔵 **Placeholder.** The product name is undecided; this is a mechanical rename before
-/// release, along with the crate names. See CLAUDE.md.
-pub const APP_DIR_NAME: &str = "SteamGridDB Client";
+/// The directory under `%APPDATA%` and `%LOCALAPPDATA%` that this app owns.
+///
+/// **The single definition.** `cache` imports it rather than keeping its own copy — the two used
+/// to be separate constants kept in step by a hand-written comment, which is a drift hazard for
+/// no benefit: a mismatch would split settings and cache across two directories, and nothing
+/// would report it.
+///
+/// 🔴 Changing this **relocates the user's settings and API key**, with no migration path in the
+/// code. That was acceptable exactly once, at the rename from the pre-release placeholder. Treat
+/// any future change as a breaking one that needs a move written first.
+pub const APP_DIR_NAME: &str = "Griddle";
 
 /// Bumped only for a breaking schema change that needs a migration.
 pub const SCHEMA_VERSION: u32 = 1;

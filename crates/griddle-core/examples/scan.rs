@@ -1,7 +1,7 @@
 //! Run the offline layer against the real Steam installation.
 //!
 //! ```powershell
-//! cargo run -p sgdb-core --example scan
+//! cargo run -p griddle-core --example scan
 //! ```
 //!
 //! Read-only. Unit tests use synthetic fixtures, which prove the parsers handle the shapes we
@@ -9,8 +9,8 @@
 //!
 //! Set `SGDB_STEAM_PATH` to point at a different installation.
 
-use sgdb_core::grid::{AssetType, GridDir};
-use sgdb_core::steam::{account, apptype, library, locate};
+use griddle_core::grid::{AssetType, GridDir};
+use griddle_core::steam::{account, apptype, library, locate};
 
 fn main() {
     println!("== locate ==");
@@ -119,7 +119,7 @@ fn main() {
     // from "the resolver works on the two apps I picked".
     println!("\n== librarycache (Steam's own default art) ==");
     {
-        use sgdb_core::steam::LibraryCache;
+        use griddle_core::steam::LibraryCache;
         let cache = LibraryCache::new(&install, types.as_ref());
         let dir = install.library_cache_dir();
         println!("  {}", dir.display());
@@ -136,7 +136,7 @@ fn main() {
             let mut hits = 0usize;
             let mut nested = 0usize;
             for id in &ids {
-                if let Some(p) = cache.resolve(sgdb_core::appid::AppId::new(*id), asset) {
+                if let Some(p) = cache.resolve(griddle_core::appid::AppId::new(*id), asset) {
                     hits += 1;
                     // A hit whose parent is not the appid dir came through the sha1 layout,
                     // which only the appinfo index can reach.
@@ -182,7 +182,7 @@ fn main() {
         ids.dedup();
 
         for id in ids {
-            let app = sgdb_core::appid::AppId::new(id);
+            let app = griddle_core::appid::AppId::new(id);
             let found: Vec<String> = AssetType::EDITABLE
                 .into_iter()
                 .flat_map(|asset| {
@@ -197,7 +197,7 @@ fn main() {
     }
 
     println!("\n== steam process ==");
-    let procs = sgdb_core::steam::process::running();
+    let procs = griddle_core::steam::process::running();
     if procs.is_empty() {
         println!("  not running — shortcuts.vdf is safe to write");
     } else {
@@ -210,7 +210,7 @@ fn main() {
     println!("\n== non-steam shortcuts ==");
     let sc_path = install.shortcuts_vdf(acct.id);
     println!("  {}", sc_path.display());
-    match sgdb_core::steam::Shortcuts::load_or_empty(&sc_path) {
+    match griddle_core::steam::Shortcuts::load_or_empty(&sc_path) {
         Ok(sc) => {
             println!("  {} shortcut(s), round-trip verified", sc.len());
             for s in sc.iter() {
@@ -271,7 +271,7 @@ fn main() {
     ids.sort_unstable();
 
     for id in &ids {
-        let app = sgdb_core::appid::AppId::new(*id);
+        let app = griddle_core::appid::AppId::new(*id);
         let mut have = Vec::new();
         for t in AssetType::EDITABLE {
             let files = grid.existing(app, t);

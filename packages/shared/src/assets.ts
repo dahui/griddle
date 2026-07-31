@@ -62,7 +62,7 @@ export const ASSET_LABEL: Record<AssetType, string> = {
  *   The bare-number list that used to be here (`'1024'`, `'768'`, …) was not even the right
  *   *shape*, let alone accepted.
  * - **Values are endpoint-specific.** `heroes?dimensions=600x900` is a 400. The grid sizes and
- *   the hero sizes are not interchangeable, and `sgdb-core` enforces that before sending.
+ *   the hero sizes are not interchangeable, and `griddle-core` enforces that before sending.
  *
  * `512x512` and `1024x1024` *are* valid for grids (9 and 22 assets for Portal 2), but are off
  * by default: they match little and are not the shape Steam renders.

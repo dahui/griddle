@@ -1,7 +1,7 @@
 //! Exercise the `cdp` module against the running Steam client. **Read-only.**
 //!
 //! ```powershell
-//! cargo run -p sgdb-core --example cdp_check
+//! cargo run -p griddle-core --example cdp_check
 //! ```
 //!
 //! Reports the sentinel state, finds `SharedJSContext`, feature-detects the artwork API, and
@@ -11,9 +11,9 @@
 //! The spike harness (`examples/cdp_probe.rs`) stays as the exploratory tool with its own JS
 //! payloads; this one proves the shipped library works, so what ships is what was tested.
 
-use sgdb_core::appid::AppId;
-use sgdb_core::cdp::{Endpoint, Sentinel, SteamJs, target};
-use sgdb_core::steam::locate;
+use griddle_core::appid::AppId;
+use griddle_core::cdp::{Endpoint, Sentinel, SteamJs, target};
+use griddle_core::steam::locate;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -138,19 +138,19 @@ async fn main() {
             );
             for (name, outcome) in &resolution.outcomes {
                 let detail = match outcome {
-                    sgdb_core::cdp::modules::Outcome::Found { ids } => {
+                    griddle_core::cdp::modules::Outcome::Found { ids } => {
                         format!("ok      {}", ids.join(", "))
                     }
-                    sgdb_core::cdp::modules::Outcome::Ambiguous { ids } => {
+                    griddle_core::cdp::modules::Outcome::Ambiguous { ids } => {
                         format!("AMBIG   {} (predicate too loose)", ids.join(", "))
                     }
-                    sgdb_core::cdp::modules::Outcome::NotFound => "NOT FOUND".to_string(),
+                    griddle_core::cdp::modules::Outcome::NotFound => "NOT FOUND".to_string(),
                 };
                 println!("    {name:<20} {detail}");
             }
 
             println!("\n== features ==");
-            for feature in sgdb_core::cdp::modules::FEATURES {
+            for feature in griddle_core::cdp::modules::FEATURES {
                 if feature.available(&resolution) {
                     println!("    {:<22} available", feature.name);
                 } else {

@@ -12,9 +12,9 @@
     "build:shared": "bun run --cwd packages/shared build",
     "typecheck": "tsc --build --force",
     "test": "bun test",
-    "app": "cd crates/sgdb-app && tauri dev",
-    "app:build": "cd crates/sgdb-app && tauri build",
-    "app:release": "bun run build:desktop && cargo build --release -p sgdb-app"
+    "app": "cd crates/griddle-app && tauri dev",
+    "app:build": "cd crates/griddle-app && tauri build",
+    "app:release": "bun run build:desktop && cargo build --release -p griddle-app"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

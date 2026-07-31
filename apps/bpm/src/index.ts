@@ -17,7 +17,7 @@
  * M6 fills this in. For now it is the minimum that proves injection round-trips.
  */
 
-import { ASSET_TYPES } from '@sgdb/shared';
+import { ASSET_TYPES } from '@griddle/shared';
 
 declare global {
   interface Window {

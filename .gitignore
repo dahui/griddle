@@ -7,7 +7,7 @@ dist/
 *.tsbuildinfo
 
 # Tauri
-/crates/sgdb-app/gen/
+/crates/griddle-app/gen/
 
 # Secrets. The SteamGridDB API key is a PER-USER secret — every API endpoint 401s without
 # one, so a key WILL get pasted somewhere during development. Enforced by
@@ -22,8 +22,8 @@ secrets.json
 **/apikey.txt
 
 # Real Steam fixtures are NEVER committed — they contain home directory paths.
-# See crates/sgdb-core/tests/real_shortcuts.rs; point SGDB_REAL_SHORTCUTS at the live file.
-/crates/sgdb-core/fixtures/real/
+# See crates/griddle-core/tests/real_shortcuts.rs; point SGDB_REAL_SHORTCUTS at the live file.
+/crates/griddle-core/fixtures/real/
 
 # Local scratch
 /scratch/

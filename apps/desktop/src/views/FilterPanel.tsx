@@ -6,7 +6,7 @@
  * edits the shared set. A size the other tab does not offer stays selected in the background and
  * comes back when you return to that tab — clamping happens when the query is built, not here.
  *
- * The values offered come from the shared tables in `@sgdb/shared`, which the Rust side
+ * The values offered come from the shared tables in `@griddle/shared`, which the Rust side
  * validates against. They are held in step by `packages/shared/fixtures/filter-vocabulary.json`,
  * asserted by tests in both languages, because a value offered here but unknown to Rust is
  * refused locally and reads as a filter that silently returns nothing.
@@ -20,7 +20,7 @@ import {
   isDefault,
   type AssetType,
   type Filters,
-} from '@sgdb/shared';
+} from '@griddle/shared';
 
 const MIME_LABEL: Record<string, string> = {
   'image/png': 'PNG',

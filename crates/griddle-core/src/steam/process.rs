@@ -337,7 +337,7 @@ mod imp {
     use super::{Error, SteamProcess};
     use std::path::Path;
 
-    /// Non-Windows exists so `sgdb-core` compiles and its pure tests run on the Linux CI leg.
+    /// Non-Windows exists so `griddle-core` compiles and its pure tests run on the Linux CI leg.
     /// There is no Steam client to find, so the list is empty — which is the truth there.
     pub fn enumerate() -> Vec<SteamProcess> {
         Vec::new()
@@ -373,7 +373,7 @@ mod tests {
     fn only_steam_processes_are_matched() {
         // `running()` filters by exact name, so a process merely containing "steam" must not
         // count. Checked against the real snapshot: whatever is running, nothing named e.g.
-        // "steamdb_loader.exe" should be reported.
+        // "steamfriends.exe" should be reported.
         for p in running() {
             assert!(
                 STEAM_PROCESSES

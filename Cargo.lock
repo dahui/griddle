@@ -1239,6 +1239,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "griddle-app"
+version = "0.0.0"
+dependencies = [
+ "griddle-core",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "griddle-core"
+version = "0.0.0"
+dependencies = [
+ "futures-util",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.19",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
+ "tungstenite",
+ "url",
+ "windows-sys 0.61.2",
+ "winreg",
+ "wiremock",
+]
+
+[[package]]
 name = "gtk"
 version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3129,41 +3164,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "170fb83ab34de17dc69aa7c67482b22218ddb85da56546f9bd6b929e32a05930"
 dependencies = [
  "stable_deref_trait",
-]
-
-[[package]]
-name = "sgdb-app"
-version = "0.0.0"
-dependencies = [
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "sgdb-core",
- "tauri",
- "tauri-build",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "sgdb-core"
-version = "0.0.0"
-dependencies = [
- "futures-util",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.19",
- "tokio",
- "tokio-tungstenite",
- "tracing",
- "tungstenite",
- "url",
- "windows-sys 0.61.2",
- "winreg",
- "wiremock",
 ]
 
 [[package]]

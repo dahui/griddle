@@ -1,7 +1,7 @@
 {
   "_comment": [
     "The filter vocabularies, asserted by BOTH packages/shared/src/assets.test.ts and the",
-    "Rust tests in crates/sgdb-core/src/sgdb/query.rs. Neither side owns it.",
+    "Rust tests in crates/griddle-core/src/sgdb/query.rs. Neither side owns it.",
     "",
     "Why this file exists: these lists have to agree across two languages. The UI offers values",
     "from the TypeScript tables and `AssetQuery::from_params` validates against the Rust ones,",

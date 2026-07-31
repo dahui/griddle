@@ -9,10 +9,10 @@
 //!
 //! So startup resolves what it can, records what it could not, and hands the UI a report.
 
-use sgdb_core::cache::Cache;
-use sgdb_core::settings::{Settings, Store};
-use sgdb_core::sgdb;
-use sgdb_core::steam::{Account, AppTypes, SteamInstall, account, apptype, locate};
+use griddle_core::cache::Cache;
+use griddle_core::settings::{Settings, Store};
+use griddle_core::sgdb;
+use griddle_core::steam::{Account, AppTypes, SteamInstall, account, apptype, locate};
 use tokio::sync::Mutex;
 
 /// Everything about the local Steam installation, when it could be found.

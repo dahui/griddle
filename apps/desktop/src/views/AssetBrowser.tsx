@@ -11,7 +11,7 @@ import {
   type AssetType,
   type Filters,
   type StoredFilters,
-} from '@sgdb/shared';
+} from '@griddle/shared';
 import {
   api,
   asUiError,

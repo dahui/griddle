@@ -1,6 +1,6 @@
 //! The error shape that crosses into the UI.
 //!
-//! `sgdb-core` uses `thiserror` precisely so failures stay distinguishable, and that only pays
+//! `griddle-core` uses `thiserror` precisely so failures stay distinguishable, and that only pays
 //! off if the distinction survives the boundary. A single `String` here would collapse
 //! "Steam is running, close it" and "your network timed out" into the same red toast, and the
 //! user would have no idea which of the two very different actions to take.
@@ -92,9 +92,9 @@ impl std::error::Error for UiError {}
 // new variant is added to a core error, the compiler does not force an update here — so the
 // catch-all arms deliberately produce `Unexpected` rather than guessing.
 
-impl From<sgdb_core::sgdb::client::Error> for UiError {
-    fn from(e: sgdb_core::sgdb::client::Error) -> Self {
-        use sgdb_core::sgdb::client::Error as E;
+impl From<griddle_core::sgdb::client::Error> for UiError {
+    fn from(e: griddle_core::sgdb::client::Error) -> Self {
+        use griddle_core::sgdb::client::Error as E;
         match &e {
             E::Unauthorized => UiError::new(Kind::Unauthorized, e.to_string())
                 .with_action("Check your key in Settings, or generate a new one."),
@@ -109,16 +109,16 @@ impl From<sgdb_core::sgdb::client::Error> for UiError {
     }
 }
 
-impl From<sgdb_core::grid::store::Error> for UiError {
-    fn from(e: sgdb_core::grid::store::Error) -> Self {
+impl From<griddle_core::grid::store::Error> for UiError {
+    fn from(e: griddle_core::grid::store::Error) -> Self {
         UiError::new(Kind::Filesystem, e.to_string())
             .with_action("Check that Steam's userdata folder is writable.")
     }
 }
 
-impl From<sgdb_core::steam::process::Error> for UiError {
-    fn from(e: sgdb_core::steam::process::Error) -> Self {
-        use sgdb_core::steam::process::Error as E;
+impl From<griddle_core::steam::process::Error> for UiError {
+    fn from(e: griddle_core::steam::process::Error) -> Self {
+        use griddle_core::steam::process::Error as E;
         match &e {
             E::StillRunning { .. } | E::Restarted => {
                 UiError::new(Kind::SteamRunning, e.to_string())
@@ -131,14 +131,14 @@ impl From<sgdb_core::steam::process::Error> for UiError {
     }
 }
 
-impl From<sgdb_core::settings::Error> for UiError {
-    fn from(e: sgdb_core::settings::Error) -> Self {
+impl From<griddle_core::settings::Error> for UiError {
+    fn from(e: griddle_core::settings::Error) -> Self {
         UiError::new(Kind::Filesystem, e.to_string())
     }
 }
 
-impl From<sgdb_core::cdp::Error> for UiError {
-    fn from(e: sgdb_core::cdp::Error) -> Self {
+impl From<griddle_core::cdp::Error> for UiError {
+    fn from(e: griddle_core::cdp::Error) -> Self {
         UiError::new(Kind::LiveApplyUnavailable, e.to_string())
             .with_action("Artwork will be written to disk instead, so Steam needs a restart.")
     }
@@ -154,12 +154,12 @@ mod tests {
         // "Steam is running, can't write shortcuts" vs "network timeout" — the exact pair the
         // architecture exists to keep apart. If these ever collapse to one kind, the UI cannot
         // tell the user which of two unrelated actions to take.
-        let running: UiError = sgdb_core::steam::process::Error::StillRunning {
+        let running: UiError = griddle_core::steam::process::Error::StillRunning {
             count: 1,
             names: "steam.exe (pid 1)".into(),
         }
         .into();
-        let timeout: UiError = sgdb_core::sgdb::client::Error::Timeout.into();
+        let timeout: UiError = griddle_core::sgdb::client::Error::Timeout.into();
 
         assert_eq!(running.kind, Kind::SteamRunning);
         assert_eq!(timeout.kind, Kind::Network);
@@ -170,7 +170,7 @@ mod tests {
 
     #[test]
     fn a_bad_key_is_not_reported_as_a_network_problem() {
-        let e: UiError = sgdb_core::sgdb::client::Error::Unauthorized.into();
+        let e: UiError = griddle_core::sgdb::client::Error::Unauthorized.into();
         assert_eq!(e.kind, Kind::Unauthorized);
         assert!(e.action.unwrap().contains("Settings"));
     }
@@ -178,7 +178,7 @@ mod tests {
     #[test]
     fn a_game_missing_from_steamgriddb_is_its_own_kind() {
         // Not an error the user caused, and not one retrying fixes.
-        let e: UiError = sgdb_core::sgdb::client::Error::NotFound.into();
+        let e: UiError = griddle_core::sgdb::client::Error::NotFound.into();
         assert_eq!(e.kind, Kind::NotOnSteamGridDb);
     }
 
@@ -188,8 +188,8 @@ mod tests {
         for e in [
             UiError::no_api_key(),
             UiError::steam_not_found("nope"),
-            sgdb_core::sgdb::client::Error::Unauthorized.into(),
-            sgdb_core::sgdb::client::Error::Timeout.into(),
+            griddle_core::sgdb::client::Error::Unauthorized.into(),
+            griddle_core::sgdb::client::Error::Timeout.into(),
         ] {
             assert!(e.action.is_some(), "{:?} needs an action", e.kind);
         }
@@ -207,7 +207,7 @@ mod tests {
     fn an_unclassified_error_is_unexpected_rather_than_mislabelled() {
         // Guessing would be worse than admitting we do not know: a wrong action sends the user
         // off to fix something that is not broken.
-        let e: UiError = sgdb_core::sgdb::client::Error::Decode("bad json".into()).into();
+        let e: UiError = griddle_core::sgdb::client::Error::Decode("bad json".into()).into();
         assert_eq!(e.kind, Kind::Unexpected);
         assert!(e.action.is_none());
     }

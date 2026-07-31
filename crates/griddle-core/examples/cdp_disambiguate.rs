@@ -1,8 +1,8 @@
 //! Tighten a module finder that has gone ambiguous. **Read-only.**
 //!
 //! ```powershell
-//! cargo run -p sgdb-core --example cdp_disambiguate -- FocusableFactory
-//! cargo run -p sgdb-core --example cdp_disambiguate -- FocusableFactory --token ReactCurrentOwner
+//! cargo run -p griddle-core --example cdp_disambiguate -- FocusableFactory
+//! cargo run -p griddle-core --example cdp_disambiguate -- FocusableFactory --token ReactCurrentOwner
 //! ```
 //!
 //! When a finder matches more than one module, the answer is never "take the first" — that
@@ -13,8 +13,8 @@
 //! `--token` tests extra substrings against every candidate, which is the fastest way to check
 //! whether a proposed discriminator actually separates them.
 
-use sgdb_core::cdp::modules::{FINDERS, Finder};
-use sgdb_core::cdp::{Endpoint, SteamJs};
+use griddle_core::cdp::modules::{FINDERS, Finder};
+use griddle_core::cdp::{Endpoint, SteamJs};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {

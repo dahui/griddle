@@ -3,7 +3,7 @@
 #
 # Run by CI and by scripts/gate.ps1. Exit 0 = clean, 1 = violation.
 #
-#   1. `sgdb-core` stays free of `tauri` / `anyhow` — all logic must be headless.
+#   1. `griddle-core` stays free of `tauri` / `anyhow` — all logic must be headless.
 #   2. Only `grid::store`, `steam::shortcuts` and `settings` may write files.
 #   3. `steam://flushconfig` is never invoked.
 #
@@ -15,12 +15,12 @@ fail=0
 note() { printf '  %s\n' "$1" >&2; }
 
 # ── 1. Dependency boundary ────────────────────────────────────────────────────────────────
-if grep -nE '^\s*(tauri|anyhow)\s*=' crates/sgdb-core/Cargo.toml >/dev/null 2>&1; then
-  note "sgdb-core must stay free of tauri/anyhow — all logic is headless"
-  grep -nE '^\s*(tauri|anyhow)\s*=' crates/sgdb-core/Cargo.toml >&2
+if grep -nE '^\s*(tauri|anyhow)\s*=' crates/griddle-core/Cargo.toml >/dev/null 2>&1; then
+  note "griddle-core must stay free of tauri/anyhow — all logic is headless"
+  grep -nE '^\s*(tauri|anyhow)\s*=' crates/griddle-core/Cargo.toml >&2
   fail=1
 else
-  echo "[ok] sgdb-core has no tauri/anyhow"
+  echo "[ok] griddle-core has no tauri/anyhow"
 fi
 
 # ── 2. Write boundary ─────────────────────────────────────────────────────────────────────
@@ -36,7 +36,7 @@ fi
 # `boundary-ok`. There are three, all test fixtures in tempdirs. Every write in the codebase is
 # then either in a sanctioned module or explicitly annotated -- and greppable.
 violations=$(
-  for f in $(find crates/sgdb-core/src -name '*.rs'); do
+  for f in $(find crates/griddle-core/src -name '*.rs'); do
     # `settings/mod.rs` as well as `settings.rs`: the module gained a `dpapi` submodule and
     # became a directory. Only the mod file is exempt -- `settings/dpapi.rs` encrypts bytes and
     # has no business touching the filesystem, so it stays inside the boundary.
@@ -73,7 +73,7 @@ fi
 # ── 3. steam://flushconfig ────────────────────────────────────────────────────────────────
 #
 # It has historically made Steam forget its library folder locations. Comment lines are
-# filtered because the ban is *documented* in sgdb-core/src/lib.rs, and a naive grep flags
+# filtered because the ban is *documented* in griddle-core/src/lib.rs, and a naive grep flags
 # the very text that forbids it.
 hits=$(grep -rn 'steam://flushconfig' \
          --include='*.rs' --include='*.ts' --include='*.tsx' \

@@ -9,7 +9,7 @@ import { invoke } from '@tauri-apps/api/core';
 // `StoredFilters` is the wire shape of Rust's `FilterState`. Imported rather than redeclared
 // here: a second copy of a nine-field struct is a drift waiting to happen, and the field that
 // would drift first is `static`, which is a rename on the Rust side.
-import type { AssetType, StoredFilters } from '@sgdb/shared';
+import type { AssetType, StoredFilters } from '@griddle/shared';
 
 export type ErrorKind =
   | 'no_api_key'

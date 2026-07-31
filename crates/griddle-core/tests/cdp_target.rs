@@ -15,7 +15,7 @@
 //! The fake server is ~30 lines of hand-rolled HTTP rather than a test-server dependency —
 //! enough to answer two GETs, which is all discovery performs.
 
-use sgdb_core::cdp::target::{self, Endpoint};
+use griddle_core::cdp::target::{self, Endpoint};
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio::net::TcpListener;
 

@@ -2,7 +2,7 @@
   "_comment": [
     "Golden table for logo position -> CSS percentages.",
     "Consumed by BOTH the TypeScript tests (packages/shared/src/logo.test.ts) and the Rust",
-    "tests (crates/sgdb-core/src/logo.rs). The two implementations exist because the desktop",
+    "tests (crates/griddle-core/src/logo.rs). The two implementations exist because the desktop",
     "GUI and the Big Picture injection render in different runtimes; this file is what stops",
     "them drifting apart. Add a case here before changing either implementation."
   ],

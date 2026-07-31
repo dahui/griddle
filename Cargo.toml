@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/sgdb-core", "crates/sgdb-app"]
+members = ["crates/griddle-core", "crates/griddle-app"]
 
 [workspace.package]
 version = "0.0.0"
@@ -9,7 +9,7 @@ rust-version = "1.90"
 license = "GPL-3.0-or-later"
 
 [workspace.dependencies]
-sgdb-core = { path = "crates/sgdb-core" }
+griddle-core = { path = "crates/griddle-core" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

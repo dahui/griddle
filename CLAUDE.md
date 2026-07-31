@@ -1,9 +1,47 @@
-# SteamGridDB artwork manager for Windows
+# Griddle — SteamGridDB artwork manager for Windows
 
-> **Product name undecided.** The folder `steamdb_loader` is a placeholder — and a doubly wrong
-> one: it's SteamGrid**DB** (not SteamDB), and there is no "loader" (the entire point is *not*
-> being Decky Loader). Crates/packages use neutral names (`sgdb-core`, `sgdb-app`,
-> `@sgdb/shared`) so nothing presumes a brand. Renaming is a mechanical pass before release.
+> **The product is called Griddle.** A griddle is a hot plate that puts a grid on things; the pun
+> lands without needing to be argued for, which is why it won.
+>
+> **It was checked, not assumed** `[VERIFIED-BOX 2026-07-31]`. Every collision is a developer
+> library — `GriddleGriddle/Griddle` (a React grid, 2,488★), two CSS grid frameworks, and
+> jonhoo's `griddle` crate (212k downloads) — and **not one is in gaming or game art**. That is
+> the axis that decides it: *Sprite* was rejected because its top ten GitHub results were all
+> pixel-art tools, in the same room as this app's users, and *Griddler* because "griddlers" means
+> nonogram puzzles. Griddle's namesakes live in a world these users never visit.
+>
+> The bare names `griddle` on crates.io and npm are taken, which costs nothing: `@griddle/shared`
+> is a private workspace package that is never published, and the crates are `griddle-core` /
+> `griddle-app`.
+>
+> 🔵 The folder is still `steamdb_loader` — a placeholder, and a doubly wrong one: it's
+> SteamGrid**DB** (not SteamDB), and there is no "loader" (the entire point is *not* being Decky
+> Loader). Renaming it is a manual step outside a session, since it moves the working directory.
+
+### 🔴 Not every "sgdb" is the old name — most of them mean SteamGridDB
+
+The rename was **not** a find-and-replace, and this is why. These are correct and must stay:
+
+| Keep | Because |
+|---|---|
+| the `sgdb::` module tree (`sgdb::client`, `sgdb::query`, `sgdb::model`, `sgdb::key`) | It is the SteamGridDB API client. `griddle::client` would be a lie. |
+| `SGDB_API_KEY`, `SGDB_STEAM_PATH`, `SGDB_REAL_SHORTCUTS` | User and test contracts naming the service |
+| `examples/sgdb_probe.rs` | It probes SteamGridDB |
+| `cache::MAGIC` = `b"SGDBCA1\n"`, `ENTRY_EXT` = `"sgdbc"`, `settings::TEMP_SUFFIX` = `".sgdbtmp"` | On-disk format markers. Renaming them only invalidates data, and the cache treats a mismatch as a **miss** — so the churn would be silent. |
+| `check-secrets.sh` key patterns | They match the *service's* key format |
+
+🔴 **The trap that nearly fired:** `dpapi::ENTROPY` read `b"sgdb-core:api-key:v1"` and looks like
+a crate reference. It is the secondary entropy for `CryptProtectData` — a *format version* — and
+its own doc says changing it invalidates every stored key. A blanket `sgdb-core` → `griddle-core`
+would have rewritten it, and the failure is silent: everything loads and only the API key comes
+back undecryptable, which reads as a key-storage bug rather than as the rename. It was changed
+**deliberately**, to `b"griddle:api-key:v1"`, because nothing had shipped and the cost was one
+re-entry — the only moment that is ever free.
+
+`APP_DIR_NAME` moved from `SteamGridDB Client` to `Griddle` on the same reasoning, with no
+migration code. It is now defined **once**, in `settings`; `cache` re-exports it. The two used to
+be separate constants kept in step by a hand-written comment, and a mismatch would have split the
+settings and the cache across two directories with nothing to report it.
 
 A Windows-native replacement for the **SteamGridDB Decky Loader plugin**. Two deliverables:
 
@@ -18,8 +56,8 @@ Steam restart. That realm — `SharedJSContext` — is reachable from a native a
 CEF remote-debugging port. So we get Decky's behaviour from a normal Windows app, with no DLL
 injection and no Millennium.
 
-- **Crates:** `sgdb-core` (all logic) · `sgdb-app` (thin Tauri shell)
-- **Packages:** `@sgdb/shared` (logic shared desktop ↔ BPM) · `apps/desktop` · `apps/bpm`
+- **Crates:** `griddle-core` (all logic) · `griddle-app` (thin Tauri shell)
+- **Packages:** `@griddle/shared` (logic shared desktop ↔ BPM) · `apps/desktop` · `apps/bpm`
 - **License:** GPL-3.0-or-later — load-bearing, not cosmetic. It makes `decky-steamgriddb`,
   `@decky/ui`, and Steam Art Manager (all GPL) legally *adaptable* rather than merely readable.
 
@@ -40,7 +78,7 @@ Full plan: `C:\Users\jeff\.claude\plans\i-want-to-start-valiant-shamir.md`
 >
 > Steam went from `10840511` (2026-07-27) to **`10856968`** (2026-07-30) — three days. The
 > finders were run against the new build with
-> `cargo run -p sgdb-core --example cdp_check`: **11/11 resolved, all features available.**
+> `cargo run -p griddle-core --example cdp_check`: **11/11 resolved, all features available.**
 >
 > 🔑 **Every module id was unchanged.** `FocusableFactory` 28869 · `ModalManager` 3673 ·
 > `ModalHost` 36437 · `AppContextMenu` 5808 · `ShowContextMenu` 39590 · `FocusTreeNode` 4690 ·
@@ -111,7 +149,7 @@ filenames on different apps**. The durable finder lives in `appinfo.vdf`:
 Corroborated structurally: `library_assets_full` occurs exactly **once** in `appinfo.vdf` (a v29
 string-table *key*) while `library_capsule` occurs **305×** (inline path *values*).
 
-**Measured resolution over all 2248 dirs**, via `cargo run -p sgdb-core --example scan`:
+**Measured resolution over all 2248 dirs**, via `cargo run -p griddle-core --example scan`:
 
 | Slot | Resolved | of which reachable *only* via the sha1 layout |
 |---|---|---|
@@ -300,7 +338,7 @@ Modern Steam assigns a **random** appid in the high-bit-set range.
 `[VERIFIED-BOX 2026-07-27]`, corroborated by [ValveSoftware/steam-for-linux#9463] (still open).
 
 **Rule: always READ `appid` from `shortcuts.vdf`. Never compute it.** Enforced structurally —
-`sgdb-core` contains no CRC32 function at all, so there is nothing to regress to. Only use a
+`griddle-core` contains no CRC32 function at all, so there is nothing to regress to. Only use a
 generated id when *creating* a brand-new shortcut, where Steam honours whatever we wrote.
 
 ### Steam's JS surface `[VERIFIED-BOX @ CLSTAMP 10840511, 2026-07-27]`
@@ -332,7 +370,7 @@ Workspace lints make these guarantees, not preferences: `unused_must_use`,
 must not compile, and `let _ = ...` is a build failure. `-D warnings` in CI.
 
 `thiserror` in core — the UI must distinguish "Steam is running, can't write shortcuts" from
-"network timeout". `anyhow` only in `sgdb-app`.
+"network timeout". `anyhow` only in `griddle-app`.
 
 ### The write boundary (CI-enforced)
 
@@ -457,7 +495,7 @@ architecture.
 |---|---|
 | **M0** | Cargo + bun workspaces; Tauri shell (PE subsystem = `WINDOWS_GUI`, no console flash); secret scanning (pre-commit + CI); encoding guard. |
 | **M1** | **All 11 spike items resolved.** Nothing left that can change the architecture. |
-| **M2** | **Offline layer done**, including the `shortcuts.vdf` writer. Verified against the real install with `cargo run -p sgdb-core --example scan`. |
+| **M2** | **Offline layer done**, including the `shortcuts.vdf` writer. Verified against the real install with `cargo run -p griddle-core --example scan`. |
 | **M3** | 🟢 **The app runs.** Library list with current art, five asset tabs, SteamGridDB browsing with infinite scroll, apply with the live→file ladder, first-run key flow, and a diagnostics screen. |
 | **M4** | 🟢 **Default art, library scope, and filter parity.** Steam's own artwork behind the custom art (local cache → CDN → placeholder); an Installed / All games toggle with sorting; the full SteamGridDB filter set wired through; and the "wrong game?" picker. The asset tabs now render only inside a game. |
 | **Next** | The rest of M4 — details modal, zoom slider, logo positioner, non-Steam icon flow — then M5/M6. |
@@ -472,13 +510,13 @@ and the `asset:` scope now covers a second directory **recursively**.
 | | Command | What it does |
 |---|---|---|
 | **Dev** | `bun run app` | Vite + the app, hot reload. |
-| **Real** | `bun run app:release`, then `target\release\sgdb-app.exe` | Frontend embedded in the exe. No dev server. |
+| **Real** | `bun run app:release`, then `target\release\griddle-app.exe` | Frontend embedded in the exe. No dev server. |
 | Installer | `bun run app:build` | NSIS bundle. |
 
 #### 🔴 `cargo build --release` alone embeds a STALE frontend
 
 `cargo build` does not run `beforeBuildCommand` — only `tauri build` does. So a bare
-`cargo build --release -p sgdb-app` happily embeds whatever is in `apps/desktop/dist` from the
+`cargo build --release -p griddle-app` happily embeds whatever is in `apps/desktop/dist` from the
 last time anything wrote there, which may be several milestones old.
 
 This bites *precisely* when the Rust side changed too, because everything looks right: the build
@@ -487,7 +525,7 @@ correctly reports that it is serving the embedded frontend. It is serving the em
 just last month's. Caught here by comparing `apps/desktop/dist` mtimes against `apps/desktop/src`:
 dist was 3 hours older than the sources it supposedly contained.
 
-`bun run app:release` is `bun run build:desktop && cargo build --release -p sgdb-app`, in that
+`bun run app:release` is `bun run build:desktop && cargo build --release -p griddle-app`, in that
 order, and exists so the obvious command is the correct one. Same reasoning as putting
 `custom-protocol` in `default` below.
 
@@ -502,9 +540,9 @@ order, and exists so the obvious command is the correct one. Same reasoning as p
 
 All three make the webview point at `http://localhost:1420` when nothing is serving it.
 
-1. **`cargo run -p sgdb-app` is not enough on its own.** Without `custom-protocol` (below) it
+1. **`cargo run -p griddle-app` is not enough on its own.** Without `custom-protocol` (below) it
    loads `devUrl`; building the frontend first changes nothing.
-2. **`custom-protocol` was missing from `sgdb-app`'s `Cargo.toml` entirely.** That feature is
+2. **`custom-protocol` was missing from `griddle-app`'s `Cargo.toml` entirely.** That feature is
    what makes a build serve `frontendDist` from inside the exe, and it is **not** one of
    `tauri`'s defaults — the stock template leaves it opt-in and lets `tauri build` add
    `--features custom-protocol`. So a hand-rolled `cargo build --release` produced a binary
@@ -513,7 +551,7 @@ All three make the webview point at `http://localhost:1420` when nothing is serv
    still works while the obvious command becomes the correct one.
 3. **`beforeDevCommand` used `bun run --cwd <relative>`.** bun documents `--cwd` as taking an
    **absolute** path; a relative one works from the repo root by luck and fails with `ENOENT`
-   from the Tauri CLI's cwd. Use `--filter @sgdb/desktop`, which resolves through the
+   from the Tauri CLI's cwd. Use `--filter @griddle/desktop`, which resolves through the
    workspace from anywhere. Note `frontendDist` *is* relative to `tauri.conf.json` — the two
    keys use **different bases**, which is what made this look inconsistent.
 
@@ -532,7 +570,7 @@ The decisive test is behavioural — **listen on `[::1]:1420` and see whether th
 
 ```powershell
 $l = New-Object System.Net.Sockets.TcpListener ([System.Net.IPAddress]::IPv6Loopback, 1420)
-$l.Start(); Start-Process target\release\sgdb-app.exe
+$l.Start(); Start-Process target\release\griddle-app.exe
 # $l.Pending() true  -> still dev mode
 # stays false        -> serving the embedded frontend
 ```
@@ -547,7 +585,7 @@ server**, does not reach for 1420, loads 2930 apps from `appinfo.vdf`, grants th
 to exactly the account's `grid/`, and has PE subsystem **2 = `WINDOWS_GUI`** — no console
 flash, the wart this project exists to remove.
 
-### `sgdb-core` module map
+### `griddle-core` module map
 
 | Module | What it is |
 |---|---|
@@ -579,13 +617,13 @@ flash, the wart this project exists to remove.
 | `cdp::SteamJs` | `probe` / `apply_artwork` / `clear_artwork` / `clstamp` / `app_name`. The live-apply path. |
 | `cdp::modules` | The structural finders, the CLSTAMP diff, and per-feature degradation. **The reliability idea.** |
 
-### `sgdb-app` — the desktop shell
+### `griddle-app` — the desktop shell
 
 | Module | What it is |
 |---|---|
 | `error` | `UiError { kind, message, action }`. The **`kind` is what keeps "Steam is running" and "network timeout" distinguishable** across the boundary; `action` is what the user should actually do. |
 | `state` | Loaded once at startup. **Nothing here may stop the window opening** — no Steam, no key and an unreadable `appinfo.vdf` are all ordinary first-run states. |
-| `commands` | The `invoke` surface. Thin; every decision belongs to `sgdb-core`. |
+| `commands` | The `invoke` surface. Thin; every decision belongs to `griddle-core`. |
 
 **The apply ladder lives in `commands::apply_asset`:** live first, file-write as the floor. The
 result says which path ran, so the UI can say whether a restart is needed rather than leaving
@@ -715,7 +753,7 @@ should not treat those as equally bad.
 
 #### 🟢 The SteamGridDB API, measured `[VERIFIED-BOX 2026-07-30]`
 
-Reproduce with `$env:SGDB_API_KEY = "<key>"; cargo run -p sgdb-core --example sgdb_probe`
+Reproduce with `$env:SGDB_API_KEY = "<key>"; cargo run -p griddle-core --example sgdb_probe`
 (read-only). The key is read from the environment and **never** from a file in this repo.
 
 | Probe | Result |
@@ -800,7 +838,7 @@ Failing the load would look to the user like every setting had been lost.
 
 #### 🟢 The module finders, and how each ambiguity was resolved
 
-`cargo run -p sgdb-core --example cdp_disambiguate -- <FinderName> --token <STR>` prints every
+`cargo run -p griddle-core --example cdp_disambiguate -- <FinderName> --token <STR>` prints every
 candidate module with its size, an excerpt around the anchor, and whether each probe token is
 present. **Ambiguity is never resolved by taking the first match** — that freezes a coin-flip
 into the settings file, where it then looks resolved forever. `Outcome::Ambiguous` is a
@@ -1040,7 +1078,7 @@ Ordered by how much they'd have cost to discover late.
 
 ### Spike results `[VERIFIED-BOX @ CLSTAMP 10840511, 2026-07-27]`
 
-Reproduce with `cargo run -p sgdb-core --example cdp_probe` (add `--probe2` for the
+Reproduce with `cargo run -p griddle-core --example cdp_probe` (add `--probe2` for the
 follow-up, `--status` for a no-connection report). Both probes are read-only.
 
 **S1 — the realm is reachable and is unmistakably Steam.**
@@ -1420,7 +1458,7 @@ applied in 48 ms.
 
 ### 🟢 S9 — the shutdown/write/relaunch choreography works
 
-`[VERIFIED-BOX 2026-07-27]` Reproduce with `cargo run -p sgdb-core --example set_shortcut_icon`
+`[VERIFIED-BOX 2026-07-27]` Reproduce with `cargo run -p griddle-core --example set_shortcut_icon`
 (read-only; add `--appid <id> --icon <path> [--shutdown]` to write, `--restore` to put the
 pristine backup back). The harness now runs on `steam::shortcuts` + `steam::process` rather than
 the throwaway code S9 used, so **what shipped is what was tested**.
@@ -1537,7 +1575,7 @@ rejection message names CSP) and a control URL that is known to load.
 
 #### 🟢 S5 — the context-menu splice point
 
-`[VERIFIED-BOX @ CLSTAMP 10840511, 2026-07-27]` Run `cargo run -p sgdb-core --example
+`[VERIFIED-BOX @ CLSTAMP 10840511, 2026-07-27]` Run `cargo run -p griddle-core --example
 cdp_probe -- --menu`.
 
 **Module `5808`** builds the game context menu (21.6 KB). The Properties item, rendered last:

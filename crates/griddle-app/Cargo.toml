@@ -1,19 +1,19 @@
 [package]
-name = "sgdb-app"
+name = "griddle-app"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Desktop shell. Thin — all logic lives in sgdb-core."
+description = "Desktop shell. Thin — all logic lives in griddle-core."
 
 [dependencies]
-sgdb-core = { workspace = true }
+griddle-core = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tokio = { version = "1", features = ["sync"] }
-# Shared with sgdb-core's client so there is one connection pool, and so the CDP discovery and
+# Shared with griddle-core's client so there is one connection pool, and so the CDP discovery and
 # the SteamGridDB client cannot disagree about timeouts.
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 # `protocol-asset` renders existing artwork straight from Steam's `grid/` directory. The scope

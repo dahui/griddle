@@ -47,11 +47,11 @@ Step "secret scan"             { & $sh scripts/check-secrets.sh --all }
 Step "architecture boundaries" { & $sh scripts/check-boundaries.sh }
 Step "encoding"                { python scripts/check-encoding.py }
 Step "cargo fmt"               { cargo fmt --all -- --check }
-Step "cargo clippy"            { cargo clippy -q -p sgdb-core --all-targets -- -D warnings }
-Step "cargo test"              { cargo test -q -p sgdb-core }
-# sgdb-app was clippy'd but never tested, here or in CI. `clippy --all-targets` compiles a
+Step "cargo clippy"            { cargo clippy -q -p griddle-core --all-targets -- -D warnings }
+Step "cargo test"              { cargo test -q -p griddle-core }
+# griddle-app was clippy'd but never tested, here or in CI. `clippy --all-targets` compiles a
 # test without running it, so the tests in commands.rs had never once executed.
-Step "cargo test (app)"        { cargo test -q -p sgdb-app }
+Step "cargo test (app)"        { cargo test -q -p griddle-app }
 
 $bun = Join-Path $env:USERPROFILE ".bun\bin\bun.exe"
 

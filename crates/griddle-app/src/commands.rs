@@ -3,7 +3,7 @@
     reason = "the #[tauri::command] macro expands to `let _ = ...` at each command's signature; \
               the workspace denies that pattern in our own code, which is where it matters"
 )]
-//! The `invoke` surface. Thin: every decision belongs to `sgdb-core`.
+//! The `invoke` surface. Thin: every decision belongs to `griddle-core`.
 //!
 //! # The apply ladder
 //!
@@ -18,16 +18,16 @@
 
 use crate::error::{Kind, UiError};
 use crate::state::AppState;
-use serde::Serialize;
-use sgdb_core::appid::AppId;
-use sgdb_core::cdp::{self, Endpoint, Sentinel, SteamJs};
-use sgdb_core::grid::names::AssetType;
-use sgdb_core::grid::store::GridDir;
-use sgdb_core::settings::{LibraryScope, LibrarySort};
-use sgdb_core::sgdb::{self, ApiKey, AssetQuery, Target};
-use sgdb_core::steam::{
+use griddle_core::appid::AppId;
+use griddle_core::cdp::{self, Endpoint, Sentinel, SteamJs};
+use griddle_core::grid::names::AssetType;
+use griddle_core::grid::store::GridDir;
+use griddle_core::settings::{LibraryScope, LibrarySort};
+use griddle_core::sgdb::{self, ApiKey, AssetQuery, Target};
+use griddle_core::steam::{
     LibraryCache, apptype, library, localconfig, process, shortcuts::Shortcuts,
 };
+use serde::Serialize;
 use std::collections::BTreeMap;
 use tauri::State;
 
@@ -66,7 +66,9 @@ pub async fn status(state: State<'_, AppState>) -> Res<Status> {
                 Some(ctx.install.root().display().to_string()),
                 Some(ctx.install.source().label().to_owned()),
                 Some(ctx.account.id),
-                ctx.app_types.as_ref().map(sgdb_core::steam::AppTypes::len),
+                ctx.app_types
+                    .as_ref()
+                    .map(griddle_core::steam::AppTypes::len),
                 Some(s),
             )
         }
@@ -132,11 +134,11 @@ pub async fn clear_api_key(state: State<'_, AppState>) -> Res<()> {
 ///
 /// A Tauri webview ignores `target="_blank"`, so an ordinary `<a>` does nothing at all — which
 /// is what made the API-key link look broken. The URL is checked against an allowlist in
-/// [`sgdb_core::browser`] before it reaches the shell; this command deliberately cannot open an
+/// [`griddle_core::browser`] before it reaches the shell; this command deliberately cannot open an
 /// arbitrary address.
 #[tauri::command]
 pub async fn open_url(url: String) -> Res<()> {
-    sgdb_core::browser::open(&url).map_err(|e| {
+    griddle_core::browser::open(&url).map_err(|e| {
         let ui = UiError::new(Kind::Unexpected, e.to_string());
         match e.suggestion() {
             Some(s) => ui.with_action(s),
@@ -159,9 +161,9 @@ pub struct Prefs {
     ///
     /// `null` when the user has never changed them; the frontend then applies
     /// `defaultFilters()`, which is where the defaults are defined and tested.
-    pub filters: Option<sgdb_core::settings::FilterState>,
+    pub filters: Option<griddle_core::settings::FilterState>,
     pub zoom: BTreeMap<String, f32>,
-    pub game_overrides: BTreeMap<u32, sgdb_core::settings::GameOverride>,
+    pub game_overrides: BTreeMap<u32, griddle_core::settings::GameOverride>,
 }
 
 async fn snapshot(state: &State<'_, AppState>) -> Prefs {
@@ -199,7 +201,7 @@ pub async fn set_library_view(
 #[tauri::command]
 pub async fn set_filters(
     state: State<'_, AppState>,
-    filters: sgdb_core::settings::FilterState,
+    filters: griddle_core::settings::FilterState,
 ) -> Res<Prefs> {
     {
         let mut settings = state.settings.lock().await;
@@ -228,7 +230,7 @@ pub async fn reset_filters(state: State<'_, AppState>) -> Res<Prefs> {
 /// `None` clears it. Without that, an override set once could never be undone from the UI, and
 /// a wrong choice would be permanent.
 /// `name` is stored alongside so the UI can name the override later without a lookup — see
-/// [`sgdb_core::settings::GameOverride`].
+/// [`griddle_core::settings::GameOverride`].
 #[tauri::command]
 pub async fn set_game_override(
     state: State<'_, AppState>,
@@ -242,7 +244,7 @@ pub async fn set_game_override(
             Some(id) => {
                 let _ = settings
                     .game_overrides
-                    .insert(app_id, sgdb_core::settings::GameOverride { id, name });
+                    .insert(app_id, griddle_core::settings::GameOverride { id, name });
             }
             None => {
                 let _ = settings.game_overrides.remove(&app_id);
@@ -503,7 +505,7 @@ fn first_existing(grid: &GridDir, app: AppId, asset: AssetType) -> Option<String
 
 #[derive(Debug, Serialize)]
 pub struct SearchResult {
-    pub assets: Vec<sgdb_core::sgdb::Asset>,
+    pub assets: Vec<griddle_core::sgdb::Asset>,
     pub page: u32,
     pub total: u32,
     pub has_more: bool,
@@ -1043,7 +1045,7 @@ pub async fn resolve_modules(state: State<'_, AppState>) -> Res<ModuleReport> {
 
 /// Map the frontend's asset-type string onto the core enum.
 ///
-/// The names match `@sgdb/shared`'s `ASSET_TYPES`, which in turn match the Decky plugin's, so
+/// The names match `@griddle/shared`'s `ASSET_TYPES`, which in turn match the Decky plugin's, so
 /// the two frontends and the docs all use one vocabulary.
 fn parse_asset_type(s: &str) -> Result<AssetType, UiError> {
     match s {
@@ -1069,7 +1071,7 @@ mod tests {
     fn effective_dimensions(
         asset: AssetType,
         filters: Option<&sgdb::FilterParams>,
-    ) -> Vec<sgdb_core::sgdb::Dimensions> {
+    ) -> Vec<griddle_core::sgdb::Dimensions> {
         let (kind, base) = AssetQuery::for_asset_type(asset).unwrap();
         let mut query = match filters {
             Some(p) => AssetQuery::from_params(kind, p).unwrap(),
@@ -1083,7 +1085,7 @@ mod tests {
 
     #[test]
     fn a_filter_set_with_no_dimensions_keeps_the_tabs_own_dimensions() {
-        use sgdb_core::sgdb::Dimensions;
+        use griddle_core::sgdb::Dimensions;
 
         // 🔴 The most dangerous line in the filter path. Capsule and Header are the *same*
         // endpoint, told apart only by `dimensions`. Letting an empty filter set through would
@@ -1223,7 +1225,7 @@ mod tests {
 
     #[test]
     fn asset_type_names_match_the_shared_vocabulary() {
-        // These strings are the contract between the Rust bridge, @sgdb/shared and the Decky
+        // These strings are the contract between the Rust bridge, @griddle/shared and the Decky
         // plugin's own naming. A mismatch would send hero art to the capsule slot.
         assert_eq!(parse_asset_type("grid_p").unwrap(), AssetType::Capsule);
         assert_eq!(parse_asset_type("grid_l").unwrap(), AssetType::Header);

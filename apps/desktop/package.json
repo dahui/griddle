@@ -1,5 +1,5 @@
 {
-  "name": "@sgdb/desktop",
+  "name": "@griddle/desktop",
   "version": "0.0.0",
   "private": true,
   "license": "GPL-3.0-or-later",
@@ -10,7 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@sgdb/shared": "workspace:*",
+    "@griddle/shared": "workspace:*",
     "@tauri-apps/api": "^2.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

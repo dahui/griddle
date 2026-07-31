@@ -165,7 +165,7 @@ export function filtersToQuery(filters: Filters): QueryParams {
 export const PAGE_LIMIT = 50;
 
 /**
- * The stored shape, as `sgdb-core`'s `FilterState` serialises it.
+ * The stored shape, as `griddle-core`'s `FilterState` serialises it.
  *
  * Structurally identical to {@link Filters}; kept as its own name because it is the wire
  * contract with Rust, where `static` is a keyword and therefore a `#[serde(rename)]`.

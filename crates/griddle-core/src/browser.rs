@@ -198,7 +198,7 @@ mod tests {
     /// something. Ignored by default because it opens a real browser window.
     ///
     /// ```powershell
-    /// cargo test -p sgdb-core browser::tests::really_opens -- --ignored --nocapture
+    /// cargo test -p griddle-core browser::tests::really_opens -- --ignored --nocapture
     /// ```
     #[test]
     #[ignore = "opens a real browser window"]

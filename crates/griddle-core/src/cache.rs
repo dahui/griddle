@@ -44,8 +44,12 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-/// 🔵 Placeholder, matching `settings::APP_DIR_NAME`. Renamed with the product.
-pub const APP_DIR_NAME: &str = "SteamGridDB Client";
+/// Re-exported from `settings`, which owns the single definition.
+///
+/// This was a second `const` with the same value, kept in step by a comment asking whoever
+/// changed one to change the other. A mismatch would have put the cache and the settings in
+/// different directories with nothing to report it.
+pub use crate::settings::APP_DIR_NAME;
 
 /// Only files with this extension are ever read, pruned or deleted.
 const ENTRY_EXT: &str = "sgdbc";

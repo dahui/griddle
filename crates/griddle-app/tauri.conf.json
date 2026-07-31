@@ -1,18 +1,18 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "SteamGridDB Artwork Manager",
+  "productName": "Griddle",
   "version": "0.0.0",
-  "identifier": "net.digital-apathy.sgdb-artwork",
+  "identifier": "net.digital-apathy.griddle",
   "build": {
-    "beforeDevCommand": "bun run --filter @sgdb/desktop dev",
+    "beforeDevCommand": "bun run --filter @griddle/desktop dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "bun run --filter @sgdb/desktop build",
+    "beforeBuildCommand": "bun run --filter @griddle/desktop build",
     "frontendDist": "../../apps/desktop/dist"
   },
   "app": {
     "windows": [
       {
-        "title": "SteamGridDB Artwork Manager",
+        "title": "Griddle",
         "width": 1280,
         "height": 820,
         "minWidth": 900,

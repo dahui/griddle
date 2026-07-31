@@ -1,11 +1,11 @@
 //! M1 spike harness — talks to a live Steam client over the CEF debugger.
 //!
 //! ```powershell
-//! cargo run -p sgdb-core --example cdp_probe            # env: realm, apply API, CSP, webpack
-//! cargo run -p sgdb-core --example cdp_probe -- --status  # no connection, just report state
-//! cargo run -p sgdb-core --example cdp_probe -- --modules # module map + Steam's own call sites
-//! cargo run -p sgdb-core --example cdp_probe -- --bpm     # mount into the focus tree (BPM open)
-//! cargo run -p sgdb-core --example cdp_probe -- --apply   # S3 live apply — WRITES, see below
+//! cargo run -p griddle-core --example cdp_probe            # env: realm, apply API, CSP, webpack
+//! cargo run -p griddle-core --example cdp_probe -- --status  # no connection, just report state
+//! cargo run -p griddle-core --example cdp_probe -- --modules # module map + Steam's own call sites
+//! cargo run -p griddle-core --example cdp_probe -- --bpm     # mount into the focus tree (BPM open)
+//! cargo run -p griddle-core --example cdp_probe -- --apply   # S3 live apply — WRITES, see below
 //! ```
 //!
 //! The harness never creates the sentinel, never restarts Steam, and never calls a `Set*` API —
@@ -13,7 +13,7 @@
 //! artwork.** Back up `userdata/<id>/config/grid/` and restore it afterwards, verifying by hash;
 //! that directory can hold art a user curated by hand and cannot regenerate.
 //!
-//! Everything here is destined for `sgdb-core::cdp`, so it is written to be promoted rather
+//! Everything here is destined for `griddle-core::cdp`, so it is written to be promoted rather
 //! than thrown away: the target-selection rules and the "is this actually Steam" check below
 //! are the real ones.
 //!
@@ -125,7 +125,7 @@ fn main() {
     }
 }
 
-/// Target selection, in the order `sgdb-core::cdp` will use it.
+/// Target selection, in the order `griddle-core::cdp` will use it.
 ///
 /// The exact-title match is first because it is unambiguous; the fallbacks cover title
 /// changes across Steam builds. If none match we refuse rather than guess — evaluating

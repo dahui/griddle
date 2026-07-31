@@ -1,5 +1,5 @@
 {
-  "name": "@sgdb/bpm",
+  "name": "@griddle/bpm",
   "version": "0.0.0",
   "private": true,
   "license": "GPL-3.0-or-later",
@@ -9,7 +9,7 @@
     "watch": "vite build --watch"
   },
   "dependencies": {
-    "@sgdb/shared": "workspace:*"
+    "@griddle/shared": "workspace:*"
   },
   "devDependencies": {
     "vite": "^6.0.0"

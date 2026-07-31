@@ -12,20 +12,20 @@
       },
     },
     "apps/bpm": {
-      "name": "@sgdb/bpm",
+      "name": "@griddle/bpm",
       "version": "0.0.0",
       "dependencies": {
-        "@sgdb/shared": "workspace:*",
+        "@griddle/shared": "workspace:*",
       },
       "devDependencies": {
         "vite": "^6.0.0",
       },
     },
     "apps/desktop": {
-      "name": "@sgdb/desktop",
+      "name": "@griddle/desktop",
       "version": "0.0.0",
       "dependencies": {
-        "@sgdb/shared": "workspace:*",
+        "@griddle/shared": "workspace:*",
         "@tauri-apps/api": "^2.0.0",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
@@ -38,7 +38,7 @@
       },
     },
     "packages/shared": {
-      "name": "@sgdb/shared",
+      "name": "@griddle/shared",
       "version": "0.0.0",
     },
   },
@@ -133,6 +133,12 @@
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.25.12", "", { "os": "win32", "cpu": "x64" }, "sha512-alJC0uCZpTFrSL0CCDjcgleBXPnCrEAhTBILpeAp7M/OFgoqtAetfBzX0xM00MUsVVPpVjlPuMbREqnZCXaTnA=="],
 
+    "@griddle/bpm": ["@griddle/bpm@workspace:apps/bpm"],
+
+    "@griddle/desktop": ["@griddle/desktop@workspace:apps/desktop"],
+
+    "@griddle/shared": ["@griddle/shared@workspace:packages/shared"],
+
     "@jridgewell/gen-mapping": ["@jridgewell/gen-mapping@0.3.13", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.0", "@jridgewell/trace-mapping": "^0.3.24" } }, "sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA=="],
 
     "@jridgewell/remapping": ["@jridgewell/remapping@2.3.5", "", { "dependencies": { "@jridgewell/gen-mapping": "^0.3.5", "@jridgewell/trace-mapping": "^0.3.24" } }, "sha512-LI9u/+laYG4Ds1TDKSJW2YPrIlcVYOwi2fUC6xB43lueCjgxV4lffOCZCtYFiH6TNOX+tQKXx97T4IKHbhyHEQ=="],
@@ -194,12 +200,6 @@
     "@rollup/rollup-win32-x64-gnu": ["@rollup/rollup-win32-x64-gnu@4.62.3", "", { "os": "win32", "cpu": "x64" }, "sha512-vp7N084ew/odXn2gi/mzm9mUkQu9l6AiN6dt4IeUM2Uvm9o+cVmP+YkqbMOteLbiGgqBBlJZjIMYVCfOOIVbVQ=="],
 
     "@rollup/rollup-win32-x64-msvc": ["@rollup/rollup-win32-x64-msvc@4.62.3", "", { "os": "win32", "cpu": "x64" }, "sha512-MOG/3gTOn4Fwf574RVOaY61I5o6P90legkFADiTyn1hyjNydT+cerU2rLUwPdZkKKyJ+iT+K9p7WXK4LM1Ka6g=="],
-
-    "@sgdb/bpm": ["@sgdb/bpm@workspace:apps/bpm"],
-
-    "@sgdb/desktop": ["@sgdb/desktop@workspace:apps/desktop"],
-
-    "@sgdb/shared": ["@sgdb/shared@workspace:packages/shared"],
 
     "@tauri-apps/api": ["@tauri-apps/api@2.11.1", "", {}, "sha512-M2FPuYND2m+wh5hfW9ZpSdxMPdEJovPBWwoHJmwUpysTYNHaOkVFN419m/K0LIgjb/7KU2vBgsUepJWugQCvAA=="],
 
