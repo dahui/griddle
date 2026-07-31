@@ -25,21 +25,39 @@ fi
 
 # ── 2. Write boundary ─────────────────────────────────────────────────────────────────────
 #
-# Only *production* code is scanned. Everything from the first `#[cfg(test)]` onward is a
-# test module, and tests legitimately write fixtures into temp directories — an earlier
-# version of this check flagged exactly that and would have trained us to ignore it.
+# Every line of every file is scanned. An earlier version stopped at the first `#[cfg(test)]`,
+# on the theory that tests come last and legitimately write fixtures into temp directories --
+# but that is a heuristic about *layout*, so a write placed after the test module was invisible.
+# Demonstrated: appending `std::fs::write` to the end of `appid.rs` passed the check.
+#
+# Parsing Rust well enough to know what is test code is not worth it: `#[cfg(test)]` can sit on
+# a module, a function, or a single struct field, and brace-counting breaks on the last of
+# those. So instead, flag every write and require legitimate exceptions to say so with
+# `boundary-ok`. There are three, all test fixtures in tempdirs. Every write in the codebase is
+# then either in a sanctioned module or explicitly annotated -- and greppable.
 violations=$(
   for f in $(find crates/sgdb-core/src -name '*.rs'); do
     # `settings/mod.rs` as well as `settings.rs`: the module gained a `dpapi` submodule and
     # became a directory. Only the mod file is exempt -- `settings/dpapi.rs` encrypts bytes and
     # has no business touching the filesystem, so it stays inside the boundary.
+    #
+    # `cache.rs` writes only under %LOCALAPPDATA%\<app>\cache, which we created and which is
+    # disposable -- deleting it costs a re-download. The boundary exists to keep writes to the
+    # user's *irreplaceable Steam config* auditable, and that is a different category. Every
+    # path in that module is derived from its own root and every filename is a hash, so it
+    # cannot write outside its directory; there is a test for exactly that.
     case "$f" in
-      */grid/store.rs|*/steam/shortcuts.rs|*/settings.rs|*/settings/mod.rs) continue ;;
+      */grid/store.rs|*/steam/shortcuts.rs|*/settings.rs|*/settings/mod.rs|*/cache.rs) continue ;;
     esac
+    # `boundary-ok` exempts the line it appears on *or* the line immediately below it, so a
+    # long call can be annotated on its own comment line rather than with a trailing comment.
     awk -v file="$f" '
-      /#\[cfg\(test\)\]/ { exit }
-      /fs::write|File::create|remove_file|remove_dir|OpenOptions/ {
-        print file ":" NR ": " $0
+      {
+        if ($0 ~ /boundary-ok/) { skip_next = 1; next }
+        if (skip_next)          { skip_next = 0; next }
+        if ($0 ~ /fs::write|File::create|remove_file|remove_dir|OpenOptions/) {
+          print file ":" NR ": " $0
+        }
       }
     ' "$f"
   done

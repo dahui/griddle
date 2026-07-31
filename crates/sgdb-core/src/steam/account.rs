@@ -181,6 +181,7 @@ mod tests {
         }
         if let Some(content) = loginusers {
             std::fs::create_dir_all(t.path().join("config")).unwrap();
+            // boundary-ok: test fixture written into a tempdir
             std::fs::write(t.path().join("config").join("loginusers.vdf"), content).unwrap();
         }
         let s = SteamInstall::at(t.path());

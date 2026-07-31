@@ -244,6 +244,7 @@ mod tests {
     fn write(root: &Path, rel: &str, content: &str) {
         let p = root.join(rel);
         std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        // boundary-ok: test fixture written into a tempdir
         std::fs::write(p, content).unwrap();
     }
 

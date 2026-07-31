@@ -159,11 +159,24 @@ must not compile, and `let _ = ...` is a build failure. `-D warnings` in CI.
 
 ### The write boundary (CI-enforced)
 
-**Only `grid::store`, `steam::shortcuts`, and `settings` may write files.** A grep for
-`fs::write|File::create|remove_file` outside those three fails CI.
+**Only `grid::store`, `steam::shortcuts`, `settings` and `cache` may write files.** Every other
+`fs::write|File::create|remove_file|remove_dir|OpenOptions` fails CI unless the line carries a
+`boundary-ok:` annotation — on the same line, or on the line directly above.
 
-This project's failure mode is corrupting a user's irreplaceable Steam config. Keep the write
-surface small enough to audit by grep.
+`cache` is on the list for a different reason from the other three: it writes only under
+`%LOCALAPPDATA%\<app>\cache`, which we created and which is disposable. The boundary exists to
+keep writes to the user's *irreplaceable Steam config* auditable, and a cache we can delete at
+will is not that. Every path there derives from its own root and every filename is a hash, with
+a test asserting a key like `../../../../windows/system32/evil` cannot escape.
+
+🔴 **The check used to stop at the first `#[cfg(test)]`**, on the theory that tests come last
+and legitimately write fixtures into tempdirs. That is a heuristic about *layout*: a write
+placed **after** the test module was invisible, demonstrated by appending `std::fs::write` to
+the end of `appid.rs` and watching the check pass. Parsing Rust well enough to identify test
+code is not worth it — `#[cfg(test)]` sits on modules, functions, *and* single struct fields,
+and brace-counting breaks on the last. Now every line is scanned and the three legitimate
+fixture writes are annotated. Verified against five cases, including "annotation two lines
+above must not exempt".
 
 ### 🔑 Secrets never enter git
 
@@ -260,6 +273,7 @@ architecture.
 | `sgdb::client` | **The only place the key is used.** Concurrency cap 3, backoff with jitter, content-type checked before parsing. |
 | `settings` | `%APPDATA%\<AppName>\settings.json`, atomic. **Third and last writer.** A corrupt file is preserved, never overwritten. |
 | `settings::dpapi` | `CryptProtectData` round-trip for the API key. Windows-only, with **no plaintext fallback**. |
+| `cache` | `%LOCALAPPDATA%\<AppName>\cache`. JSON on a TTL, images forever. Entries are self-describing, so a collision or torn write is a **miss**. |
 | `steam::process` | ToolHelp process enumeration; `-shutdown` → poll → relaunch. **The only minter of `SteamStopped`.** Waits on *processes*, never on the registry pid. |
 | `steam::shortcuts` | Read/edit/write `shortcuts.vdf`. Round-trip verified on **load**; write needs a `SteamStopped` token *and* re-checks it. Mutation surface is `set_icon` / `clear_icon` only. |
 
@@ -433,7 +447,7 @@ as a client default, precisely so image downloads cannot carry it.
 account still yields every tab preference and filter; only the key is reported as unreadable.
 Failing the load would look to the user like every setting had been lost.
 
-#### Seven bugs worth remembering
+#### Eight bugs worth remembering
 
 **`Path::ends_with` matches whole components, not string suffixes.** `p.ends_with("_icon.ico")`
 is always false for `4048848997_icon.ico`. Compare `file_name()` instead.
@@ -441,6 +455,15 @@ is always false for `4048848997_icon.ico`. Compare `file_name()` instead.
 **`StateFlags` is a bitfield, not an enum.** `6` = `StateFullyInstalled | StateUpdateRequired` —
 installed *and* update-pending, which is playable; FINAL FANTASY TACTICS reads `6` here. A test
 asserting `6` meant "not installed" failed against correct code.
+
+**🔴 A hand-rolled FNV-1a had a mistyped prime, and the empty-string vector still passed.**
+`0x1000_0000_01b3` is one hex digit too many; the correct prime is `0x100_0000_01b3`. The
+`""` case cannot catch it — that result is just the offset basis, returned before any multiply
+happens. `"a"` is the vector that matters, and it is also what distinguishes FNV-1**a**
+(`…dc4c8601ec8c`) from FNV-1 (`…bd4c8601b7be`), which differ only in whether the xor precedes
+the multiply. A second mistake surfaced immediately after: the `"foobar"` constant belonged to
+neither variant. **Published vectors for a hand-rolled primitive, and pick ones that exercise
+the loop.**
 
 **🔴 The encoding guard only scanned *tracked* files, so new files were unprotected until the
 moment they were committed.** A PowerShell `Get-Content -Raw` / `Set-Content` round-trip

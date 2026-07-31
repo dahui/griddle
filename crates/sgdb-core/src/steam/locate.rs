@@ -341,6 +341,7 @@ mod tests {
         );
 
         std::fs::create_dir_all(t.path().join("config")).unwrap();
+        // boundary-ok: test fixture written into a tempdir
         std::fs::write(t.path().join("config").join("libraryfolders.vdf"), "").unwrap();
         assert!(s.library_folders_vdf().to_string_lossy().contains("config"));
     }
