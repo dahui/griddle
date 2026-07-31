@@ -296,7 +296,7 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
         </button>
       </nav>
 
-      {!browsing && <CurrentAssets entry={entry} onBrowse={setTab} />}
+      {!browsing && <CurrentAssets entry={entry} />}
 
       {browsing && filters && (
         <FilterPanel

@@ -16,13 +16,7 @@ import { ArtImage, ContextMenu, ErrorNote, Spinner } from '../components';
 
 type Menu = { x: number; y: number; slot: AssetSlot };
 
-export function CurrentAssets({
-  entry,
-  onBrowse,
-}: {
-  entry: LibraryEntry;
-  onBrowse: (type: AssetType) => void;
-}) {
+export function CurrentAssets({ entry }: { entry: LibraryEntry }) {
   const [slots, setSlots] = useState<AssetSlot[] | null>(null);
   // Two error slots, deliberately. A load failure means there is nothing to show; a *reset*
   // failure must not take the view with it — replacing the grid with an error box loses the
@@ -82,15 +76,16 @@ export function CurrentAssets({
       <ul className="slots">
         {slots.map((slot) => (
           <li key={slot.asset_type} className="slot">
-            <button
-              type="button"
+            {/* Not a button: this is a display of what is applied, and left-clicking it used to
+                jump to that browsing tab — which reads as the view navigating away by itself
+                when all you did was look at something. Right-click is the only action. */}
+            <div
               className={`slot-art slot-art-${slot.asset_type}`}
-              onClick={() => onBrowse(slot.asset_type)}
               onContextMenu={(e) => {
                 e.preventDefault();
                 setMenu({ x: e.clientX, y: e.clientY, slot });
               }}
-              title={`Browse ${slot.label.toLowerCase()} artwork`}
+              title={`${slot.label} — right-click to reset`}
             >
               <ArtImage
                 sources={sourcesFor(entry, slot)}
@@ -98,7 +93,7 @@ export function CurrentAssets({
                 fallback={<span className="art-none">No artwork</span>}
               />
               {busy === slot.asset_type && <span className="applying">Resetting…</span>}
-            </button>
+            </div>
             <span className="slot-name">{slot.label}</span>
             <span className={`slot-state ${slot.custom_art ? 'slot-custom' : ''}`}>
               {state(slot)}

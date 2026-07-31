@@ -554,7 +554,9 @@ figcaption {
   border: 1px solid var(--line);
   border-radius: 8px;
   overflow: hidden;
-  cursor: pointer;
+  /* Not `pointer`: left-clicking does nothing. `context-menu` is the cursor that actually
+     means "there is a right-click action here". */
+  cursor: context-menu;
   display: grid;
   place-items: center;
   /* Each slot is a different shape; showing them at the wrong one would misrepresent the art
