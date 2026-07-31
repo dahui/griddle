@@ -262,6 +262,17 @@ pub async fn set_game_override(
 pub struct LibraryEntry {
     pub app_id: u32,
     pub name: String,
+    /// Whether [`name`](Self::name) is a real name or a stand-in built from the appid.
+    ///
+    /// Now a **degraded-mode signal only**: an app with no `appinfo.vdf` name is one the account
+    /// no longer holds and is dropped from the list entirely, so the only rows that reach the UI
+    /// unnamed are those from an unreadable `appinfo.vdf` (where nothing is dropped, by design)
+    /// and a shortcut with no `appname`.
+    ///
+    /// Kept rather than removed because that is exactly when the UI most needs to explain
+    /// itself: a synthesised name with nothing to say for it reads as artwork that failed to
+    /// load, which is how it was reported.
+    pub named: bool,
     /// `"steam"` or `"shortcut"`.
     pub kind: &'static str,
     pub app_type: Option<String>,
@@ -278,6 +289,26 @@ pub struct LibraryEntry {
     /// Unix seconds, absent when never played. See [`localconfig`] on the 1970 sentinel.
     pub last_played: Option<u64>,
     pub playtime_minutes: Option<u32>,
+}
+
+/// Whether an app that only `localconfig.vdf` remembers should be left out of the library.
+///
+/// 🔴 **An app `localconfig.vdf` knows and `appinfo.vdf` does not is one the account no longer
+/// holds** — a refunded purchase, or a demo or beta Steam has withdrawn. Confirmed against a real
+/// library: all 29 such apps there were exactly that. `[VERIFIED-BOX 2026-07-31]` `localconfig` is
+/// a record of what was *configured*, never of what is *owned* — there is no offline ownership
+/// list, `licensecache` being encrypted — and absence from appinfo is the closest signal there is.
+///
+/// 🔴 `appinfo_loaded` is the whole safety story, which is why it is a parameter rather than
+/// something this function works out. When `appinfo.vdf` cannot be read, **every** app looks
+/// nameless, and dropping on that would cut the All-games scope down to installed apps and
+/// shortcuts — surfacing as "some of my games are missing", which this codebase treats as the
+/// hardest kind of bug to report. No appinfo means no opinion.
+///
+/// Installed apps never reach this: they are named from their `appmanifest` and are already in
+/// the map by the time `localconfig` is walked.
+fn is_disowned(appinfo_loaded: bool, appinfo_name: Option<&str>) -> bool {
+    appinfo_loaded && appinfo_name.is_none()
 }
 
 /// The library list, scoped to installed apps or to everything Steam knows about.
@@ -320,6 +351,7 @@ pub async fn library(
                         // The manifest name, not appinfo's: it is what the user installed, and
                         // it is present even for the apps appinfo has never heard of.
                         name: app.name.clone(),
+                        named: true,
                         kind: "steam",
                         app_type: ctx
                             .app_types
@@ -341,8 +373,21 @@ pub async fn library(
     // `localconfig.vdf` serves two purposes: it is the "all games" source, and it carries the
     // playtimes for installed games too, so it is read either way.
     let known = localconfig::known_apps_or_empty(&ctx.install, ctx.account.id);
+    let mut dropped = 0usize;
     for record in &known {
         let id = record.app_id;
+        let appinfo_name = ctx.app_types.as_ref().and_then(|t| t.name(id));
+
+        // Refunded games and withdrawn demos — see `is_disowned`. This reverses the project's
+        // usual "unknown means show it" direction, deliberately and on the library owner's
+        // say-so: these are not games missing from the list, they are games no longer in the
+        // account, and every one of them is unnamed and artless.
+        let disowned = is_disowned(ctx.app_types.is_some(), appinfo_name);
+        if scope == LibraryScope::All && disowned && !steam_apps.contains_key(&id.get()) {
+            dropped += 1;
+            continue;
+        }
+
         if scope == LibraryScope::All
             && !steam_apps.contains_key(&id.get())
             && apptype::include_in_library(ctx.app_types.as_ref(), id)
@@ -351,16 +396,14 @@ pub async fn library(
                 id.get(),
                 LibraryEntry {
                     app_id: id.get(),
-                    // 29 of these have no appinfo entry and no cached art on this box — they
-                    // are delisted. Shown anyway with a placeholder name, because the appid is
-                    // still a valid SteamGridDB key and the project's failure direction is that
-                    // an unknown app gets shown. A missing game is a bug report; an odd-looking
-                    // row is a cosmetic annoyance.
-                    name: ctx
-                        .app_types
-                        .as_ref()
-                        .and_then(|t| t.name(id))
-                        .map_or_else(|| format!("Unknown app {}", id.get()), str::to_owned),
+                    // Only reachable when `appinfo.vdf` could not be read at all, since a
+                    // nameless app is otherwise dropped above. `Steam app <id>` reads as a label
+                    // rather than as art that failed to load, which is how `Unknown app <id>`
+                    // was reported. The id stays *inside* the name on purpose: the filter box
+                    // matches on `name`, so the row is still findable by typing the number.
+                    name: appinfo_name
+                        .map_or_else(|| format!("Steam app {}", id.get()), str::to_owned),
+                    named: appinfo_name.is_some(),
                     kind: "steam",
                     app_type: ctx
                         .app_types
@@ -382,6 +425,17 @@ pub async fn library(
         }
     }
 
+    // The tripwire for the paragraph above. If this ever starts hiding real games, the count is
+    // the first place to look — and a count that suddenly jumps is the signal that `appinfo.vdf`
+    // changed shape rather than that the account did.
+    if dropped > 0 {
+        tracing::info!(
+            dropped,
+            of = known.len(),
+            "skipped apps absent from appinfo.vdf (refunded, or withdrawn demos and betas)"
+        );
+    }
+
     let mut entries: Vec<LibraryEntry> = steam_apps.into_values().collect();
 
     // Non-Steam shortcuts. Read-only here; the file is only written for icons.
@@ -392,6 +446,8 @@ pub async fn library(
                 entries.push(LibraryEntry {
                     app_id: id.get(),
                     name: s.app_name().unwrap_or("(unnamed shortcut)").to_owned(),
+                    // A shortcut with no `appname` is the same situation, from a different file.
+                    named: s.app_name().is_some(),
                     kind: "shortcut",
                     app_type: None,
                     current_art: first_existing(&grid, id, asset),
@@ -1060,11 +1116,36 @@ mod tests {
     }
 
     #[test]
+    fn an_app_appinfo_has_never_heard_of_is_dropped() {
+        // Refunded purchases and withdrawn demos keep their `localconfig` entry forever. They
+        // are unnamed and artless, and the account no longer holds them.
+        assert!(is_disowned(true, None));
+
+        // The control: an app appinfo *can* name is kept. Without this the test would pass just
+        // as well against a function that dropped everything.
+        assert!(!is_disowned(true, Some("Portal 2")));
+    }
+
+    #[test]
+    fn nothing_is_dropped_when_appinfo_could_not_be_read() {
+        // 🔴 The guard that keeps the rule above safe. With no readable `appinfo.vdf` every app
+        // looks nameless, so dropping on that alone would cut the All-games scope down to
+        // installed apps and shortcuts — "some of my games are missing", which is the hardest
+        // kind of bug for a user to report and the one this codebase most wants to avoid.
+        assert!(!is_disowned(false, None));
+
+        // And it must not depend on the name being absent: with no appinfo there is no opinion
+        // to have, whatever else is true.
+        assert!(!is_disowned(false, Some("Portal 2")));
+    }
+
+    #[test]
     fn the_library_sort_is_stable_and_never_played_sorts_last() {
         fn entry(name: &str, last_played: Option<u64>, minutes: Option<u32>) -> LibraryEntry {
             LibraryEntry {
                 app_id: 1,
                 name: name.to_owned(),
+                named: true,
                 kind: "steam",
                 app_type: None,
                 current_art: None,
@@ -1105,6 +1186,7 @@ mod tests {
                 LibraryEntry {
                     app_id: 2,
                     name: "Bravo".to_owned(),
+                    named: true,
                     kind: "steam",
                     app_type: None,
                     current_art: None,
@@ -1116,6 +1198,7 @@ mod tests {
                 LibraryEntry {
                     app_id: 1,
                     name: "Alpha".to_owned(),
+                    named: true,
                     kind: "steam",
                     app_type: None,
                     current_art: None,

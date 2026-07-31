@@ -204,10 +204,57 @@ under a different name. `u32::from_str` refuses it for free, which is why there 
 
 Against `appinfo.vdf`: 469 typed `Game` (**409 `Game` + 60 `game`** — the casing really is
 inconsistent, and `AppType::parse` already handles it), 10 `Tool`/`Config` which get filtered
-out, and **29 absent from appinfo entirely with no cache dir** — delisted. Those show as
-`Unknown app <id>`, following the fixed failure direction: a Steam appid is still a valid
-SteamGridDB key, and a missing game is a bug report while an odd-looking row is a cosmetic
-annoyance.
+out, and **29 absent from appinfo entirely with no cache dir** — delisted. They are still shown,
+following the fixed failure direction: a Steam appid is still a valid SteamGridDB key, and a
+missing game is a bug report while an odd-looking row is a cosmetic annoyance.
+
+#### 🔴 Absence from `appinfo.vdf` means the account no longer holds the app — drop it
+
+They are **not** delisted, which is what this section said first. The library's owner identified
+them: **refunded purchases, plus demos and betas Steam has since withdrawn.** The list bears that
+out — a refunded Mortal Kombat 1 and Black Ops III, three Resident Evil demos, a Division beta.
+
+`localconfig.vdf` records what was *configured*, never what is *owned* — there is no offline
+ownership list at all, `licensecache` being encrypted — so an app it remembers that `appinfo.vdf`
+has never heard of is the closest thing to a "no longer yours" signal available. Steam drops an
+app from appinfo once it stops being yours.
+
+**This reverses the usual "unknown means show it" direction, deliberately.** These are not games
+missing from the list; they are games no longer in the account, and every one is unnamed and
+artless. `is_disowned` in `commands.rs` is the predicate, with a `tracing::info!` counter as the
+tripwire.
+
+🔴 **`appinfo_loaded` is the whole safety story, and it is a parameter rather than something the
+predicate works out.** With no readable `appinfo.vdf` *every* app looks nameless, so dropping on
+namelessness alone would cut the All-games scope down to installed apps and shortcuts — surfacing
+as "some of my games are missing", the hardest kind of bug to report. **No appinfo means no
+opinion.** Two tests, one per direction, each with a control.
+
+Re-measured when they were reported as "the title and art don't load" `[VERIFIED-BOX 2026-07-31]`:
+
+| Question | Answer |
+|---|---|
+| Present in `appinfo.vdf` but unnamed? | **0** — all 30 are absent *entirely*, so no parser fix can help |
+| Have a `librarycache` directory? | **0** |
+| Keys in their `localconfig` entry | `LastPlayed`, `Playtime` — **no name** |
+| Steam CDN still serves a capsule | **18 of 29** |
+| Known to SteamGridDB by appid | **14 of 29** — incl. Mortal Kombat 1, Elite Dangerous, Black Ops III |
+
+The 30th is `4048848997`, the EmulationStationDE shortcut, which is named from `shortcuts.vdf`.
+
+That 14-of-29 row is why the first fix — relabelling them — was the wrong one: some of these are
+perfectly recognisable games, so no label was ever going to make the row look right. Dropping them
+is what the data supports.
+
+`LibraryEntry::named` survives as a **degraded-mode signal only**: once disowned apps are dropped,
+the only unnamed rows left are those from an unreadable `appinfo.vdf` and a shortcut with no
+`appname`. That is exactly when the UI most needs to explain itself, so the row says *"Steam has
+no details for this app"* rather than showing a synthesised name with nothing to back it.
+
+**It was never throttling, and never scroll speed.** The rows are deterministic and appear only
+under the **All games** scope. A burst of 200 concurrent Steam CDN requests measured 200/200 OK in
+0.34 s, so nothing here is rate-limited. Both of the first two explanations — a CDN failure under
+burst, then a bad label — were wrong, and only measuring killed them.
 
 #### 🟡 `logo_position` is already in `appinfo.vdf` — free for the logo positioner
 

@@ -183,6 +183,10 @@ function artSources(entry: LibraryEntry): string[] {
 
 function meta(entry: LibraryEntry): string {
   if (entry.kind === 'shortcut') return 'Non-Steam';
+  // Only reachable when `appinfo.vdf` could not be read — an app Steam has no record of is
+  // dropped from the list rather than shown. Says why the row has no name instead of leaving
+  // something that reads as artwork which failed to load.
+  if (!entry.named) return 'Steam has no details for this app';
   const kind = entry.app_type ?? 'Game';
   return entry.installed ? kind : `${kind} · not installed`;
 }

@@ -70,6 +70,14 @@ export type LibrarySort = 'name' | 'recently_played' | 'most_played';
 export interface LibraryEntry {
   app_id: number;
   name: string;
+  /**
+   * False when `name` is a stand-in built from the appid.
+   *
+   * Rare by design: an app Steam has no record of is one the account no longer holds, and those
+   * are dropped from the list. This is left true-by-exception for the degraded cases — an
+   * unreadable `appinfo.vdf`, or a shortcut with no name of its own.
+   */
+  named: boolean;
   kind: 'steam' | 'shortcut';
   app_type: string | null;
   /** The user's own art for this slot. */
