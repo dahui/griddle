@@ -1,7 +1,7 @@
 /** API key, live apply, and diagnostics. */
 import { useState } from 'react';
 import { api, asUiError, type ModuleReport, type Status, type UiError } from '../api';
-import { ErrorNote, Spinner } from '../components';
+import { ErrorNote, ExternalLink, Spinner } from '../components';
 
 const KEY_PAGE = 'https://www.steamgriddb.com/profile/preferences/api';
 
@@ -9,9 +9,32 @@ export function Settings({ status, onStatus }: { status: Status; onStatus: (s: S
   return (
     <>
       <ApiKeyPanel status={status} onStatus={onStatus} />
-      <LiveApplyPanel status={status} onStatus={onStatus} />
       <DiagnosticsPanel status={status} />
     </>
+  );
+}
+
+/**
+ * What the app set up on its own, shown once on first run.
+ *
+ * 🔑 Live apply is not a setting — applying artwork without restarting Steam is the whole
+ * reason this app exists, so its prerequisite is arranged rather than offered. CSS Loader and
+ * Decky set the same flag and tell nobody; this at least says what it did and how to undo it.
+ */
+export function SetupNote() {
+  return (
+    <section>
+      <h2>What this set up</h2>
+      <p>
+        So artwork can apply without restarting Steam, this app creates an empty{' '}
+        <code>.cef-enable-remote-debugging</code> file in Steam&rsquo;s folder. It&rsquo;s
+        Valve&rsquo;s own setting — CSS Loader and Decky use the same one — and it takes effect
+        the next time Steam starts. Deleting the file undoes it.
+      </p>
+      <p className="hint">
+        Until Steam restarts, artwork still applies; it just needs a restart to show up.
+      </p>
+    </section>
   );
 }
 
@@ -51,15 +74,14 @@ export function ApiKeyPanel({
     <section>
       <h2>SteamGridDB API key</h2>
       <p>
-        This app uses <strong>your own</strong> key rather than shipping a shared one — shared
-        keys get scraped and revoked, which is what happened to the Decky plugin&rsquo;s. Yours
+        This app uses <strong>your own</strong> API key rather than shipping a shared one. Yours
         is stored encrypted for your Windows account and only ever sent to SteamGridDB.
       </p>
       <p>
         Grab one from{' '}
-        <a href={KEY_PAGE} target="_blank" rel="noreferrer">
+        <ExternalLink href={KEY_PAGE} onError={setError}>
           your SteamGridDB preferences
-        </a>
+        </ExternalLink>
         .
       </p>
 
@@ -87,69 +109,6 @@ export function ApiKeyPanel({
           </button>
         </div>
       )}
-      {error && <ErrorNote error={error} />}
-    </section>
-  );
-}
-
-function LiveApplyPanel({ status, onStatus }: { status: Status; onStatus: (s: Status) => void }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<UiError | null>(null);
-
-  async function toggle(enabled: boolean) {
-    setBusy(true);
-    setError(null);
-    try {
-      onStatus(await api.setLiveApply(enabled));
-    } catch (e: unknown) {
-      setError(asUiError(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <section>
-      <h2>Live apply</h2>
-      <p>
-        Artwork appears in Steam <strong>immediately</strong>, with no restart.
-      </p>
-      <p>
-        Turning this on creates an empty <code>.cef-enable-remote-debugging</code> file in
-        Steam&rsquo;s folder, and Steam needs restarting once. It&rsquo;s Valve&rsquo;s own
-        setting — CSS Loader uses it too — and deleting the file undoes it.
-      </p>
-
-      <div className="row">
-        <label className="toggle">
-          <input
-            type="checkbox"
-            checked={status.live_apply_enabled}
-            disabled={busy || !status.steam_root}
-            onChange={(e) => void toggle(e.target.checked)}
-          />
-          Apply artwork without restarting Steam
-        </label>
-        {status.sentinel_present && (
-          <button
-            type="button"
-            className="ghost"
-            disabled={busy}
-            onClick={() => {
-              setBusy(true);
-              api
-                .removeSentinel()
-                .then(onStatus)
-                .catch((e: unknown) => setError(asUiError(e)))
-                .finally(() => setBusy(false));
-            }}
-            title="Deletes the empty opt-in file. Other tools such as CSS Loader may also use it."
-          >
-            Remove the debugging file
-          </button>
-        )}
-      </div>
-      <p className="hint">{status.sentinel_explanation}</p>
       {error && <ErrorNote error={error} />}
     </section>
   );
@@ -192,6 +151,10 @@ function DiagnosticsPanel({ status }: { status: Status }) {
         <dd>{status.account_id ?? '—'}</dd>
         <dt>Steam running</dt>
         <dd>{status.steam_running ? 'yes' : 'no'}</dd>
+        {/* Reported, not offered. The panel that used to let you toggle this is gone — live
+            apply is set up at startup because it is the point of the app. */}
+        <dt>Live apply</dt>
+        <dd>{status.sentinel_explanation}</dd>
         <dt>Known apps</dt>
         <dd>
           {status.app_types_loaded === null

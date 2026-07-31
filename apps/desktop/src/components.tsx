@@ -1,6 +1,6 @@
 /** Small shared pieces. Kept together because none of them is big enough to earn a file. */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { UiError } from './api';
+import { api, asUiError, type UiError } from './api';
 
 /**
  * An image with fallbacks, tried in order until one loads.
@@ -62,6 +62,38 @@ export function ErrorNote({ error, onRetry }: { error: UiError; onRetry?: () => 
         </button>
       )}
     </div>
+  );
+}
+
+/**
+ * A link that opens in the user's real browser.
+ *
+ * 🔴 A plain `<a target="_blank">` **silently does nothing** in a Tauri webview: there is no
+ * browser chrome and no new window to open into. It still renders as a link, which is what made
+ * the API-key link look merely unresponsive rather than unimplemented.
+ *
+ * The `href` is kept so the address shows on hover and "copy link" works; the click is handled
+ * by the backend, which only opens allowlisted URLs.
+ */
+export function ExternalLink({
+  href,
+  children,
+  onError,
+}: {
+  href: string;
+  children: ReactNode;
+  onError?: (e: UiError) => void;
+}) {
+  return (
+    <a
+      href={href}
+      onClick={(e) => {
+        e.preventDefault();
+        void api.openUrl(href).catch((err: unknown) => onError?.(asUiError(err)));
+      }}
+    >
+      {children}
+    </a>
   );
 }
 

@@ -68,6 +68,33 @@ fn main() {
                 }
             }
 
+            // Live apply is set up, not offered.
+            //
+            // Applying artwork without restarting Steam is the entire reason this app exists
+            // rather than Steam Art Manager or SGDBoop, and its one prerequisite is an empty
+            // `.cef-enable-remote-debugging` file in Steam's folder — Valve's own flag, the same
+            // one CSS Loader and Decky rely on. Behind an opt-in checkbox, the product shipped
+            // switched off for anyone who never found it.
+            //
+            // 🔑 It is disclosed rather than silent: the first-run screen says what the file is
+            // and that deleting it undoes everything. Creating it opens Steam's CEF debugging
+            // port on loopback at Steam's next start, which is a real (if modest) widening and
+            // belongs in that copy.
+            //
+            // Re-run on every launch on purpose — `enable()` is idempotent and never truncates,
+            // so this also repairs the file if something removed it. Millennium is known to.
+            //
+            // Never fatal: the apply ladder falls back to writing files, which needs no port.
+            if let Ok(ctx) = state.steam() {
+                let sentinel = sgdb_core::cdp::Sentinel::for_install(&ctx.install);
+                match sentinel.enable() {
+                    Ok(()) => tracing::info!(path = %sentinel.path().display(), "live apply ready"),
+                    Err(e) => {
+                        tracing::warn!(error = %e, "could not enable live apply; artwork will be written to disk instead");
+                    }
+                }
+            }
+
             app.manage(state);
             Ok(())
         })
@@ -77,6 +104,7 @@ fn main() {
             commands::set_api_key,
             commands::clear_api_key,
             commands::library,
+            commands::open_url,
             commands::prefs,
             commands::set_library_view,
             commands::set_filters,
@@ -88,8 +116,6 @@ fn main() {
             commands::apply_asset,
             commands::asset_status,
             commands::clear_asset,
-            commands::set_live_apply,
-            commands::remove_sentinel,
             commands::resolve_modules,
         ])
         .run(tauri::generate_context!())

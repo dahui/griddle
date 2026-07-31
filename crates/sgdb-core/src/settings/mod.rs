@@ -103,10 +103,6 @@ pub struct Settings {
     /// string to it.
     api_key_protected: Option<String>,
 
-    /// Whether live apply over CDP is enabled. Off until the user opts in — turning it on is
-    /// what creates the `.cef-enable-remote-debugging` sentinel.
-    pub live_apply: bool,
-
     /// Tab order, hidden tabs, and which one opens first.
     pub tabs: TabSettings,
 
@@ -175,7 +171,6 @@ impl Default for Settings {
         Settings {
             version: SCHEMA_VERSION,
             api_key_protected: None,
-            live_apply: false,
             tabs: TabSettings::default(),
             zoom: PerAssetType::new(),
             filters: None,
@@ -489,9 +484,14 @@ mod tests {
 
     #[test]
     fn unknown_fields_from_a_newer_build_are_ignored() {
-        let s: Settings =
-            serde_json::from_str(r#"{"live_apply": true, "some_future_field": [1,2,3]}"#).unwrap();
-        assert!(s.live_apply);
+        // `live_apply` is here on purpose: it was a real field until live apply stopped being
+        // optional, so any existing settings file still has it. A removed field must be as
+        // harmless as one from the future.
+        let s: Settings = serde_json::from_str(
+            r#"{"live_apply": true, "library_scope": "all", "some_future_field": [1,2,3]}"#,
+        )
+        .unwrap();
+        assert_eq!(s.library_scope, LibraryScope::All);
     }
 
     #[test]
@@ -508,7 +508,6 @@ mod tests {
         let store = Store::at(dir.path().join("nested").join("settings.json"));
 
         let mut s = Settings {
-            live_apply: true,
             library_scope: LibraryScope::All,
             library_sort: LibrarySort::RecentlyPlayed,
             ..Default::default()
@@ -667,10 +666,14 @@ mod tests {
         // written before the library scope existed must not fail to load.
         let dir = tempfile::tempdir().unwrap();
         let store = Store::at(dir.path().join("settings.json"));
-        std::fs::write(store.path(), r#"{"version":1,"live_apply":true}"#).unwrap(); // boundary-ok: test fixture
+        std::fs::write(store.path(), r#"{"version":1,"zoom":{"Hero":2.0}}"#).unwrap(); // boundary-ok: test fixture
 
         let loaded = store.load().unwrap();
-        assert!(loaded.live_apply, "the keys that were present must survive");
+        assert_eq!(
+            loaded.zoom.get("Hero"),
+            Some(&2.0),
+            "the keys that were present must survive"
+        );
         assert_eq!(loaded.library_scope, LibraryScope::Installed);
         assert_eq!(loaded.library_sort, LibrarySort::Name);
     }
@@ -790,7 +793,7 @@ mod tests {
         let store = Store::at(dir.path().join("settings.json"));
 
         let mut s = Settings {
-            live_apply: true,
+            library_scope: LibraryScope::All,
             ..Default::default()
         };
         s.set_api_key(&ApiKey::new(FAKE_KEY).unwrap()).unwrap();
@@ -803,7 +806,11 @@ mod tests {
         store.save(&damaged).unwrap();
 
         let loaded = store.load().unwrap();
-        assert!(loaded.live_apply, "settings must still load");
+        assert_eq!(
+            loaded.library_scope,
+            LibraryScope::All,
+            "settings must still load"
+        );
         assert_eq!(loaded.zoom.get("Hero"), Some(&2.0));
         assert!(
             loaded.api_key().is_err(),

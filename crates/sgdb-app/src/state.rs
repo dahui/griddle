@@ -33,6 +33,20 @@ pub struct AppState {
     pub http: reqwest::Client,
     /// Built lazily: there is no client until a key exists.
     pub sgdb: Mutex<Option<sgdb::Client>>,
+    /// Steam appid → which SteamGridDB game it resolves to, for this session.
+    ///
+    /// Resolving can cost a name search (see `commands::resolve_game`), and the asset browser
+    /// asks twice per game — once to label the "Wrong game?" button and once to fetch artwork.
+    /// Caching makes that one request instead of two, and keeps paging through 700 assets from
+    /// re-resolving on every page.
+    ///
+    /// **In memory, not in `settings.json`, on purpose.** A name match is a guess; persisting it
+    /// would silently enshrine a wrong one where the user would have to notice and undo it. The
+    /// only stored mapping is the one they chose themselves.
+    ///
+    /// `None` means "resolved to nothing" — cached too, so a game SteamGridDB simply does not
+    /// have does not re-search on every page.
+    pub game_matches: Mutex<std::collections::HashMap<u32, Option<crate::commands::GameMatch>>>,
 }
 
 impl AppState {
@@ -82,6 +96,7 @@ impl AppState {
             cache,
             http,
             sgdb: Mutex::new(client),
+            game_matches: Mutex::new(std::collections::HashMap::new()),
         }
     }
 

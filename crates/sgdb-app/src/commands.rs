@@ -18,7 +18,7 @@
 
 use crate::error::{Kind, UiError};
 use crate::state::AppState;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sgdb_core::appid::AppId;
 use sgdb_core::cdp::{self, Endpoint, Sentinel, SteamJs};
 use sgdb_core::grid::names::AssetType;
@@ -42,7 +42,8 @@ pub struct Status {
     pub account_id: Option<u32>,
     pub steam_running: bool,
     pub has_api_key: bool,
-    pub live_apply_enabled: bool,
+    /// Whether the CEF debugging flag is in place. Set up at startup, not by the user — this is
+    /// reported for diagnostics, not offered as a control.
     pub sentinel_present: bool,
     pub sentinel_explanation: String,
     pub app_types_loaded: Option<usize>,
@@ -78,7 +79,6 @@ pub async fn status(state: State<'_, AppState>) -> Res<Status> {
         account_id: account,
         steam_running: process::is_running(),
         has_api_key: settings.has_api_key(),
-        live_apply_enabled: settings.live_apply,
         sentinel_present: sentinel.as_ref().is_some_and(Sentinel::exists),
         sentinel_explanation: sentinel.as_ref().map_or_else(
             || "Steam was not found.".to_owned(),
@@ -124,6 +124,25 @@ pub async fn clear_api_key(state: State<'_, AppState>) -> Res<()> {
     let mut slot = state.sgdb.lock().await;
     *slot = None;
     Ok(())
+}
+
+// -- links ----------------------------------------------------------------------------------
+
+/// Open a link in the user's default browser.
+///
+/// A Tauri webview ignores `target="_blank"`, so an ordinary `<a>` does nothing at all — which
+/// is what made the API-key link look broken. The URL is checked against an allowlist in
+/// [`sgdb_core::browser`] before it reaches the shell; this command deliberately cannot open an
+/// arbitrary address.
+#[tauri::command]
+pub async fn open_url(url: String) -> Res<()> {
+    sgdb_core::browser::open(&url).map_err(|e| {
+        let ui = UiError::new(Kind::Unexpected, e.to_string());
+        match e.suggestion() {
+            Some(s) => ui.with_action(s),
+            None => ui,
+        }
+    })
 }
 
 // -- preferences ----------------------------------------------------------------------------
@@ -231,6 +250,9 @@ pub async fn set_game_override(
         }
         state.store.save(&settings)?;
     }
+    // The session cache holds whatever this appid resolved to before. Clearing an override has
+    // to re-resolve, or "use the automatic match" would keep returning the overridden game.
+    let _ = state.game_matches.lock().await.remove(&app_id);
     Ok(snapshot(&state).await)
 }
 
@@ -468,17 +490,19 @@ pub async fn search_assets(
         query.dimensions = base.dimensions;
     }
 
+    // Override, then appid, then a search by name — see `resolve_game`. Resolved before the
+    // client is locked, because resolving needs that same lock.
+    //
+    // Falling back to `Target::Steam` when nothing resolves is deliberate: the API's own 404 is
+    // a clearer, more specific error than anything invented here, and it carries the "search by
+    // name instead" action.
+    let target = match resolve_game(&state, app_id).await? {
+        Some(game) => Target::Sgdb(game.id),
+        None => Target::Steam(AppId::new(app_id)),
+    };
+
     let guard = state.sgdb.lock().await;
     let client = guard.as_ref().ok_or_else(UiError::no_api_key)?;
-
-    // A manual override wins: it exists for when the automatic Steam-appid match is wrong.
-    let target = {
-        let settings = state.settings.lock().await;
-        match settings.game_overrides.get(&app_id) {
-            Some(over) => Target::Sgdb(over.id),
-            None => Target::Steam(AppId::new(app_id)),
-        }
-    };
 
     let query = query.page(page).limit(sgdb::PAGE_LIMIT);
     let result = client.assets(kind, target, &query).await?;
@@ -493,25 +517,129 @@ pub async fn search_assets(
 
 // -- which SteamGridDB game --------------------------------------------------------------
 
+/// How an appid was matched to a SteamGridDB game.
+///
+/// Internal: it distinguishes a manual override from an automatic match, which is what lets
+/// [`current_game_match`] re-resolve the name of an override stored before names were kept.
+/// It is deliberately **not** sent to the UI — the label is just the game's name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MatchedBy {
+    /// The user picked this game themselves.
+    Override,
+    /// SteamGridDB knows this Steam appid. Exact.
+    AppId,
+    /// SteamGridDB does not know the appid, so the game's name was searched instead.
+    Name,
+}
+
 /// A SteamGridDB game, for the "wrong game?" picker.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct GameMatch {
     /// SteamGridDB's own id — **not** a Steam appid.
     pub id: u64,
     pub name: String,
     pub verified: bool,
     pub types: Vec<String>,
+    /// Not serialised: the UI shows the game's name, not how it was found.
+    #[serde(skip)]
+    pub matched_by: MatchedBy,
 }
 
-impl From<sgdb::Game> for GameMatch {
-    fn from(g: sgdb::Game) -> Self {
+impl GameMatch {
+    fn from_game(g: sgdb::Game, matched_by: MatchedBy) -> Self {
         GameMatch {
             id: g.id,
             name: g.name,
             verified: g.verified,
             types: g.types,
+            matched_by,
         }
     }
+}
+
+/// The name to search SteamGridDB with when the appid is not known there.
+///
+/// `appinfo.vdf` covers Steam apps; `shortcuts.vdf` covers non-Steam ones, whose appid is a
+/// random high-bit number SteamGridDB has never seen and never will — so for those the name is
+/// the *only* way to match anything at all.
+fn searchable_name(ctx: &crate::state::SteamContext, app_id: u32) -> Option<String> {
+    let app = AppId::new(app_id);
+    if let Some(name) = ctx.app_types.as_ref().and_then(|t| t.name(app)) {
+        return Some(name.to_owned());
+    }
+    let shortcuts = Shortcuts::load_or_empty(ctx.install.shortcuts_vdf(ctx.account.id)).ok()?;
+    shortcuts
+        .iter()
+        .find(|s| s.app_id() == Some(app))
+        .and_then(|s| s.app_name())
+        .map(str::to_owned)
+}
+
+/// Which SteamGridDB game an appid pulls artwork from.
+///
+/// The ladder, and why the last rung exists:
+///
+/// 1. **A manual override** — the user's choice always wins.
+/// 2. **The Steam appid** — exact, and right for most games.
+/// 3. **A name search** — because plenty of appids are not on SteamGridDB at all. Measured:
+///    `3837340` (FINAL FANTASY VII) 404s by appid but its name finds the game immediately, and
+///    every non-Steam shortcut 404s by construction since its appid is a random number Steam
+///    generated locally. `[VERIFIED-BOX 2026-07-30]` Without this rung those games showed an
+///    error instead of artwork.
+///
+/// Cached per session in [`AppState::game_matches`], including a `None`, so a game with no match
+/// does not re-search on every page of a scroll.
+async fn resolve_game(state: &State<'_, AppState>, app_id: u32) -> Res<Option<GameMatch>> {
+    // The user's own choice, and the only mapping that is persisted.
+    if let Some(over) = state.settings.lock().await.game_overrides.get(&app_id) {
+        return Ok(Some(GameMatch {
+            id: over.id,
+            name: over
+                .name
+                .clone()
+                .unwrap_or_else(|| format!("SteamGridDB game #{}", over.id)),
+            verified: false,
+            types: Vec::new(),
+            matched_by: MatchedBy::Override,
+        }));
+    }
+
+    if let Some(cached) = state.game_matches.lock().await.get(&app_id) {
+        return Ok(cached.clone());
+    }
+
+    let guard = state.sgdb.lock().await;
+    let client = guard.as_ref().ok_or_else(UiError::no_api_key)?;
+
+    let mut resolved = client
+        .game_by_steam_appid(AppId::new(app_id))
+        .await?
+        .map(|g| GameMatch::from_game(g, MatchedBy::AppId));
+
+    if resolved.is_none()
+        && let Ok(ctx) = state.steam()
+        && let Some(name) = searchable_name(ctx, app_id)
+    {
+        // First hit only. SteamGridDB's autocomplete is already ranked, and offering the user a
+        // list here would be the "Wrong game?" picker — which they can still open to change it.
+        resolved = client
+            .search(&name)
+            .await?
+            .into_iter()
+            .next()
+            .map(|g| GameMatch::from_game(g, MatchedBy::Name));
+        match &resolved {
+            Some(g) => tracing::info!(app_id, name, matched = g.name, "matched by name"),
+            None => tracing::info!(app_id, name, "no SteamGridDB match by appid or name"),
+        }
+    }
+
+    let _ = state
+        .game_matches
+        .lock()
+        .await
+        .insert(app_id, resolved.clone());
+    Ok(resolved)
 }
 
 /// Search SteamGridDB by name, for when the automatic Steam-appid match is wrong or absent.
@@ -528,7 +656,9 @@ pub async fn search_games(state: State<'_, AppState>, term: String) -> Res<Vec<G
         .search(&term)
         .await?
         .into_iter()
-        .map(GameMatch::from)
+        // These are candidates the user is choosing between, so they are all "by name" until
+        // one is picked and becomes an override.
+        .map(|g| GameMatch::from_game(g, MatchedBy::Name))
         .collect())
 }
 
@@ -536,48 +666,22 @@ pub async fn search_games(state: State<'_, AppState>, term: String) -> Res<Vec<G
 /// otherwise the automatic match. `None` means SteamGridDB has no entry for it.
 #[tauri::command]
 pub async fn current_game_match(state: State<'_, AppState>, app_id: u32) -> Res<Option<GameMatch>> {
-    let over = {
-        state
-            .settings
-            .lock()
-            .await
-            .game_overrides
-            .get(&app_id)
-            .cloned()
-    };
+    let resolved = resolve_game(&state, app_id).await?;
 
-    // The common case costs nothing: the name was stored when the user chose the override.
-    if let Some(over) = &over
-        && let Some(name) = &over.name
+    // An override stored before the name was kept alongside it shows as `SteamGridDB game
+    // #17830`. `/games/id/{id}` is probed and works, so resolve it properly.
+    if let Some(game) = &resolved
+        && game.matched_by == MatchedBy::Override
+        && game.name.starts_with("SteamGridDB game #")
     {
-        return Ok(Some(GameMatch {
-            id: over.id,
-            name: name.clone(),
-            verified: false,
-            types: Vec::new(),
-        }));
+        let guard = state.sgdb.lock().await;
+        let client = guard.as_ref().ok_or_else(UiError::no_api_key)?;
+        if let Some(found) = client.game_by_id(game.id).await? {
+            return Ok(Some(GameMatch::from_game(found, MatchedBy::Override)));
+        }
     }
 
-    let guard = state.sgdb.lock().await;
-    let client = guard.as_ref().ok_or_else(UiError::no_api_key)?;
-
-    // An override stored before the name was kept alongside it. `/games/id/{id}` is probed and
-    // works, so resolve it properly rather than showing `SteamGridDB game #17830`; fall back to
-    // that only if the lookup finds nothing.
-    if let Some(over) = over {
-        let resolved = client.game_by_id(over.id).await?.map(GameMatch::from);
-        return Ok(Some(resolved.unwrap_or_else(|| GameMatch {
-            id: over.id,
-            name: format!("SteamGridDB game #{}", over.id),
-            verified: false,
-            types: Vec::new(),
-        })));
-    }
-
-    Ok(client
-        .game_by_steam_appid(AppId::new(app_id))
-        .await?
-        .map(GameMatch::from))
+    Ok(resolved)
 }
 
 // -- applying -------------------------------------------------------------------------------
@@ -626,12 +730,11 @@ pub async fn apply_asset(
         }
     };
 
-    let live_enabled = state.settings.lock().await.live_apply;
-
     // Why the live path is not being taken, or `None` if it is about to be tried.
-    let fell_back_because: Option<String> = if !live_enabled {
-        Some("Live apply is off.".to_owned())
-    } else if !asset.supports_live_apply() {
+    //
+    // Live is always attempted — there is no longer a setting for it. The user installed this
+    // to avoid restarting Steam, so the ladder decides by capability, not by preference.
+    let fell_back_because: Option<String> = if !asset.supports_live_apply() {
         // Icon and HeroBlur are silent no-ops through Steam's API — ordinal 4 takes ~500 ms
         // and writes nothing at all. Going straight to the file path is the honest choice.
         Some(format!("Steam can't set {asset} artwork live."))
@@ -782,10 +885,7 @@ pub async fn clear_asset(
         .map(|n| n.to_string_lossy().into_owned())
         .collect();
 
-    let live_enabled = state.settings.lock().await.live_apply;
-    let fell_back_because: Option<String> = if !live_enabled {
-        Some("Live apply is off.".to_owned())
-    } else if !asset.supports_live_apply() {
+    let fell_back_because: Option<String> = if !asset.supports_live_apply() {
         Some(format!("Steam can't clear {asset} artwork live."))
     } else {
         match try_live_clear(&state, app, asset).await {
@@ -824,55 +924,6 @@ async fn try_live_clear(
         ));
     }
     steam.clear_artwork(app, asset).await.map_err(UiError::from)
-}
-
-// -- settings -------------------------------------------------------------------------------
-
-#[derive(Debug, Deserialize)]
-pub struct LiveApplyRequest {
-    pub enabled: bool,
-}
-
-/// Turn live apply on or off.
-///
-/// 🔑 Enabling it creates `.cef-enable-remote-debugging`. That is the **only** place this app
-/// creates that file, and it happens here because this command is only ever reached from an
-/// explicit click on a control that explains what the file is.
-#[tauri::command]
-pub async fn set_live_apply(state: State<'_, AppState>, req: LiveApplyRequest) -> Res<Status> {
-    let ctx = state.steam()?;
-    let sentinel = Sentinel::for_install(&ctx.install);
-
-    if req.enabled {
-        sentinel
-            .enable()
-            .map_err(|e| UiError::new(Kind::Filesystem, e.to_string()))?;
-    }
-    // Disabling leaves the sentinel alone on purpose: CSS Loader and other tools rely on the
-    // same file, and silently breaking them would be worse than leaving an empty file behind.
-    // Removing it is offered separately, with that explained.
-
-    {
-        let mut settings = state.settings.lock().await;
-        settings.live_apply = req.enabled;
-        state.store.save(&settings)?;
-    }
-    status(state).await
-}
-
-/// Remove the debugging sentinel entirely.
-#[tauri::command]
-pub async fn remove_sentinel(state: State<'_, AppState>) -> Res<Status> {
-    let ctx = state.steam()?;
-    Sentinel::for_install(&ctx.install)
-        .disable()
-        .map_err(|e| UiError::new(Kind::Filesystem, e.to_string()))?;
-    {
-        let mut settings = state.settings.lock().await;
-        settings.live_apply = false;
-        state.store.save(&settings)?;
-    }
-    status(state).await
 }
 
 // -- diagnostics ----------------------------------------------------------------------------

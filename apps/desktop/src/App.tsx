@@ -1,5 +1,4 @@
 /**
- * M3 — the first genuinely usable build.
  *
  * Library list with current art, the five asset tabs, SteamGridDB browsing with infinite
  * scroll, and apply. The apply path tries live first and falls back to writing files; the UI's
@@ -14,7 +13,7 @@ import { api, asUiError, type LibraryEntry, type Status, type UiError } from './
 import { ErrorNote, Spinner } from './components';
 import { Library } from './views/Library';
 import { AssetBrowser } from './views/AssetBrowser';
-import { ApiKeyPanel, Settings } from './views/Settings';
+import { ApiKeyPanel, SetupNote, Settings } from './views/Settings';
 
 type Tab = 'library' | 'settings';
 
@@ -52,6 +51,10 @@ export function App() {
           </p>
         </section>
         <ApiKeyPanel status={status} onStatus={setStatus} />
+        {/* Shown here and only here: the app has already enabled live apply by this point, and
+            first run is the moment to say so. It is disclosure, not a permission prompt — see
+            `cdp::sentinel`. */}
+        <SetupNote />
       </Shell>
     );
   }
@@ -100,7 +103,7 @@ function Shell({ children }: { children: React.ReactNode }) {
     <main>
       <header>
         <h1>SteamGridDB Artwork Manager</h1>
-        <p className="sub">Artwork for your Steam library, without the restart.</p>
+        <p className="sub">Artwork for your Steam library.</p>
       </header>
       {children}
     </main>

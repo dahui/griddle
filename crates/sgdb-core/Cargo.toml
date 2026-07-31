@@ -37,6 +37,13 @@ windows-sys = { version = "0.61", features = [
     "Win32_System_Diagnostics_ToolHelp",
     # DPAPI, for encrypting the API key at rest in `settings`.
     "Win32_Security_Cryptography",
+    # ShellExecuteW, for opening an allowlisted link in the default browser. A Tauri webview
+    # ignores `target="_blank"`, so the backend has to hand the URL to the OS.
+    #
+    # `Win32_UI_WindowsAndMessaging` is not optional here: ShellExecuteW is gated behind it,
+    # because its last parameter is a `SHOW_WINDOW_CMD` that lives in that module.
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
 ] }
 
 [dev-dependencies]

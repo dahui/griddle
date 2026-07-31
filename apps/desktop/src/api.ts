@@ -48,7 +48,7 @@ export interface Status {
   account_id: number | null;
   steam_running: boolean;
   has_api_key: boolean;
-  live_apply_enabled: boolean;
+  /** Whether the CEF debugging flag is in place. Set up at startup; not a user setting. */
   sentinel_present: boolean;
   sentinel_explanation: string;
   app_types_loaded: number | null;
@@ -177,6 +177,13 @@ export interface GameMatch {
 
 export const api = {
   status: () => invoke<Status>('status'),
+  /**
+   * Open a link in the default browser.
+   *
+   * The webview cannot do this itself — Tauri ignores `target="_blank"` — and the backend only
+   * accepts an allowlisted https URL, so this is not a general "launch anything".
+   */
+  openUrl: (url: string) => invoke<void>('open_url', { url }),
   setApiKey: (key: string) => invoke<void>('set_api_key', { key }),
   clearApiKey: () => invoke<void>('clear_api_key'),
   /**
@@ -213,7 +220,5 @@ export const api = {
     invoke<Prefs>('set_game_override', { appId, sgdbId, name }),
   searchGames: (term: string) => invoke<GameMatch[]>('search_games', { term }),
   currentGameMatch: (appId: number) => invoke<GameMatch | null>('current_game_match', { appId }),
-  setLiveApply: (enabled: boolean) => invoke<Status>('set_live_apply', { req: { enabled } }),
-  removeSentinel: () => invoke<Status>('remove_sentinel'),
   resolveModules: () => invoke<ModuleReport>('resolve_modules'),
 };

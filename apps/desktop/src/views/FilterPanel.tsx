@@ -168,7 +168,12 @@ export function FilterPanel({
         </Group>
 
         <div className="filter-actions">
-          <button type="button" className="ghost" onClick={onPickGame}>
+          <button
+            type="button"
+            className="ghost"
+            onClick={onPickGame}
+            title="Change which SteamGridDB game this artwork comes from"
+          >
             {gameLabel ? `Game: ${gameLabel}` : 'Wrong game?'}
           </button>
           {modified && (

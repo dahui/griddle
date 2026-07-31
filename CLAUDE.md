@@ -345,6 +345,37 @@ frontend or the injected bundle (that JS realm also runs Valve's code and CSS Lo
 > hash, so writing it into this file would make the documentation fail its own check. (It
 > did, on the first attempt.)
 
+### 🔑 Live apply is set up, not offered — a reversal, on purpose
+
+The sentinel used to be behind an opt-in checkbox, and this document used to say *"enabling a
+debugging port on someone's machine without asking is not ours to do."* That was the wrong call
+for this product and it is now created at startup.
+
+The reasoning that changed it: **applying artwork without restarting Steam is the entire reason
+this app exists** in preference to Steam Art Manager or SGDBoop. Putting its one prerequisite
+behind a checkbox meant the product shipped switched off for anyone who never found it — the
+headline feature, off by default, in a settings tab. CSS Loader and Decky set the identical flag
+and mention it to no one.
+
+**What was kept from the old design is the disclosure, not the prompt.** The first-run screen
+says what the file is, that it is Valve's own setting, that CSS Loader and Decky use it too, and
+that deleting it undoes everything. That is more than the comparable tools do.
+
+Be clear-eyed about what it costs: Steam opens its CEF debugging port on loopback at next start,
+so any process already running as this user can drive Steam's JS. Modest, Valve's own mechanism,
+and the same exposure those tools have always carried — but real, and it belongs in the copy
+rather than in a footnote.
+
+Consequences in code: `Settings.live_apply` is **gone** rather than defaulted to `true` (a
+stored `false` would have stranded someone in file-mode with no UI to change it), the
+`set_live_apply` and `remove_sentinel` commands are gone, and `apply_asset`/`clear_asset` decide
+by *capability* — `AssetType::supports_live_apply` — never by preference. `enable()` runs on
+every launch because it is idempotent and never truncates, which also repairs the file if
+something removed it; Millennium is known to.
+
+The file-write path stays as the floor of the ladder. It is what makes this shippable if Steam
+moves the API, and it needs no port at all.
+
 ### Never destructively probe
 
 **Delete no file we did not write** — except the same-base-name art siblings inside `grid/`
@@ -494,7 +525,8 @@ flash, the wart this project exists to remove.
 | `settings::dpapi` | `CryptProtectData` round-trip for the API key. Windows-only, with **no plaintext fallback**. |
 | `cache` | `%LOCALAPPDATA%\<AppName>\cache`. JSON on a TTL, images forever. Entries are self-describing, so a collision or torn write is a **miss**. |
 | `base64` | Shared by `settings` (DPAPI blob) and `cdp` (image payloads). `is_base64()` is the JS-injection guard. |
-| `cdp::sentinel` | The `.cef-enable-remote-debugging` opt-in. Created **only** on explicit user action; never truncates a file someone else wrote. |
+| `browser` | Opens a link in the default browser via `ShellExecuteW`. 🔴 **Allowlisted to https on `steamgriddb.com`** — handing an arbitrary string to the shell launches whatever handler is registered for it, and `file:///…exe` would run a program. A Tauri webview ignores `target="_blank"`, which is why this exists at all. |
+| `cdp::sentinel` | The `.cef-enable-remote-debugging` flag. **Created at startup, disclosed on first run** — see below. Never truncates a file someone else wrote. |
 | `cdp::target` | Finds `SharedJSContext` and **refuses anything that is not Steam** — port 8080 is a very common dev-server port. |
 | `cdp::client` | Minimal CDP: `Runtime.evaluate` + `addScriptToEvaluateOnNewDocument`. A JS throw is a distinct error, not silent success. |
 | `cdp::SteamJs` | `probe` / `apply_artwork` / `clear_artwork` / `clstamp` / `app_name`. The live-apply path. |
@@ -663,6 +695,17 @@ someone decides we are obliged to honour it and re-fetches on every keystroke.
 **Three response envelopes, not one:** `/games/...` returns `data` as a single object;
 `/search/autocomplete` returns an array with **no** pagination fields; asset endpoints return an
 array with `page`/`total`/`limit`.
+
+🔴 **Plenty of Steam appids are not on SteamGridDB, so appid alone is not a resolver.**
+`[VERIFIED-BOX 2026-07-30]` `/games/steam/3837340` (FINAL FANTASY VII, a re-release) **404s**,
+while `/search/autocomplete/FINAL FANTASY VII` returns the game as its first hit. Every non-Steam
+shortcut 404s by construction — its appid is a random high-bit number Steam generated locally and
+SteamGridDB has never seen it. Note the neighbours all resolve: `1004640`, `2909400`, `1173800`
+are all 200, so this is not "the whole series is missing", it is per-appid and unguessable.
+
+`commands::resolve_game` is therefore a three-rung ladder — manual override, then appid, then a
+name search — cached per session **in memory, not in `settings.json`**: a name match is a guess,
+and persisting it would enshrine a wrong one somewhere the user has to notice and undo it.
 
 🟢 **`GET /games/id/{id}` exists and returns a full record.** `[VERIFIED-BOX 2026-07-30]` Probed
 because a manual game override stores only SteamGridDB's id, and an override written before the

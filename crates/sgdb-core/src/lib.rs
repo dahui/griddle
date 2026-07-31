@@ -11,6 +11,7 @@
 
 pub mod appid;
 pub mod base64;
+pub mod browser;
 pub mod cache;
 pub mod cdp;
 pub mod grid;
