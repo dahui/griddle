@@ -48,10 +48,13 @@ export function FilterPanel({
   const dimensions = DIMENSIONS[assetType].all;
   const mimes = MIMES[assetType];
   const modified = !isDefault(filters);
-  // Counted among the *visible* options only. The shared set holds sizes for every tab, so
-  // `filters.dimensions.length` would never reach one and the last-one guard below would never
-  // engage.
-  const checkedSizes = dimensions.filter((d) => filters.dimensions.includes(d)).length;
+  // Counted among the *visible* options only: the shared set holds values for every tab, so a
+  // plain `filters.styles.length` is never zero even when this tab has nothing ticked.
+  const ticked = (options: readonly string[], chosen: string[]) =>
+    options.filter((o) => chosen.includes(o)).length;
+  const checkedStyles = ticked(styles, filters.styles);
+  const checkedSizes = ticked(dimensions, filters.dimensions);
+  const checkedMimes = ticked(mimes, filters.mimes);
 
   // React *controls* `open` on a <details>, so binding it straight to `modified` would slam the
   // panel shut the instant the user clicked "Reset filters" — while their cursor was still
@@ -82,6 +85,7 @@ export function FilterPanel({
                 onChange={() => onChange({ ...filters, styles: toggleIn(filters.styles, s) })}
               />
             ))}
+            {checkedStyles === 0 && <p className="hint filter-hint">Any style.</p>}
           </Group>
         )}
 
@@ -89,25 +93,20 @@ export function FilterPanel({
             group is hidden rather than rendered empty. */}
         {dimensions.length > 0 && (
           <Group label="Size">
-            {dimensions.map((d) => {
-              const checked = filters.dimensions.includes(d);
-              return (
-                <Check
-                  key={d}
-                  label={d}
-                  checked={checked}
-                  // Unticking the last size is prevented rather than tolerated. An empty
-                  // dimension set makes the backend restore this tab's defaults — it has to,
-                  // since `grid_p` and `grid_l` are the same endpoint and an unfiltered `grids`
-                  // query fills the Wide tab with portrait art. So the control would appear to
-                  // do nothing at all, which is worse than being unavailable.
-                  disabled={checked && checkedSizes === 1}
-                  onChange={() =>
-                    onChange({ ...filters, dimensions: toggleIn(filters.dimensions, d) })
-                  }
-                />
-              );
-            })}
+            {dimensions.map((d) => (
+              <Check
+                key={d}
+                label={d}
+                checked={filters.dimensions.includes(d)}
+                onChange={() =>
+                  onChange({ ...filters, dimensions: toggleIn(filters.dimensions, d) })
+                }
+              />
+            ))}
+            {/* Every box is now unticked, which `queryFor` widens to this tab's full list. The
+                note is what makes that visible — an unticked group that quietly shows everything
+                is otherwise indistinguishable from one that is broken. */}
+            {checkedSizes === 0 && <p className="hint filter-hint">Any size.</p>}
           </Group>
         )}
 
@@ -120,21 +119,26 @@ export function FilterPanel({
               onChange={() => onChange({ ...filters, mimes: toggleIn(filters.mimes, m) })}
             />
           ))}
-          {/* Unchecking the last of these is prevented rather than tolerated: `filtersToQuery`
-              omits `types` entirely when both are off, which quietly means "no filter" — the
-              opposite of what unticking both looks like it should do. */}
           <Check
             label="Animated"
             checked={filters.animated}
-            disabled={filters.animated && !filters.static}
             onChange={() => onChange({ ...filters, animated: !filters.animated })}
           />
           <Check
             label="Static"
             checked={filters.static}
-            disabled={filters.static && !filters.animated}
             onChange={() => onChange({ ...filters, static: !filters.static })}
           />
+          {/* These two used to refuse to let the last one be unticked, on the grounds that
+              `filtersToQuery` omits `types` when both are off — so "neither" quietly means "any",
+              the opposite of what it looks like. That reasoning was right and the remedy was
+              wrong: it made a ticked box unclickable, which reads as broken rather than
+              protected. Saying what the state actually does fixes the misreading without taking
+              the control away, and matches how Size and Format behave right beside it. */}
+          {checkedMimes === 0 && <p className="hint filter-hint">Any file format.</p>}
+          {!filters.animated && !filters.static && (
+            <p className="hint filter-hint">Any type — animated and static both shown.</p>
+          )}
         </Group>
 
         <Group label="Content">
@@ -196,20 +200,25 @@ function Group({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+/**
+ * No `disabled` prop, on purpose.
+ *
+ * Every box in this panel is always clickable. Greying one out to protect an invariant was the
+ * cause of the only filter bug ever reported here — the invariants are defended in `queryFor`
+ * and by the notes above, where they cost the user nothing.
+ */
 function Check({
   label,
   checked,
-  disabled,
   onChange,
 }: {
   label: string;
   checked: boolean;
-  disabled?: boolean;
   onChange: () => void;
 }) {
   return (
     <label className="toggle">
-      <input type="checkbox" checked={checked} disabled={disabled} onChange={onChange} />
+      <input type="checkbox" checked={checked} onChange={onChange} />
       {label}
     </label>
   );

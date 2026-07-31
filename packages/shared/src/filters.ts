@@ -53,20 +53,45 @@ export interface Filters {
 }
 
 /**
- * Every dimension that is on by default for *some* asset type.
+ * The union of a per-type vocabulary, in first-seen order.
  *
- * Derived from {@link DIMENSIONS} rather than written out, so adding a size cannot leave this
- * behind. Clamping this union with {@link pruneToType} reproduces each type's own default set
- * exactly — which is the property that lets one shared filter set replace five without changing
- * what any tab shows out of the box.
+ * Derived rather than written out, so adding a style, size or format cannot leave the defaults
+ * behind. Clamping a union with {@link pruneToType} reproduces each type's own list exactly —
+ * which is the property that lets one shared filter set replace five without changing what any
+ * tab shows out of the box.
  */
-const DEFAULT_DIMENSIONS: string[] = [...new Set(ASSET_TYPES.flatMap((t) => DIMENSIONS[t].default))];
+const unionOf = (per: (type: AssetType) => readonly string[]): string[] => [
+  ...new Set(ASSET_TYPES.flatMap(per)),
+];
 
+const DEFAULT_STYLES: string[] = unionOf((t) => STYLES[t]);
+const DEFAULT_MIMES: string[] = unionOf((t) => MIMES[t]);
+const DEFAULT_DIMENSIONS: string[] = unionOf((t) => DIMENSIONS[t].default);
+
+/**
+ * The starting filter set — **matching the Decky plugin's, deliberately.**
+ *
+ * Decky seeds each group from its own vocabulary (`STYLES[type].default`, `MIMES[type].default`,
+ * `DIMENSIONS[type].default`), so every style and format box starts *ticked* and unticking one is
+ * a narrowing action. `[VERIFIED-SOURCE — decky-steamgriddb src/modals/FiltersModal.tsx]` This
+ * used to start them empty, which queries identically but reads as a filter nobody has set up
+ * yet: the vocabulary was invisible until you ticked something.
+ *
+ * The tag toggles were already identical to Decky's: everything on except Adult.
+ *
+ * 🔴 One deliberate divergence remains. Decky lists 39 icon dimensions; every one of them is an
+ * HTTP 400 against the live `icons` endpoint, so {@link DIMENSIONS} carries none for that type.
+ * A verified measurement outranks parity. `[VERIFIED-BOX 2026-07-30]`
+ *
+ * Note what "all ticked" costs: a style SteamGridDB *adds* later is excluded until it is added
+ * here, where leaving the group empty would have included it. That is the same closed-vocabulary
+ * trade this project already makes in `Dimensions`, and it is Decky's behaviour too.
+ */
 export function defaultFilters(): Filters {
   return {
-    styles: [],
+    styles: [...DEFAULT_STYLES],
     dimensions: [...DEFAULT_DIMENSIONS],
-    mimes: [],
+    mimes: [...DEFAULT_MIMES],
     animated: true,
     static: true,
     adult: false,
@@ -218,7 +243,26 @@ export function pruneToType(type: AssetType, filters: Filters): Filters {
   };
 }
 
-/** The query parameters for one tab: clamp to what it offers, then translate. */
+/**
+ * The query parameters for one tab: clamp to what it offers, widen an empty size list, translate.
+ *
+ * 🔴 **No size ticked means "any size this tab can show" — it must never mean "send no
+ * `dimensions` at all".** Those look equivalent and are not: `grid_p` and `grid_l` are the same
+ * SteamGridDB endpoint told apart *only* by `dimensions`, so an unfiltered `grids` query fills
+ * the Wide Capsule tab with portrait art. Widening to this tab's own list keeps that separation
+ * while leaving the user free to clear every box.
+ *
+ * Before this, the panel simply refused to let the last size be unticked. That is the same
+ * invariant defended in the wrong place: it made a checked box unclickable, which reads as a
+ * broken control rather than a protected one.
+ *
+ * Logos and icons have an empty `all` — every dimension value is a 400 there — so they still
+ * send no `dimensions`, which is the only thing those endpoints accept.
+ */
 export function queryFor(type: AssetType, filters: Filters): QueryParams {
-  return filtersToQuery(pruneToType(type, filters));
+  const pruned = pruneToType(type, filters);
+  if (pruned.dimensions.length === 0) {
+    return filtersToQuery({ ...pruned, dimensions: [...DIMENSIONS[type].all] });
+  }
+  return filtersToQuery(pruned);
 }

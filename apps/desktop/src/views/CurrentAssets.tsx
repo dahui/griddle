@@ -4,9 +4,9 @@
  * The overview the five browsing tabs cannot give: which slots the user has customised, which
  * are still Steam's own, and which have nothing at all.
  *
- * Right-clicking a slot resets it. That deletion is **named before it happens** — the menu lists
- * the files it will remove — because this project deletes nothing from a user's Steam directory
- * without saying so first.
+ * Clicking a slot shows it larger; right-clicking resets it. That deletion is **named before it
+ * happens** — the menu lists the files it will remove — because this project deletes nothing from
+ * a user's Steam directory without saying so first.
  */
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { useCallback, useEffect, useState } from 'react';
@@ -24,6 +24,9 @@ export function CurrentAssets({ entry }: { entry: LibraryEntry }) {
   const [loadError, setLoadError] = useState<UiError | null>(null);
   const [resetError, setResetError] = useState<UiError | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
+  // The slot *type*, not the slot. A reset reloads `slots` into fresh objects, and holding one of
+  // the old ones here would leave the preview showing artwork that is no longer there.
+  const [preview, setPreview] = useState<AssetType | null>(null);
   const [busy, setBusy] = useState<AssetType | null>(null);
   const [cleared, setCleared] = useState<{ slot: string; result: Cleared } | null>(null);
 
@@ -68,41 +71,62 @@ export function CurrentAssets({ entry }: { entry: LibraryEntry }) {
   if (loadError) return <ErrorNote error={loadError} onRetry={load} />;
   if (!slots) return <Spinner label="Reading current artwork…" />;
 
+  // Resolved from the live list every render, so the preview can never outlive the slot it shows.
+  const previewSlot = slots.find((s) => s.asset_type === preview) ?? null;
+
   return (
     <>
       {resetError && <ErrorNote error={resetError} />}
       {cleared && <ClearedNote slot={cleared.slot} result={cleared.result} />}
 
-      <p className="hint">Right-click any artwork to reset it.</p>
+      <p className="hint">Click any artwork to see it larger, or right-click to reset it.</p>
 
       <ul className="slots">
-        {slots.map((slot) => (
-          <li key={slot.asset_type} className="slot">
-            {/* Not a button: this is a display of what is applied, and left-clicking it used to
-                jump to that browsing tab — which reads as the view navigating away by itself
-                when all you did was look at something. Right-click is the only action. */}
-            <div
-              className={`slot-art slot-art-${slot.asset_type}`}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                setMenu({ x: e.clientX, y: e.clientY, slot });
-              }}
-              title={`${slot.label} — right-click to reset`}
-            >
-              <ArtImage
-                sources={sourcesFor(entry, slot)}
-                alt=""
-                fallback={<span className="art-none">No artwork</span>}
-              />
-              {busy === slot.asset_type && <span className="applying">Resetting…</span>}
-            </div>
-            <span className="slot-name">{slot.label}</span>
-            <span className={`slot-state ${slot.custom_art ? 'slot-custom' : ''}`}>
-              {state(slot)}
-            </span>
-          </li>
-        ))}
+        {slots.map((slot) => {
+          const sources = sourcesFor(entry, slot);
+          return (
+            <li key={slot.asset_type} className="slot">
+              {/* A button again. It stopped being one when left-clicking jumped to that browsing
+                  tab — the view navigating away by itself when all you did was look at something.
+                  Enlarging in place is not that, and a button is what gets this to the keyboard. */}
+              <button
+                type="button"
+                className={`slot-art slot-art-${slot.asset_type}${
+                  sources.length === 0 ? ' slot-art-flat' : ''
+                }`}
+                // Nothing to enlarge when every rung of the ladder is empty. Left as a no-op
+                // rather than `disabled`, because a disabled button fires no mouse events at all
+                // in Chromium — which would take the right-click menu with it.
+                onClick={() => sources.length > 0 && setPreview(slot.asset_type)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setMenu({ x: e.clientX, y: e.clientY, slot });
+                }}
+                title={slot.label}
+              >
+                <ArtImage
+                  sources={sources}
+                  alt=""
+                  fallback={<span className="art-none">No artwork</span>}
+                />
+                {busy === slot.asset_type && <span className="applying">Resetting…</span>}
+              </button>
+              <span className="slot-name">{slot.label}</span>
+              <span className={`slot-state ${slot.custom_art ? 'slot-custom' : ''}`}>
+                {state(slot)}
+              </span>
+            </li>
+          );
+        })}
       </ul>
+
+      {previewSlot && (
+        <ArtPreview
+          slot={previewSlot}
+          sources={sourcesFor(entry, previewSlot)}
+          onClose={() => setPreview(null)}
+        />
+      )}
 
       {menu && (
         <ContextMenu x={menu.x} y={menu.y} onClose={() => setMenu(null)}>
@@ -123,6 +147,80 @@ export function CurrentAssets({ entry }: { entry: LibraryEntry }) {
         </ContextMenu>
       )}
     </>
+  );
+}
+
+/**
+ * One slot's artwork, as large as the window allows.
+ *
+ * It re-walks the same `sources` ladder rather than being handed whichever rung the tile settled
+ * on: that index is private to `ArtImage`, and a second walk lands on the same rung out of the
+ * browser cache. Artwork is shown at its own size and never scaled up — a 32-pixel icon blown up
+ * to fill the frame is a worse look at it, not a better one.
+ */
+function ArtPreview({
+  slot,
+  sources,
+  onClose,
+}: {
+  slot: AssetSlot;
+  sources: string[];
+  onClose: () => void;
+}) {
+  // Measured off the image that actually loaded rather than taken from anywhere else: what is on
+  // disk is whatever was applied, and Steam's own defaults in particular are often smaller than
+  // the slot suggests. Seeing the number is the difference between "this looks soft" and knowing
+  // there is a larger copy worth going to find.
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  const ladder = sources.join('|');
+  useEffect(() => setSize(null), [ladder]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      // The identity test, not `stopPropagation` on the child: a click that started on the picture
+      // and ended on the backdrop is a drag, not a dismissal.
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="preview" role="dialog" aria-modal="true" aria-label={slot.label}>
+        <div className={`preview-art preview-art-${slot.asset_type}`}>
+          <ArtImage
+            sources={sources}
+            alt={slot.label}
+            fallback={<span className="art-none">No artwork</span>}
+            onLoad={(e) =>
+              setSize({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })
+            }
+          />
+        </div>
+        <div className="preview-foot">
+          <span className="slot-name">{slot.label}</span>
+          {/* Zero would mean the browser has not decoded it yet, not a zero-pixel image. */}
+          {size && size.w > 0 && (
+            <span className="dims">
+              {size.w}×{size.h}
+            </span>
+          )}
+          <span className={`slot-state ${slot.custom_art ? 'slot-custom' : ''}`}>
+            {state(slot)}
+          </span>
+          <button type="button" className="ghost" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

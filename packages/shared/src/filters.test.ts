@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { ASSET_TYPES, MIMES, STYLES } from './assets';
 import {
   defaultFilters,
   filtersToQuery,
@@ -149,6 +150,35 @@ describe('defaults', () => {
     expect(shared.dimensions).toContain('1920x620');
   });
 
+  test('every style and format starts ticked, as the Decky plugin does', () => {
+    // 🔴 Parity with `decky-steamgriddb`'s FiltersModal, which seeds each group from that type's
+    // own vocabulary — so a box starts ticked and unticking it narrows. `[VERIFIED-SOURCE]`
+    //
+    // Asserted through `pruneToType` rather than against the raw union, because the union is an
+    // implementation detail: what the user sees is one tab's clamped view, and that is what has
+    // to come out fully ticked.
+    const shared = defaultFilters();
+
+    for (const type of ASSET_TYPES) {
+      expect(pruneToType(type, shared).styles).toEqual(STYLES[type]);
+      expect(pruneToType(type, shared).mimes).toEqual(MIMES[type]);
+    }
+  });
+
+  test('the union spans vocabularies no single tab has', () => {
+    // Premise for the test above: if the union were just one tab's list, the per-tab assertions
+    // could pass for the wrong reason on that tab and be untested everywhere else.
+    const shared = defaultFilters();
+    // `white_logo` is grid-only; `official` is logo/icon-only. No tab offers both.
+    expect(shared.styles).toContain('white_logo');
+    expect(shared.styles).toContain('official');
+    expect(STYLES.grid_p).not.toContain('official');
+    expect(STYLES.logo).not.toContain('white_logo');
+    // Same for formats: ICO exists only on the icon tab.
+    expect(shared.mimes).toContain('image/vnd.microsoft.icon');
+    expect(MIMES.grid_p).not.toContain('image/vnd.microsoft.icon');
+  });
+
   test('the opt-in square sizes are off by default', () => {
     // Valid for grids but they match little and are not the shape Steam renders.
     expect(defaultFilters().dimensions).not.toContain('512x512');
@@ -222,6 +252,41 @@ describe('queryFor', () => {
     // logos and icons 400 on any `dimensions` value at all.
     expect(queryFor('logo', defaultFilters()).dimensions).toBeUndefined();
     expect(queryFor('icon', defaultFilters()).dimensions).toBeUndefined();
+  });
+
+  test('no size ticked widens to the tab, and never to no filter at all', () => {
+    // 🔴 The two are not interchangeable. `grid_p` and `grid_l` are the same endpoint, so
+    // dropping `dimensions` would fill the Wide tab with portrait art rather than showing every
+    // wide size — the exact failure the clamp above exists to prevent, arrived at from the
+    // opposite direction.
+    const none: Filters = { ...base, dimensions: [] };
+
+    // Premise: the shared set really is empty, so this exercises the widening and not the clamp.
+    expect(none.dimensions).toEqual([]);
+
+    expect(queryFor('grid_l', none).dimensions).toBe('460x215,920x430,512x512,1024x1024');
+    expect(queryFor('grid_l', none).dimensions).not.toContain('600x900');
+    // Wider than the defaults, which is the point: unticking everything is how the user reaches
+    // the sizes that are valid but off by default.
+    expect(queryFor('grid_p', none).dimensions).toContain('1024x1024');
+    expect(defaultFilters().dimensions).not.toContain('1024x1024');
+  });
+
+  test('widening does not resurrect dimensions on the endpoints that reject them', () => {
+    // logo and icon have an empty `all`, so there is nothing to widen to — and a value here
+    // would be a 400 on every request rather than a wrong-looking result.
+    const none: Filters = { ...base, dimensions: [] };
+    expect(queryFor('logo', none).dimensions).toBeUndefined();
+    expect(queryFor('icon', none).dimensions).toBeUndefined();
+  });
+
+  test('a tab with nothing of its own ticked is widened, not left unfiltered', () => {
+    // The realistic shape of the shared set: sizes chosen on the Capsule tab, none of which the
+    // Wide tab can show. Pruning empties it, and the widening is what stops that becoming an
+    // unfiltered `grids` query.
+    const capsuleOnly: Filters = { ...base, dimensions: ['600x900', '660x930'] };
+    expect(pruneToType('grid_l', capsuleOnly).dimensions).toEqual([]);
+    expect(queryFor('grid_l', capsuleOnly).dimensions).toBe('460x215,920x430,512x512,1024x1024');
   });
 
   test('a style valid only for another endpoint is dropped rather than sent', () => {

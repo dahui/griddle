@@ -1,5 +1,5 @@
 /** Small shared pieces. Kept together because none of them is big enough to earn a file. */
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type SyntheticEvent } from 'react';
 import { api, asUiError, type UiError } from './api';
 
 /**
@@ -20,10 +20,13 @@ export function ArtImage({
   sources,
   alt,
   fallback,
+  onLoad,
 }: {
   sources: string[];
   alt: string;
   fallback: ReactNode;
+  /** Fires for whichever rung actually loaded — `naturalWidth`/`naturalHeight` are real there. */
+  onLoad?: (e: SyntheticEvent<HTMLImageElement>) => void;
 }) {
   const [index, setIndex] = useState(0);
   const ladder = sources.join('|');
@@ -39,6 +42,7 @@ export function ArtImage({
       src={sources[index]}
       alt={alt}
       loading="lazy"
+      onLoad={onLoad}
       onError={() => setIndex((i) => i + 1)}
     />
   );
