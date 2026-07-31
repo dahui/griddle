@@ -231,7 +231,10 @@ impl AppTypes {
         self.info.apps.get(&app.get())?.common.name.as_deref()
     }
 
-    /// sha1 of the client icon, for locating it under `appcache/librarycache`.
+    /// sha1 of the client icon — the `.ico` under `Steam\steam\games\`.
+    ///
+    /// 🔴 **Not** the librarycache icon. That is [`AppTypes::icon_sha1`], which is a different
+    /// sha1 on the same app.
     pub fn client_icon(&self, app: AppId) -> Option<&str> {
         self.info
             .apps
@@ -239,6 +242,40 @@ impl AppTypes {
             .common
             .client_icon
             .as_deref()
+            .filter(|s| !s.is_empty())
+    }
+
+    /// sha1 of the small icon at `librarycache/<appid>/<icon>.jpg`.
+    pub fn icon_sha1(&self, app: AppId) -> Option<&str> {
+        self.info
+            .apps
+            .get(&app.get())?
+            .common
+            .icon
+            .as_deref()
+            .filter(|s| !s.is_empty())
+    }
+
+    /// `common/header_image` — the store header's filename, nearly always `header.jpg`.
+    pub fn header_image(&self, app: AppId, lang: &str) -> Option<&str> {
+        self.info
+            .apps
+            .get(&app.get())?
+            .common
+            .header_image_for(lang)
+            .filter(|s| !s.is_empty())
+    }
+
+    /// A `library_assets_full` slot's path, **relative to `librarycache/<appid>/`**.
+    ///
+    /// Untrusted and possibly stale: join it only through [`crate::steam::librarycache`], which
+    /// guards the join and checks the file exists.
+    pub fn library_asset(&self, app: AppId, slot: &str, lang: &str) -> Option<&str> {
+        self.info
+            .apps
+            .get(&app.get())?
+            .common
+            .library_asset(slot, lang)
             .filter(|s| !s.is_empty())
     }
 }

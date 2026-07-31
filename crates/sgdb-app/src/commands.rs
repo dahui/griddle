@@ -23,8 +23,12 @@ use sgdb_core::appid::AppId;
 use sgdb_core::cdp::{self, Endpoint, Sentinel, SteamJs};
 use sgdb_core::grid::names::AssetType;
 use sgdb_core::grid::store::GridDir;
+use sgdb_core::settings::{LibraryScope, LibrarySort};
 use sgdb_core::sgdb::{self, ApiKey, AssetQuery, Target};
-use sgdb_core::steam::{apptype, library, process, shortcuts::Shortcuts};
+use sgdb_core::steam::{
+    LibraryCache, apptype, library, localconfig, process, shortcuts::Shortcuts,
+};
+use std::collections::BTreeMap;
 use tauri::State;
 
 type Res<T> = Result<T, UiError>;
@@ -122,6 +126,114 @@ pub async fn clear_api_key(state: State<'_, AppState>) -> Res<()> {
     Ok(())
 }
 
+// -- preferences ----------------------------------------------------------------------------
+
+/// The persisted UI state the frontend needs at mount.
+///
+/// Returned by every mutating preference command as well, so the frontend never has to guess
+/// what the store now holds — one round trip, one source of truth.
+#[derive(Debug, Serialize)]
+pub struct Prefs {
+    pub library_scope: LibraryScope,
+    pub library_sort: LibrarySort,
+    /// Keyed by [`AssetType::sgdb_name`] — `grid_p`, `grid_l`, `hero`, `logo`, `icon`.
+    ///
+    /// Only asset types the user has actually customised appear. The frontend fills the gaps
+    /// with `defaultFilters(type)`, which is where the defaults are defined and tested.
+    pub filters: BTreeMap<String, sgdb_core::settings::FilterState>,
+    pub zoom: BTreeMap<String, f32>,
+    pub game_overrides: BTreeMap<u32, u64>,
+}
+
+async fn snapshot(state: &State<'_, AppState>) -> Prefs {
+    let s = state.settings.lock().await;
+    Prefs {
+        library_scope: s.library_scope,
+        library_sort: s.library_sort,
+        filters: s.filters.clone(),
+        zoom: s.zoom.clone(),
+        game_overrides: s.game_overrides.clone(),
+    }
+}
+
+#[tauri::command]
+pub async fn prefs(state: State<'_, AppState>) -> Res<Prefs> {
+    Ok(snapshot(&state).await)
+}
+
+#[tauri::command]
+pub async fn set_library_view(
+    state: State<'_, AppState>,
+    scope: LibraryScope,
+    sort: LibrarySort,
+) -> Res<Prefs> {
+    {
+        let mut settings = state.settings.lock().await;
+        settings.library_scope = scope;
+        settings.library_sort = sort;
+        state.store.save(&settings)?;
+    }
+    Ok(snapshot(&state).await)
+}
+
+/// Store the filter set for one asset type.
+///
+/// The asset type is parsed before anything is written, so a typo cannot leave an unreachable
+/// key behind in `settings.json`.
+#[tauri::command]
+pub async fn set_filters(
+    state: State<'_, AppState>,
+    asset_type: String,
+    filters: sgdb_core::settings::FilterState,
+) -> Res<Prefs> {
+    let asset = parse_asset_type(&asset_type)?;
+    {
+        let mut settings = state.settings.lock().await;
+        let _ = settings
+            .filters
+            .insert(asset.sgdb_name().to_owned(), filters);
+        state.store.save(&settings)?;
+    }
+    Ok(snapshot(&state).await)
+}
+
+/// Forget the stored filters for one asset type, so it falls back to the defaults.
+#[tauri::command]
+pub async fn reset_filters(state: State<'_, AppState>, asset_type: String) -> Res<Prefs> {
+    let asset = parse_asset_type(&asset_type)?;
+    {
+        let mut settings = state.settings.lock().await;
+        let _ = settings.filters.remove(asset.sgdb_name());
+        state.store.save(&settings)?;
+    }
+    Ok(snapshot(&state).await)
+}
+
+/// Point a Steam appid at a specific SteamGridDB game, or clear the override.
+///
+/// `None` clears it. Without that, an override set once could never be undone from the UI, and
+/// a wrong choice would be permanent.
+#[tauri::command]
+pub async fn set_game_override(
+    state: State<'_, AppState>,
+    app_id: u32,
+    sgdb_id: Option<u64>,
+) -> Res<Prefs> {
+    {
+        let mut settings = state.settings.lock().await;
+        match sgdb_id {
+            Some(id) => {
+                let _ = settings.game_overrides.insert(app_id, id);
+            }
+            None => {
+                let _ = settings.game_overrides.remove(&app_id);
+            }
+        }
+        state.store.save(&settings)?;
+    }
+    Ok(snapshot(&state).await)
+}
+
 // -- library --------------------------------------------------------------------------------
 
 #[derive(Debug, Serialize)]
@@ -134,16 +246,37 @@ pub struct LibraryEntry {
     /// Absolute path to existing custom art for this asset type, if any. Rendered through
     /// Tauri's `asset:` protocol.
     pub current_art: Option<String>,
+    /// Absolute path to *Steam's own* art for this slot, when there is one on disk.
+    ///
+    /// The second rung of the ladder the UI walks: custom art → this → Steam's CDN → a
+    /// placeholder. Always `None` for shortcuts, which have no librarycache entry.
+    pub steam_art: Option<String>,
+    /// False for an app `localconfig.vdf` knows about that has no installed manifest.
+    pub installed: bool,
+    /// Unix seconds, absent when never played. See [`localconfig`] on the 1970 sentinel.
+    pub last_played: Option<u64>,
+    pub playtime_minutes: Option<u32>,
 }
 
-/// Installed games plus non-Steam shortcuts, with whatever custom art already exists.
+/// The library list, scoped to installed apps or to everything Steam knows about.
+///
+/// Shortcuts are never scoped away: a non-Steam shortcut is always "installed" in the only sense
+/// that matters here, and hiding them behind a toggle they have nothing to do with would be
+/// baffling.
 #[tauri::command]
-pub async fn library(state: State<'_, AppState>, asset_type: String) -> Res<Vec<LibraryEntry>> {
+pub async fn library(
+    state: State<'_, AppState>,
+    asset_type: String,
+    scope: LibraryScope,
+) -> Res<Vec<LibraryEntry>> {
     let asset = parse_asset_type(&asset_type)?;
     let ctx = state.steam()?;
     let grid = GridDir::new(ctx.install.grid_dir(ctx.account.id));
+    let steam_art = LibraryCache::new(&ctx.install, ctx.app_types.as_ref());
 
-    let mut entries = Vec::new();
+    // Keyed by appid so the "all games" pass can skip anything already installed without a
+    // linear scan, and so a duplicate appid across the two sources cannot produce two rows.
+    let mut steam_apps: BTreeMap<u32, LibraryEntry> = BTreeMap::new();
 
     // Installed Steam apps. One corrupt manifest never empties the list.
     match library::installed_apps(&ctx.install) {
@@ -152,21 +285,76 @@ pub async fn library(state: State<'_, AppState>, asset_type: String) -> Res<Vec<
                 if !apptype::include_in_library(ctx.app_types.as_ref(), app.app_id) {
                     continue;
                 }
-                entries.push(LibraryEntry {
-                    app_id: app.app_id.get(),
-                    name: app.name.clone(),
-                    kind: "steam",
-                    app_type: ctx
-                        .app_types
-                        .as_ref()
-                        .and_then(|t| t.app_type(app.app_id))
-                        .map(|t| t.label().to_owned()),
-                    current_art: first_existing(&grid, app.app_id, asset),
-                });
+                let _ = steam_apps.insert(
+                    app.app_id.get(),
+                    LibraryEntry {
+                        app_id: app.app_id.get(),
+                        // The manifest name, not appinfo's: it is what the user installed, and
+                        // it is present even for the apps appinfo has never heard of.
+                        name: app.name.clone(),
+                        kind: "steam",
+                        app_type: ctx
+                            .app_types
+                            .as_ref()
+                            .and_then(|t| t.app_type(app.app_id))
+                            .map(|t| t.label().to_owned()),
+                        current_art: first_existing(&grid, app.app_id, asset),
+                        steam_art: path_string(steam_art.resolve(app.app_id, asset)),
+                        installed: true,
+                        last_played: None,
+                        playtime_minutes: None,
+                    },
+                );
             }
         }
         Err(e) => tracing::warn!(error = %e, "could not enumerate installed apps"),
     }
+
+    // `localconfig.vdf` serves two purposes: it is the "all games" source, and it carries the
+    // playtimes for installed games too, so it is read either way.
+    let known = localconfig::known_apps_or_empty(&ctx.install, ctx.account.id);
+    for record in &known {
+        let id = record.app_id;
+        if scope == LibraryScope::All
+            && !steam_apps.contains_key(&id.get())
+            && apptype::include_in_library(ctx.app_types.as_ref(), id)
+        {
+            let _ = steam_apps.insert(
+                id.get(),
+                LibraryEntry {
+                    app_id: id.get(),
+                    // 29 of these have no appinfo entry and no cached art on this box — they
+                    // are delisted. Shown anyway with a placeholder name, because the appid is
+                    // still a valid SteamGridDB key and the project's failure direction is that
+                    // an unknown app gets shown. A missing game is a bug report; an odd-looking
+                    // row is a cosmetic annoyance.
+                    name: ctx
+                        .app_types
+                        .as_ref()
+                        .and_then(|t| t.name(id))
+                        .map_or_else(|| format!("Unknown app {}", id.get()), str::to_owned),
+                    kind: "steam",
+                    app_type: ctx
+                        .app_types
+                        .as_ref()
+                        .and_then(|t| t.app_type(id))
+                        .map(|t| t.label().to_owned()),
+                    current_art: first_existing(&grid, id, asset),
+                    steam_art: path_string(steam_art.resolve(id, asset)),
+                    installed: false,
+                    last_played: None,
+                    playtime_minutes: None,
+                },
+            );
+        }
+        // Merge playtimes onto whichever group the app landed in.
+        if let Some(entry) = steam_apps.get_mut(&id.get()) {
+            entry.last_played = record.last_played;
+            entry.playtime_minutes = record.playtime_minutes;
+        }
+    }
+
+    let mut entries: Vec<LibraryEntry> = steam_apps.into_values().collect();
 
     // Non-Steam shortcuts. Read-only here; the file is only written for icons.
     match Shortcuts::load_or_empty(ctx.install.shortcuts_vdf(ctx.account.id)) {
@@ -179,15 +367,47 @@ pub async fn library(state: State<'_, AppState>, asset_type: String) -> Res<Vec<
                     kind: "shortcut",
                     app_type: None,
                     current_art: first_existing(&grid, id, asset),
+                    // No librarycache entry exists for a non-Steam appid, so do not stat for one.
+                    steam_art: None,
+                    installed: true,
+                    last_played: None,
+                    playtime_minutes: None,
                 });
             }
         }
         Err(e) => tracing::warn!(error = %e, "could not read shortcuts.vdf"),
     }
 
-    // Case-insensitive, so "Portal" and "portal" sit together rather than in separate blocks.
-    entries.sort_by_key(|e| e.name.to_lowercase());
+    let sort = { state.settings.lock().await.library_sort };
+    sort_entries(&mut entries, sort);
     Ok(entries)
+}
+
+/// Order the list, always breaking ties by name.
+///
+/// The name tiebreak is what keeps the order stable: hundreds of apps share a `None` playtime,
+/// and without it they would shuffle between loads for no visible reason.
+fn sort_entries(entries: &mut [LibraryEntry], sort: LibrarySort) {
+    // Case-insensitive, so "Portal" and "portal" sit together rather than in separate blocks.
+    entries.sort_by(|a, b| match sort {
+        LibrarySort::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+        // Descending, and never-played sorts last rather than first — `None` would otherwise
+        // win a plain descending comparison on `Option`.
+        LibrarySort::RecentlyPlayed => b
+            .last_played
+            .unwrap_or(0)
+            .cmp(&a.last_played.unwrap_or(0))
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())),
+        LibrarySort::MostPlayed => b
+            .playtime_minutes
+            .unwrap_or(0)
+            .cmp(&a.playtime_minutes.unwrap_or(0))
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())),
+    });
+}
+
+fn path_string(path: Option<std::path::PathBuf>) -> Option<String> {
+    path.map(|p| p.display().to_string())
 }
 
 fn first_existing(grid: &GridDir, app: AppId, asset: AssetType) -> Option<String> {
@@ -206,13 +426,17 @@ pub struct SearchResult {
     pub has_more: bool,
 }
 
-/// One page of artwork for a game, filtered to the asset type's dimensions.
+/// One page of artwork for a game.
+///
+/// `filters` is the output of `filtersToQuery()` in `packages/shared/src/filters.ts`. It is
+/// optional so the tab's defaults still apply before the user has touched anything.
 #[tauri::command]
 pub async fn search_assets(
     state: State<'_, AppState>,
     app_id: u32,
     asset_type: String,
     page: u32,
+    filters: Option<sgdb::FilterParams>,
 ) -> Res<SearchResult> {
     let asset = parse_asset_type(&asset_type)?;
     let Some((kind, base)) = AssetQuery::for_asset_type(asset) else {
@@ -221,6 +445,23 @@ pub async fn search_assets(
             format!("{asset} has no SteamGridDB source"),
         ));
     };
+
+    let mut query = match &filters {
+        Some(params) => AssetQuery::from_params(kind, params).map_err(|e| {
+            UiError::new(Kind::Unexpected, e.to_string())
+                .with_action("Reset the filters for this tab.")
+        })?,
+        None => base.clone(),
+    };
+
+    // 🔴 Restore the tab's dimensions when the filter set carries none.
+    //
+    // Both grid slots use the *same* endpoint and are told apart only by `dimensions`. Querying
+    // `grids` with none for the Header tab fills it with portrait art, which then gets written
+    // into the wide slot — it applies, and it looks wrong, which is worse than failing.
+    if query.dimensions.is_empty() {
+        query.dimensions = base.dimensions;
+    }
 
     let guard = state.sgdb.lock().await;
     let client = guard.as_ref().ok_or_else(UiError::no_api_key)?;
@@ -234,7 +475,7 @@ pub async fn search_assets(
         }
     };
 
-    let query = base.page(page).limit(50);
+    let query = query.page(page).limit(sgdb::PAGE_LIMIT);
     let result = client.assets(kind, target, &query).await?;
 
     Ok(SearchResult {
@@ -243,6 +484,80 @@ pub async fn search_assets(
         has_more: result.has_more(),
         assets: result.assets,
     })
+}
+
+// -- which SteamGridDB game --------------------------------------------------------------
+
+/// A SteamGridDB game, for the "wrong game?" picker.
+#[derive(Debug, Serialize)]
+pub struct GameMatch {
+    /// SteamGridDB's own id — **not** a Steam appid.
+    pub id: u64,
+    pub name: String,
+    pub verified: bool,
+    pub types: Vec<String>,
+}
+
+impl From<sgdb::Game> for GameMatch {
+    fn from(g: sgdb::Game) -> Self {
+        GameMatch {
+            id: g.id,
+            name: g.name,
+            verified: g.verified,
+            types: g.types,
+        }
+    }
+}
+
+/// Search SteamGridDB by name, for when the automatic Steam-appid match is wrong or absent.
+///
+/// The request is made entirely in Rust; only results cross the boundary. The API key stays in
+/// `sgdb::client` — it cannot be serialised, so this is enforced by the compiler rather than by
+/// remembering.
+#[tauri::command]
+pub async fn search_games(state: State<'_, AppState>, term: String) -> Res<Vec<GameMatch>> {
+    let guard = state.sgdb.lock().await;
+    let client = guard.as_ref().ok_or_else(UiError::no_api_key)?;
+    // An empty term short-circuits inside the client without a request.
+    Ok(client
+        .search(&term)
+        .await?
+        .into_iter()
+        .map(GameMatch::from)
+        .collect())
+}
+
+/// Which SteamGridDB game this appid currently resolves to: the manual override if one is set,
+/// otherwise the automatic match. `None` means SteamGridDB has no entry for it.
+#[tauri::command]
+pub async fn current_game_match(state: State<'_, AppState>, app_id: u32) -> Res<Option<GameMatch>> {
+    let over = {
+        state
+            .settings
+            .lock()
+            .await
+            .game_overrides
+            .get(&app_id)
+            .copied()
+    };
+
+    let guard = state.sgdb.lock().await;
+    let client = guard.as_ref().ok_or_else(UiError::no_api_key)?;
+
+    match over {
+        // An override names a SteamGridDB id directly, and there is no by-id endpoint in use
+        // here — report what we know rather than pretending to have resolved a name.
+        Some(id) => Ok(Some(GameMatch {
+            id,
+            name: format!("SteamGridDB game #{id}"),
+            verified: false,
+            types: Vec::new(),
+        })),
+        None => Ok(client
+            .game_by_steam_appid(AppId::new(app_id))
+            .await?
+            .map(GameMatch::from)),
+    }
 }
 
 // -- applying -------------------------------------------------------------------------------
@@ -500,6 +815,136 @@ fn parse_asset_type(s: &str) -> Result<AssetType, UiError> {
 #[allow(clippy::unwrap_used, reason = "test assertions are allowed to panic")]
 mod tests {
     use super::*;
+
+    /// The dimension-restoring rule from `search_assets`, extracted so it can be tested without
+    /// a Tauri `State` or a network call. Kept next to its caller so the two cannot drift.
+    fn effective_dimensions(
+        asset: AssetType,
+        filters: Option<&sgdb::FilterParams>,
+    ) -> Vec<sgdb_core::sgdb::Dimensions> {
+        let (kind, base) = AssetQuery::for_asset_type(asset).unwrap();
+        let mut query = match filters {
+            Some(p) => AssetQuery::from_params(kind, p).unwrap(),
+            None => base.clone(),
+        };
+        if query.dimensions.is_empty() {
+            query.dimensions = base.dimensions;
+        }
+        query.dimensions
+    }
+
+    #[test]
+    fn a_filter_set_with_no_dimensions_keeps_the_tabs_own_dimensions() {
+        use sgdb_core::sgdb::Dimensions;
+
+        // 🔴 The most dangerous line in the filter path. Capsule and Header are the *same*
+        // endpoint, told apart only by `dimensions`. Letting an empty filter set through would
+        // fill the Header tab with portrait art, which then applies to the wide slot — it works,
+        // and it looks wrong, which is worse than failing.
+        let empty = sgdb::FilterParams::default();
+
+        // Premise: the filter set really does carry no dimensions, so this exercises the guard.
+        assert!(empty.dimensions.is_none());
+
+        assert_eq!(
+            effective_dimensions(AssetType::Header, Some(&empty)),
+            Dimensions::WIDE,
+        );
+        assert_eq!(
+            effective_dimensions(AssetType::Capsule, Some(&empty)),
+            Dimensions::PORTRAIT,
+        );
+
+        // The control: an explicit choice is honoured rather than overwritten, or the guard
+        // would silently make the size filter do nothing at all.
+        let chosen = sgdb::FilterParams {
+            dimensions: Some("920x430".to_owned()),
+            ..Default::default()
+        };
+        assert_eq!(
+            effective_dimensions(AssetType::Header, Some(&chosen)),
+            vec![Dimensions::D920x430],
+        );
+    }
+
+    #[test]
+    fn the_library_sort_is_stable_and_never_played_sorts_last() {
+        fn entry(name: &str, last_played: Option<u64>, minutes: Option<u32>) -> LibraryEntry {
+            LibraryEntry {
+                app_id: 1,
+                name: name.to_owned(),
+                kind: "steam",
+                app_type: None,
+                current_art: None,
+                steam_art: None,
+                installed: true,
+                last_played,
+                playtime_minutes: minutes,
+            }
+        }
+
+        let mut entries = vec![
+            entry("Zeta", Some(100), Some(5)),
+            entry("alpha", None, None),
+            entry("Beta", Some(900), Some(1)),
+        ];
+
+        sort_entries(&mut entries, LibrarySort::Name);
+        let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, ["alpha", "Beta", "Zeta"], "case-insensitive by name");
+
+        sort_entries(&mut entries, LibrarySort::RecentlyPlayed);
+        let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
+        // `None` must sort last. A naive descending sort on Option<u64> puts None first, which
+        // would fill the top of "recently played" with games never launched.
+        assert_eq!(names, ["Beta", "Zeta", "alpha"]);
+
+        sort_entries(&mut entries, LibrarySort::MostPlayed);
+        let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, ["Zeta", "Beta", "alpha"]);
+    }
+
+    #[test]
+    fn every_entry_with_the_same_key_sorts_deterministically() {
+        // Hundreds of apps share a `None` playtime. Without the name tiebreak their order would
+        // depend on the input order and shuffle between loads for no visible reason.
+        let make = || {
+            vec![
+                LibraryEntry {
+                    app_id: 2,
+                    name: "Bravo".to_owned(),
+                    kind: "steam",
+                    app_type: None,
+                    current_art: None,
+                    steam_art: None,
+                    installed: true,
+                    last_played: None,
+                    playtime_minutes: None,
+                },
+                LibraryEntry {
+                    app_id: 1,
+                    name: "Alpha".to_owned(),
+                    kind: "steam",
+                    app_type: None,
+                    current_art: None,
+                    steam_art: None,
+                    installed: false,
+                    last_played: None,
+                    playtime_minutes: None,
+                },
+            ]
+        };
+
+        let mut a = make();
+        let mut b = make();
+        b.reverse();
+        sort_entries(&mut a, LibrarySort::RecentlyPlayed);
+        sort_entries(&mut b, LibrarySort::RecentlyPlayed);
+
+        let names = |v: &[LibraryEntry]| v.iter().map(|e| e.name.clone()).collect::<Vec<_>>();
+        assert_eq!(names(&a), names(&b));
+        assert_eq!(names(&a), ["Alpha", "Bravo"]);
+    }
 
     #[test]
     fn asset_type_names_match_the_shared_vocabulary() {

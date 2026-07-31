@@ -114,6 +114,49 @@ fn main() {
         Err(e) => eprintln!("  {e}"),
     }
 
+    // The unit tests build fixtures for the shapes we thought of. This measures coverage across
+    // every appid Steam has actually cached, which is the only way to tell "the resolver works"
+    // from "the resolver works on the two apps I picked".
+    println!("\n== librarycache (Steam's own default art) ==");
+    {
+        use sgdb_core::steam::LibraryCache;
+        let cache = LibraryCache::new(&install, types.as_ref());
+        let dir = install.library_cache_dir();
+        println!("  {}", dir.display());
+
+        let ids: Vec<u32> = std::fs::read_dir(&dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|e| e.file_name().to_str()?.parse::<u32>().ok())
+            .collect();
+        println!("  {} cached appid directories", ids.len());
+
+        for asset in AssetType::EDITABLE {
+            let mut hits = 0usize;
+            let mut nested = 0usize;
+            for id in &ids {
+                if let Some(p) = cache.resolve(sgdb_core::appid::AppId::new(*id), asset) {
+                    hits += 1;
+                    // A hit whose parent is not the appid dir came through the sha1 layout,
+                    // which only the appinfo index can reach.
+                    if p.parent().and_then(|d| d.file_name())
+                        != Some(std::ffi::OsStr::new(&id.to_string()))
+                    {
+                        nested += 1;
+                    }
+                }
+            }
+            println!(
+                "    {:<13} {:>5} / {} resolved  ({} via a sha1 subdirectory)",
+                asset.label(),
+                hits,
+                ids.len(),
+                nested
+            );
+        }
+    }
+
     println!("\n== steam process ==");
     let procs = sgdb_core::steam::process::running();
     if procs.is_empty() {

@@ -1,6 +1,48 @@
 /** Small shared pieces. Kept together because none of them is big enough to earn a file. */
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { UiError } from './api';
+
+/**
+ * An image with fallbacks, tried in order until one loads.
+ *
+ * Artwork comes from up to three places — the user's custom art, Steam's local cache, and
+ * Steam's CDN — and which of them exist varies per game. Rather than ask the backend to decide,
+ * the ladder is walked in the browser, where a failed load is already observable.
+ *
+ * Two details make this correct rather than merely plausible:
+ *
+ * - The `index >= sources.length` terminator. Without an explicit end, the last `onError`
+ *   re-renders the same failing `src` and the browser retries it forever.
+ * - `key={sources[index]}`. React reuses a DOM node when only `src` changes, and a node that has
+ *   already errored can keep its error state, so the next rung never gets a real attempt.
+ */
+export function ArtImage({
+  sources,
+  alt,
+  fallback,
+}: {
+  sources: string[];
+  alt: string;
+  fallback: ReactNode;
+}) {
+  const [index, setIndex] = useState(0);
+  const ladder = sources.join('|');
+
+  // A different game (or asset type) means a different ladder, which has to restart from the
+  // top — otherwise a card scrolled into a position that previously failed stays blank.
+  useEffect(() => setIndex(0), [ladder]);
+
+  if (index >= sources.length) return <>{fallback}</>;
+  return (
+    <img
+      key={sources[index]}
+      src={sources[index]}
+      alt={alt}
+      loading="lazy"
+      onError={() => setIndex((i) => i + 1)}
+    />
+  );
+}
 
 /**
  * An error the user can act on.

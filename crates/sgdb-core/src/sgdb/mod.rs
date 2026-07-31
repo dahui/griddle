@@ -17,4 +17,7 @@ pub mod query;
 pub use client::{Client, Config, Target};
 pub use key::ApiKey;
 pub use model::{Asset, AssetPage, Author, Game};
-pub use query::{AssetKind, AssetQuery, Dimensions, Tri};
+pub use query::{
+    ASSET_TYPE_FILTERS, AssetKind, AssetQuery, Dimensions, FilterParams, PAGE_LIMIT, QueryError,
+    Tri,
+};

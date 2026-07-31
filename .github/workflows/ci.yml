@@ -67,6 +67,12 @@ jobs:
       - name: Build the app shell (Windows only)
         if: matrix.os == 'windows-latest'
         run: cargo clippy -p sgdb-app --all-targets -- -D warnings
+      # `clippy --all-targets` compiles the tests but never runs them, so sgdb-app's tests had
+      # never executed anywhere -- not here, not in the local gate. Linting a test is not the
+      # same as running it.
+      - name: Test the app shell (Windows only)
+        if: matrix.os == 'windows-latest'
+        run: cargo test -p sgdb-app
 
   js:
     name: typescript

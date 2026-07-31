@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import { defaultFilters, filtersToQuery, isDefault, pruneToType, type Filters } from './filters';
+import {
+  defaultFilters,
+  filtersToQuery,
+  fromStored,
+  isDefault,
+  pruneToType,
+  toStored,
+  type Filters,
+} from './filters';
 
 const base: Filters = {
   styles: [],
@@ -164,5 +172,45 @@ describe('pruneToType', () => {
     const pruned = pruneToType('logo', { ...base, adult: true, untagged: false });
     expect(pruned.adult).toBe(true);
     expect(pruned.untagged).toBe(false);
+  });
+});
+
+describe('stored <-> working filter conversion', () => {
+  test('an absent stored entry yields the defaults for that type', () => {
+    // `undefined` is the ordinary case: the user has never touched this tab. Rust deliberately
+    // stores nothing for it, so the defaults have one implementation and it is this one.
+    expect(fromStored('grid_p', undefined)).toEqual(defaultFilters('grid_p'));
+    expect(fromStored('logo', undefined)).toEqual(defaultFilters('logo'));
+  });
+
+  test('a stored entry round-trips', () => {
+    const filters: Filters = {
+      ...base,
+      styles: ['alternate'],
+      dimensions: ['600x900'],
+      mimes: ['image/png'],
+      adult: true,
+      untagged: false,
+    };
+    expect(fromStored('grid_p', toStored(filters))).toEqual(filters);
+  });
+
+  test('toStored drops gameIdOverride so Reset Filters does not stick on', () => {
+    // The subtle one. `gameIdOverride` is per-game and lives in Settings.game_overrides; if it
+    // round-tripped through the per-tab filter state, `isDefault` would be false forever for any
+    // game with an override and "Reset Filters" would never go away.
+    const withOverride: Filters = { ...defaultFilters('grid_p'), gameIdOverride: 17830 };
+    expect(isDefault('grid_p', withOverride)).toBe(false);
+
+    const restored = fromStored('grid_p', toStored(withOverride));
+    expect(restored.gameIdOverride).toBeUndefined();
+    expect(isDefault('grid_p', restored)).toBe(true);
+  });
+
+  test('a stored dimension the type no longer offers is dropped', () => {
+    // pruneToType runs on the way back in, so a value left over from an older build (or from a
+    // different tab) cannot reach the API and 400 it.
+    const stored = { ...toStored(defaultFilters('hero')), dimensions: ['600x900', '1920x620'] };
+    expect(fromStored('hero', stored).dimensions).toEqual(['1920x620']);
   });
 });

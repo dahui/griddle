@@ -1,8 +1,41 @@
 //! `appcache/appinfo.vdf` — Steam's metadata cache for every app it knows about.
 //!
-//! We read exactly three fields per app, out of `common`: `type`, `name` and `clienticon`.
-//! `type` is what distinguishes a game from a redistributable, a soundtrack or a dedicated
-//! server — the difference between a library list and a library list with junk in it.
+//! We read a handful of fields per app, all out of `common`: `type`, `name`, `clienticon`,
+//! `icon`, `header_image` and `library_assets_full`. `type` is what distinguishes a game from a
+//! redistributable, a soundtrack or a dedicated server — the difference between a library list
+//! and a library list with junk in it.
+//!
+//! # 🔴 `library_assets_full` is the index into `librarycache`, and filenames are not
+//!
+//! `common/library_assets_full/<slot>/image/<lang>` holds the path **relative to
+//! `appcache/librarycache/<appid>/`**, including a `<sha1>/` directory component when there is
+//! one. `[VERIFIED-BOX 2026-07-30]`
+//!
+//! ```text
+//! 620      library_capsule -> "library_600x900.jpg"
+//! 1030300  library_capsule -> "93637c34351160eaa7d7ff0cce69cb4312abb819/library_capsule.jpg"
+//! 1091500  library_capsule -> { english: "...", schinese: ".../library_capsule_schinese.jpg" }
+//! ```
+//!
+//! The same slot is `library_600x900.jpg` for one app and `library_capsule.jpg` for another, so
+//! **matching on the basename is not a durable predicate** — it works on whichever app you
+//! happened to test and silently misses the rest. Read the path from here instead.
+//!
+//! Corroborated structurally: `library_assets_full` occurs exactly **once** in the file (it is a
+//! string-table *key*) while `library_capsule` occurs **305×** (those are inline path *values*).
+//!
+//! Two consequences for anyone consuming this: the paths can run **ahead of disk** (Steam
+//! downloads the cache lazily — 24-32 of them per slot had no file on this box), so every path
+//! must be existence-checked; and the value is attacker-adjacent input read out of a 6 MB binary
+//! we do not control, so joining it onto a directory needs an escape guard. Both live in
+//! [`crate::steam::librarycache`].
+//!
+//! # 🔴 `icon` and `clienticon` are different fields
+//!
+//! `common/icon` is the sha1 of the small game icon, and the file is
+//! `librarycache/<appid>/<icon>.jpg` — 628 of 630 matched on this box. `common/clienticon` is a
+//! *different* sha1 (1030300: `b4a999c1…` vs `28f5a413…`) naming a `.ico` under
+//! `Steam\steam\games\`. Conflating them yields a path that does not exist.
 //!
 //! # The format, measured on this box `[VERIFIED-BOX 2026-07-30]`
 //!
@@ -56,7 +89,10 @@
 //! emptying the library. An unknown magic yields [`Error::UnsupportedVersion`] so the caller
 //! can degrade to the blocklist rather than showing an empty library.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+
+/// The language Steam falls back to, and the one nearly every asset is keyed by.
+pub const DEFAULT_LANGUAGE: &str = "english";
 
 /// v29 — string table, and `sha1_data` present. The version on this machine.
 pub const MAGIC_V29: u32 = 0x0756_4429;
@@ -144,14 +180,54 @@ impl Version {
     }
 }
 
-/// The three `common` fields we care about. Everything else in the blob is skipped.
+/// The `common` fields we care about. Everything else in the blob is skipped.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Common {
     /// `Game`, `Tool`, `Application`, `Demo`, `DLC`, `Music`, `Config`, …
     pub app_type: Option<String>,
     pub name: Option<String>,
-    /// sha1 of the client icon, used to find it under `appcache/librarycache`.
+    /// `common/clienticon` — sha1 of the `.ico` under `Steam\steam\games\`.
+    ///
+    /// **Not** the librarycache icon: see [`Common::icon`], which is a different sha1 on the
+    /// same app.
     pub client_icon: Option<String>,
+    /// `common/icon` — sha1 of the small icon at `librarycache/<appid>/<icon>.jpg`.
+    pub icon: Option<String>,
+    /// `common/header_image`, language → filename (almost always `header.jpg`).
+    pub header_image: BTreeMap<String, String>,
+    /// `common/library_assets_full/<slot>/image`, slot → language → path **relative to
+    /// `librarycache/<appid>/`**, which may contain a `<sha1>/` component.
+    ///
+    /// Slots seen on this box: `library_capsule`, `library_hero`, `library_hero_blur`,
+    /// `library_logo`, `library_header`. `image2x` is deliberately not captured — none of those
+    /// files exist on disk here.
+    pub library_assets: BTreeMap<String, BTreeMap<String, String>>,
+}
+
+impl Common {
+    /// `common/header_image` for a language, falling back to English and then to any entry.
+    pub fn header_image_for(&self, lang: &str) -> Option<&str> {
+        pick(&self.header_image, lang)
+    }
+
+    /// A `library_assets_full` slot's path for a language, with the same fallback.
+    ///
+    /// The result is *relative* and untrusted — join it only through
+    /// [`crate::steam::librarycache`], which guards against escaping the app directory.
+    pub fn library_asset(&self, slot: &str, lang: &str) -> Option<&str> {
+        pick(self.library_assets.get(slot)?, lang)
+    }
+}
+
+/// Language lookup: exact, then English, then whatever exists.
+///
+/// The last step matters — an app localized only into Simplified Chinese still has perfectly
+/// good artwork, and returning nothing for it would show a blank tile instead.
+fn pick<'m>(map: &'m BTreeMap<String, String>, lang: &str) -> Option<&'m str> {
+    map.get(&lang.to_ascii_lowercase())
+        .or_else(|| map.get(DEFAULT_LANGUAGE))
+        .or_else(|| map.values().next())
+        .map(String::as_str)
 }
 
 /// One app's entry.
@@ -297,7 +373,8 @@ fn parse_entry<'a>(
         Err(_) => {}
         Ok(T_MAP) => {
             let _root_key = read_key(&mut c, keys)?;
-            read_map(&mut c, keys, 0, false, &mut common)?;
+            let mut path: Vec<&[u8]> = Vec::new();
+            read_map(&mut c, keys, 0, &mut path, &mut common)?;
         }
         Ok(other) => {
             return Err(Error::UnknownMarker {
@@ -317,13 +394,16 @@ fn parse_entry<'a>(
 
 /// Read a map's entries up to its `0x08`.
 ///
-/// `capturing` is true only while we are directly inside `common`, so a nested map in there
-/// (`name_localized`, `associations`) cannot overwrite the fields we want with its own.
+/// `path` is the chain of map keys descended into so far, relative to the entry's root map, and
+/// it is what [`capture`] dispatches on. Matching the *whole* path rather than a "are we inside
+/// `common`" flag is what keeps a nested map (`name_localized`, `associations`) from
+/// overwriting the fields we want — that property now holds by construction rather than by a
+/// flag someone has to remember to clear.
 fn read_map<'a>(
     c: &mut Cursor<'a>,
     keys: &Keys<'a>,
     depth: usize,
-    capturing: bool,
+    path: &mut Vec<&'a [u8]>,
     out: &mut Common,
 ) -> Result<(), Error> {
     if depth > MAX_DEPTH {
@@ -339,14 +419,16 @@ fn read_map<'a>(
 
         match marker {
             T_MAP => {
-                let descend_into_common = !capturing && key.eq_ignore_ascii_case(b"common");
-                read_map(c, keys, depth + 1, descend_into_common, out)?;
+                // Push and pop around the recursion, propagating the error *after* the pop, so
+                // the stack cannot desync on a truncated blob.
+                path.push(key);
+                let descended = read_map(c, keys, depth + 1, path, out);
+                let _ = path.pop();
+                descended?;
             }
             T_STRING => {
                 let value = c.cstring()?;
-                if capturing {
-                    capture(key, value, out);
-                }
+                capture(path, key, value, out);
             }
             // Everything else is skipped by width. We never need these values, and decoding
             // them would only add ways to be wrong.
@@ -369,14 +451,56 @@ fn read_map<'a>(
     }
 }
 
-fn capture(key: &[u8], value: &[u8], out: &mut Common) {
+/// Store a string value if its full key path is one we want.
+///
+/// Dispatching on the path is what makes this safe: `common/name` and
+/// `common/name_localized/english` are different paths, so the localized map cannot clobber the
+/// real name no matter what order the file happens to list them in.
+fn capture(path: &[&[u8]], key: &[u8], value: &[u8], out: &mut Common) {
+    // Everything we want lives under `common`, so leave early for the great majority of the
+    // blob rather than comparing key names inside `config`, `extended`, `depots` and the rest.
+    let Some((root, rest)) = path.split_first() else {
+        return;
+    };
+    if !root.eq_ignore_ascii_case(b"common") {
+        return;
+    }
+
     let text = || String::from_utf8_lossy(value).into_owned();
-    if key.eq_ignore_ascii_case(b"type") {
-        out.app_type = Some(text());
-    } else if key.eq_ignore_ascii_case(b"name") {
-        out.name = Some(text());
-    } else if key.eq_ignore_ascii_case(b"clienticon") {
-        out.client_icon = Some(text());
+    let lang = || String::from_utf8_lossy(key).to_ascii_lowercase();
+
+    match rest {
+        // common/<key>
+        [] => {
+            if key.eq_ignore_ascii_case(b"type") {
+                out.app_type = Some(text());
+            } else if key.eq_ignore_ascii_case(b"name") {
+                out.name = Some(text());
+            } else if key.eq_ignore_ascii_case(b"clienticon") {
+                out.client_icon = Some(text());
+            } else if key.eq_ignore_ascii_case(b"icon") {
+                out.icon = Some(text());
+            }
+        }
+        // common/header_image/<lang>
+        [section] if section.eq_ignore_ascii_case(b"header_image") => {
+            let _ = out.header_image.insert(lang(), text());
+        }
+        // common/library_assets_full/<slot>/image/<lang>
+        //
+        // The `image` guard is also what excludes `image2x`: those files are on no disk here,
+        // so capturing them would only produce paths that never resolve.
+        [section, slot, leaf]
+            if section.eq_ignore_ascii_case(b"library_assets_full")
+                && leaf.eq_ignore_ascii_case(b"image") =>
+        {
+            let _ = out
+                .library_assets
+                .entry(String::from_utf8_lossy(slot).to_ascii_lowercase())
+                .or_default()
+                .insert(lang(), text());
+        }
+        _ => {}
     }
 }
 
@@ -502,6 +626,109 @@ impl<'a> Cursor<'a> {
 #[allow(clippy::unwrap_used, reason = "test assertions are allowed to panic")]
 mod tests {
     use super::*;
+
+    /// A KV tree, for fixtures whose shape is the point of the test.
+    enum Node<'a> {
+        Str(&'a str, &'a str),
+        Map(&'a str, Vec<Node<'a>>),
+    }
+
+    /// Build a one-app v29 file from a declarative `common` tree.
+    ///
+    /// The string table is derived from the keys actually used, so a test can nest as deeply as
+    /// it likes without hand-maintaining indices — which is what made the existing fixtures too
+    /// laborious to extend, and is why the deeper paths went untested.
+    fn build_tree(app_id: u32, common: Vec<Node<'_>>) -> Vec<u8> {
+        fn collect<'a>(nodes: &[Node<'a>], into: &mut Vec<&'a str>) {
+            for n in nodes {
+                match n {
+                    Node::Str(k, _) => into.push(k),
+                    Node::Map(k, kids) => {
+                        into.push(k);
+                        collect(kids, into);
+                    }
+                }
+            }
+        }
+
+        let mut strings: Vec<&str> = vec!["appinfo", "common"];
+        collect(&common, &mut strings);
+        strings.dedup();
+
+        let idx = |s: &str| {
+            strings
+                .iter()
+                .position(|x| *x == s)
+                .map(|i| i as u32)
+                .unwrap_or(0)
+        };
+
+        fn emit(nodes: &[Node<'_>], out: &mut Vec<u8>, idx: &dyn Fn(&str) -> u32) {
+            for n in nodes {
+                match n {
+                    Node::Str(k, v) => {
+                        out.push(T_STRING);
+                        out.extend(idx(k).to_le_bytes());
+                        out.extend(v.as_bytes());
+                        out.push(0);
+                    }
+                    Node::Map(k, kids) => {
+                        out.push(T_MAP);
+                        out.extend(idx(k).to_le_bytes());
+                        emit(kids, out, idx);
+                        out.push(T_END);
+                    }
+                }
+            }
+        }
+
+        let mut blob = Vec::new();
+        blob.push(T_MAP);
+        blob.extend(idx("appinfo").to_le_bytes());
+        blob.push(T_MAP);
+        blob.extend(idx("common").to_le_bytes());
+        emit(&common, &mut blob, &idx);
+        blob.push(T_END); // common
+        blob.push(T_END); // appinfo
+
+        let mut payload = Vec::new();
+        payload.extend(1u32.to_le_bytes());
+        payload.extend(0u32.to_le_bytes());
+        payload.extend(0u64.to_le_bytes());
+        payload.extend([0u8; 20]);
+        payload.extend(0u32.to_le_bytes());
+        payload.extend([0u8; 20]);
+        payload.extend(&blob);
+
+        let mut body = Vec::new();
+        body.extend(app_id.to_le_bytes());
+        body.extend((payload.len() as u32).to_le_bytes());
+        body.extend(&payload);
+        body.extend(0u32.to_le_bytes());
+
+        let mut table = Vec::new();
+        table.extend((strings.len() as u32).to_le_bytes());
+        for s in &strings {
+            table.extend(s.as_bytes());
+            table.push(0);
+        }
+
+        let mut data = Vec::new();
+        data.extend(MAGIC_V29.to_le_bytes());
+        data.extend(1u32.to_le_bytes());
+        data.extend(((4 + 4 + 8 + body.len()) as i64).to_le_bytes());
+        data.extend(&body);
+        data.extend(&table);
+        data
+    }
+
+    /// `library_assets_full/<slot>/image/english = <path>`, the real nesting.
+    fn asset_slot<'a>(slot: &'a str, path: &'a str) -> Node<'a> {
+        Node::Map(
+            slot,
+            vec![Node::Map("image", vec![Node::Str("english", path)])],
+        )
+    }
 
     /// Build a v29 file with a string table, mirroring the real layout.
     fn build_v29(apps: &[(u32, &str, &str, &str)]) -> Vec<u8> {
@@ -692,6 +919,218 @@ mod tests {
         let app = info.apps.get(&70).unwrap();
         assert_eq!(app.common.name.as_deref(), Some("Real Name"));
         assert_eq!(app.common.app_type.as_deref(), Some("Game"));
+
+        // A control for the same property, from the other direction. The assertions above are
+        // all negative — they pass just as well if nothing under `common` were captured at all,
+        // which is exactly how a broken fixture hides. This half asserts that a *deeper* path
+        // still gets captured while `name_localized/name` does not, so the two cannot both be
+        // explained by "capture never ran".
+        let data = build_tree(
+            70,
+            vec![
+                Node::Str("name", "Real Name"),
+                Node::Map("name_localized", vec![Node::Str("name", "Localised Name")]),
+                Node::Map(
+                    "library_assets_full",
+                    vec![asset_slot("library_capsule", "library_600x900.jpg")],
+                ),
+            ],
+        );
+        let info = parse(&data).unwrap();
+        let common = &info.apps.get(&70).unwrap().common;
+        assert_eq!(common.name.as_deref(), Some("Real Name"));
+        assert_eq!(
+            common.library_asset("library_capsule", "english"),
+            Some("library_600x900.jpg"),
+            "control: capture really is running on nested paths",
+        );
+    }
+
+    #[test]
+    fn library_assets_full_survives_both_disk_shapes() {
+        // The two shapes measured on this box: a bare filename for 1945 apps, and a path with a
+        // sha1 directory component for 278. Losing the sha1 component would produce a path that
+        // does not exist, which is indistinguishable from "this app has no art".
+        const FLAT: &str = "library_600x900.jpg";
+        const NESTED: &str = "93637c34351160eaa7d7ff0cce69cb4312abb819/library_capsule.jpg";
+
+        // Premise: these fixtures really are the two different shapes. Without this the test
+        // still passes if someone "tidies" NESTED into a bare filename.
+        assert!(!FLAT.contains('/'), "the flat fixture must have no path");
+        assert!(NESTED.contains('/'), "the nested fixture must have one");
+
+        let flat = build_tree(
+            620,
+            vec![Node::Map(
+                "library_assets_full",
+                vec![asset_slot("library_capsule", FLAT)],
+            )],
+        );
+        let nested = build_tree(
+            1030300,
+            vec![Node::Map(
+                "library_assets_full",
+                vec![
+                    asset_slot("library_capsule", NESTED),
+                    asset_slot("library_hero", "70d7e70a/library_hero.jpg"),
+                ],
+            )],
+        );
+
+        let a = parse(&flat).unwrap();
+        let common = &a.apps.get(&620).unwrap().common;
+        assert_eq!(
+            common.library_asset("library_capsule", "english"),
+            Some(FLAT)
+        );
+
+        let b = parse(&nested).unwrap();
+        let common = &b.apps.get(&1030300).unwrap().common;
+        assert_eq!(
+            common.library_asset("library_capsule", "english"),
+            Some(NESTED),
+            "the sha1 directory component must survive verbatim"
+        );
+        assert_eq!(
+            common.library_asset("library_hero", "english"),
+            Some("70d7e70a/library_hero.jpg"),
+            "slots must not overwrite each other"
+        );
+        assert_eq!(common.library_asset("library_logo", "english"), None);
+    }
+
+    #[test]
+    fn every_language_is_kept_and_lookup_falls_back() {
+        let data = build_tree(
+            1091500,
+            vec![Node::Map(
+                "library_assets_full",
+                vec![Node::Map(
+                    "library_capsule",
+                    vec![Node::Map(
+                        "image",
+                        vec![
+                            Node::Str("english", "6399de/library_capsule.jpg"),
+                            Node::Str("schinese", "e8cc29/library_capsule_schinese.jpg"),
+                        ],
+                    )],
+                )],
+            )],
+        );
+        let info = parse(&data).unwrap();
+        let common = &info.apps.get(&1091500).unwrap().common;
+
+        // Premise: both languages really were captured, so the fallback below is a fallback and
+        // not the only entry there is.
+        assert_eq!(
+            common
+                .library_assets
+                .get("library_capsule")
+                .map(BTreeMap::len),
+            Some(2),
+        );
+
+        assert_eq!(
+            common.library_asset("library_capsule", "schinese"),
+            Some("e8cc29/library_capsule_schinese.jpg"),
+            "an exact language match wins",
+        );
+        assert_eq!(
+            common.library_asset("library_capsule", "klingon"),
+            Some("6399de/library_capsule.jpg"),
+            "an unknown language falls back to english",
+        );
+    }
+
+    #[test]
+    fn a_language_steam_has_no_english_for_still_resolves() {
+        // The last fallback rung. An app localized only into one language still has perfectly
+        // good artwork, and returning None would render a blank tile.
+        let data = build_tree(
+            777,
+            vec![Node::Map(
+                "library_assets_full",
+                vec![Node::Map(
+                    "library_capsule",
+                    vec![Node::Map(
+                        "image",
+                        vec![Node::Str("schinese", "only/one.jpg")],
+                    )],
+                )],
+            )],
+        );
+        let info = parse(&data).unwrap();
+        let common = &info.apps.get(&777).unwrap().common;
+
+        assert!(
+            !common
+                .library_assets
+                .get("library_capsule")
+                .unwrap()
+                .contains_key("english"),
+            "premise: there is deliberately no english entry",
+        );
+        assert_eq!(
+            common.library_asset("library_capsule", "english"),
+            Some("only/one.jpg"),
+        );
+    }
+
+    #[test]
+    fn icon_and_clienticon_are_captured_as_separate_fields() {
+        // Measured on 1030300: these are genuinely different sha1s. `icon` names the
+        // librarycache .jpg; `clienticon` names a .ico under Steam\steam\games. Aliasing them
+        // yields a path that does not exist.
+        const ICON: &str = "b4a999c1302e3ac123c041fd41bb8a34528c6ab5";
+        const CLIENT: &str = "28f5a413a0f1f4b0a0f8b6ff30e1cbb0e5ba9a3d";
+        assert_ne!(
+            ICON, CLIENT,
+            "premise: the fixture uses two distinct values"
+        );
+
+        let data = build_tree(
+            1030300,
+            vec![
+                Node::Str("icon", ICON),
+                Node::Str("clienticon", CLIENT),
+                Node::Str("type", "Game"),
+            ],
+        );
+        let info = parse(&data).unwrap();
+        let common = &info.apps.get(&1030300).unwrap().common;
+
+        assert_eq!(common.icon.as_deref(), Some(ICON));
+        assert_eq!(common.client_icon.as_deref(), Some(CLIENT));
+    }
+
+    #[test]
+    fn image2x_is_not_captured_but_image_beside_it_is() {
+        // `image2x` sits next to `image` in the real file and none of those files exist on
+        // disk here. The control is the `image` sibling: without it, a test that only asserts
+        // image2x is absent would also pass if the whole slot failed to parse.
+        let data = build_tree(
+            620,
+            vec![Node::Map(
+                "library_assets_full",
+                vec![Node::Map(
+                    "library_capsule",
+                    vec![
+                        Node::Map("image", vec![Node::Str("english", "real.jpg")]),
+                        Node::Map("image2x", vec![Node::Str("english", "retina.jpg")]),
+                    ],
+                )],
+            )],
+        );
+        let info = parse(&data).unwrap();
+        let common = &info.apps.get(&620).unwrap().common;
+
+        assert_eq!(
+            common.library_asset("library_capsule", "english"),
+            Some("real.jpg"),
+            "control: the `image` sibling really was captured",
+        );
+        let slot = common.library_assets.get("library_capsule").unwrap();
+        assert_eq!(slot.len(), 1, "image2x must not have been merged in");
     }
 
     #[test]

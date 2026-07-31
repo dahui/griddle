@@ -81,33 +81,147 @@ of `steamui/`. When a Steam update breaks something, the predicate is what you e
 | Steam dir writable | **Without elevation.** The `.cef-enable-remote-debugging` sentinel needs no admin. |
 | `libraryfolders.vdf` | Exists in **both** `config\` and `steamapps\`, byte-identical. Prefer `config\`. Modern nested format. |
 | `appmanifest_*.acf` | 51 installed. `StateFlags & 4` = fully installed. |
-| `appcache\librarycache\` | **2245** per-appid dirs vs 51 appmanifests — a superset (owned/browsed, not installed). Layout is **sha1-keyed**, see below. **Read-only. Never write here** — Steam re-downloads over it. |
+| `appcache\librarycache\` | **2248** per-appid dirs vs 51 appmanifests — a superset (owned/browsed, not installed). **The filename is not the predicate — `appinfo.vdf` indexes it**, see below. **Read-only. Never write here** — Steam re-downloads over it. |
+| `userdata\<id>\config\localconfig.vdf` | 200 KB text VDF. Its `apps` map holds **518** appids — the offline "all games" source. See below. |
 | `userdata\<id>\config\librarycache\<appid>.json` | **Achievement data, not art.** Same name, different thing. Do not confuse with the above. |
 | `userdata\<id>\config\licensecache` | Encrypted binary. Dead end for an owned-games list. |
 
 #### 🔴 `appcache\librarycache\` is sha1-keyed — earlier notes here were wrong
 
-Measured across all **2244** cached appid directories on this box
-`[VERIFIED-BOX 2026-07-27]`:
+**This section has now been wrong twice, and the second correction matters more than the first.**
 
-| Shape | Appids |
-|---|---|
-| flat files only — `<appid>/<sha1>.jpg` | **1972** |
-| sha1 sub-directories only — `<appid>/<sha1>/<name>.ext` | 137 |
-| both | 135 |
+An earlier version said the flat files are "all sha1-named". They are not. Measured across all
+**2248** appid directories `[VERIFIED-BOX 2026-07-30]`, **1945** hold semantically *named* files
+(`header.jpg` 1856, `library_600x900.jpg` 608, `library_hero.jpg` 594, `logo.png` 526,
+`library_hero_blur.jpg` 513, `library_header.jpg` 50) and **278** hold them one level down under
+a sha1 directory.
 
-Names found *inside* the sha1 sub-directories: `header.jpg` (143), `library_header.jpg` (122),
-`library_hero.jpg` (108), `library_hero_blur.jpg` (108), `logo.png` (95),
-`library_capsule.jpg` (66), `library_600x900.jpg` (40), `markers.svg` (4). Flat files directly
-under `<appid>/`: 4445 `.jpg` + 528 `.png`, all sha1-named.
+But correcting the census does not give a usable rule, because **the same slot has different
+filenames on different apps**. The durable finder lives in `appinfo.vdf`:
 
-Both the design research ("modern per-appid subfolder: `header.jpg`, `library_600x900.jpg`, …")
-and an earlier line in this file were **wrong** — they omitted the sha1 level entirely. Anything
-reading this cache must handle *all three* shapes and must not assume a filename.
+> **Predicate: `common/library_assets_full/<slot>/image/<lang>` holds the path *relative to*
+> `librarycache/<appid>/`, sha1 component included. Read it, then `is_file()` it.**
 
-This is exactly why the cache is read-only for us: the naming is a Steam implementation detail
+```text
+620      library_capsule -> "library_600x900.jpg"
+1030300  library_capsule -> "93637c34351160eaa7d7ff0cce69cb4312abb819/library_capsule.jpg"
+1091500  library_capsule -> { english: "…", schinese: "…/library_capsule_schinese.jpg" }
+```
+
+Corroborated structurally: `library_assets_full` occurs exactly **once** in `appinfo.vdf` (a v29
+string-table *key*) while `library_capsule` occurs **305×** (inline path *values*).
+
+**Measured resolution over all 2248 dirs**, via `cargo run -p sgdb-core --example scan`:
+
+| Slot | Resolved | of which reachable *only* via the sha1 layout |
+|---|---|---|
+| Capsule | 714 | **106** |
+| Wide Capsule | 2175 | **269** |
+| Hero | 702 | **108** |
+| Logo | 621 | **95** |
+| Icon | 804 | 0 |
+
+That middle column is the point: a basename-only resolver silently misses 106 capsules and 269
+wide capsules. It would have looked perfectly correct on whichever app you happened to test.
+
+Two consequences, both enforced in `steam::librarycache`:
+
+- **appinfo runs *ahead of* disk.** Steam records what art an app has before downloading it, so
+  24–32 paths per slot pointed at no file. Every rung ends in `is_file()`.
+- **The path is untrusted.** It is a string out of a 6 MB binary, joined onto a directory the
+  `asset:` scope covers *recursively*. `safe_join` refuses `..`, absolute paths and drive
+  letters — the same guard, and the same reasoning, as `cache`.
+
+Bare filenames survive only as a **fallback**, for the ~1570 apps with no `library_assets_full`
+entry at all, which have just `header.jpg` and an icon.
+
+This is still why the cache is read-only for us: the naming is a Steam implementation detail
 that has now changed at least twice. Custom art goes in `userdata/<id>/config/grid/`, which is
 stable and documented by usage.
+
+#### 🔴 The tiny sha1-named `.jpg` is `common/icon` — and `icon` ≠ `clienticon`
+
+The 484–1981 byte sha1-named `.jpg` sitting beside the artwork is **not junk**: it is the small
+game icon, named by `common/icon`. 628 of 630 matched, and 620's local `25a5a16b….jpg` is
+byte-size identical (1025 B) to
+`cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/620/25a5a16b….jpg`.
+`[VERIFIED-BOX 2026-07-30]`
+
+🔴 **`common/icon` and `common/clienticon` are different sha1s on the same app** (1030300:
+`b4a999c1…` vs `28f5a413…`). The librarycache `.jpg` matches **`icon`**; `clienticon` names a
+`.ico` under `Steam\steam\games\` (57 files here). Conflating them yields a path that does not
+exist. This is also the only thing that can show an Icon *default* for a real Steam app, which
+S8 otherwise left as a dead end.
+
+There is deliberately **no positional fallback** for icons — no "the only sha1 `.jpg` in the
+directory". Without `common/icon` there is nothing to match on, and guessing by position is
+exactly the coin flip this whole section exists to avoid.
+
+#### 🟢 Steam's artwork CDN — its own fixed name table `[VERIFIED-BOX 2026-07-30]`
+
+The last rung before a placeholder, and the only source that covers not-installed games. Base
+`https://shared.steamstatic.com/store_item_assets/steam/apps/<appid>/<name>`; mirror
+`https://cdn.cloudflare.steamstatic.com/steam/apps/<appid>/<name>`.
+
+| Slot | CDN name | 620 | 1030300 |
+|---|---|---|---|
+| Capsule | `library_600x900.jpg` | 200 | **200** — its disk name is `<sha1>/library_capsule.jpg` |
+| Header | `header.jpg` | 200 | 200 |
+| Hero | `library_hero.jpg` | 200 | 200 |
+| Logo | `logo.png` | 200 | 200 |
+| — | `library_capsule.jpg` | **404** | **404** |
+| — | `library_header.jpg` | — | **404** |
+
+🔴 **The CDN name is not the disk name.** The two 404 rows are recorded deliberately: they are
+what stops someone "fixing" the table by copying names out of `librarycache`. A test asserts
+`library_capsule.jpg` appears nowhere in it.
+
+Icons are a different host *and* path:
+`cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/<appid>/<common/icon>.jpg`.
+
+Shortcut appid `4048848997` → 404, so non-Steam entries need no special case beyond
+`kind !== 'steam'`. Both hosts were already in the CSP.
+
+#### 🟢 `localconfig.vdf` — the offline "all games" source `[VERIFIED-BOX 2026-07-30]`
+
+`userdata/<id>/config/localconfig.vdf`, 200 KB of **text** VDF, so `vdf::text` reads it — no new
+codec. Key path `UserLocalConfigStore` → `Software` → `Valve` → `Steam` → `apps`.
+
+> **Predicate: a child is a Steam app iff its key parses as `u32` and its value is a map.**
+> 519 children, **0 scalar siblings**.
+
+**518 appids against 51 `appmanifest` files.** There is still no *ownership* list — `licensecache`
+is encrypted — so this is a proxy, not a license check: it misses games owned and never launched.
+The UI says "All games", never "owned".
+
+🔴 **The 519th key is `-246118299`** — the signed form of `0xF1548865`, the EmulationStationDE
+shortcut. `shortcuts.vdf` owns those, so it is skipped; taking it too would duplicate the row
+under a different name. `u32::from_str` refuses it for free, which is why there is no sign check.
+
+🔴 **`LastPlayed` has a sentinel that is not a date.** Eight entries read `86400` (1970-01-02,
+33 years before Steam existed) and six read `0`. Anything at or below `STEAM_LAUNCH_EPOCH`
+(`1_063_324_800`) is reported as never-played, or "recently played" opens in 1970.
+
+Against `appinfo.vdf`: 469 typed `Game` (**409 `Game` + 60 `game`** — the casing really is
+inconsistent, and `AppType::parse` already handles it), 10 `Tool`/`Config` which get filtered
+out, and **29 absent from appinfo entirely with no cache dir** — delisted. Those show as
+`Unknown app <id>`, following the fixed failure direction: a Steam appid is still a valid
+SteamGridDB key, and a missing game is a bug report while an odd-looking row is a cosmetic
+annoyance.
+
+#### 🟡 `logo_position` is already in `appinfo.vdf` — free for the logo positioner
+
+`common/library_assets_full/library_logo/logo_position` carries Steam's own default, which the
+positioner would otherwise have to invent:
+
+```text
+440:     { pinned_position: "BottomLeft", width_pct: 26,                  height_pct: 37 }
+1030300: { pinned_position: "BottomLeft", width_pct: "51.53499168364688", height_pct: "79.538…" }
+```
+
+🔴 **`width_pct`/`height_pct` are sometimes `T_INT32` and sometimes `T_STRING` in the same
+file.** A reader that assumes either one skips half the apps. Not captured yet — recorded so it
+is not re-derived later.
 
 **Parse `libraryfolders.vdf` defensively:** some client versions emit *scalar* siblings (e.g.
 `contentstatsid`) among the numbered object keys. Skip any child whose value is not a map. This
@@ -266,16 +380,45 @@ architecture.
 | **M0** | Cargo + bun workspaces; Tauri shell (PE subsystem = `WINDOWS_GUI`, no console flash); secret scanning (pre-commit + CI); encoding guard. |
 | **M1** | **All 11 spike items resolved.** Nothing left that can change the architecture. |
 | **M2** | **Offline layer done**, including the `shortcuts.vdf` writer. Verified against the real install with `cargo run -p sgdb-core --example scan`. |
-| **M3** | 🟢 **The app runs.** Library list with current art, five asset tabs, SteamGridDB browsing with infinite scroll, apply with the live→file ladder, first-run key flow, and a diagnostics screen. **256 Rust + 62 TS tests**, clippy clean at `-D warnings`, gate green. |
-| **Next** | M4 desktop parity (filters, details modal, zoom, logo positioner, non-Steam picker), then M5/M6. |
+| **M3** | 🟢 **The app runs.** Library list with current art, five asset tabs, SteamGridDB browsing with infinite scroll, apply with the live→file ladder, first-run key flow, and a diagnostics screen. |
+| **M4** | 🟢 **Default art, library scope, and filter parity.** Steam's own artwork behind the custom art (local cache → CDN → placeholder); an Installed / All games toggle with sorting; the full SteamGridDB filter set wired through; and the "wrong game?" picker. The asset tabs now render only inside a game. |
+| **Next** | The rest of M4 — details modal, zoom slider, logo positioner, non-Steam icon flow — then M5/M6. |
+
+**The M4 changes worth remembering**, all detailed above: `librarycache` is indexed by
+`appinfo.vdf`, not by filename; the CDN has its own name table that is *not* the disk name;
+`localconfig.vdf` is the "all games" source and contains one negative key that is a shortcut;
+and the `asset:` scope now covers a second directory **recursively**.
 
 ### Running it
 
 | | Command | What it does |
 |---|---|---|
 | **Dev** | `bun run app` | Vite + the app, hot reload. |
-| **Real** | `cargo build --release -p sgdb-app`, then `target\release\sgdb-app.exe` | Frontend embedded in the exe. No dev server. |
+| **Real** | `bun run app:release`, then `target\release\sgdb-app.exe` | Frontend embedded in the exe. No dev server. |
 | Installer | `bun run app:build` | NSIS bundle. |
+
+#### 🔴 `cargo build --release` alone embeds a STALE frontend
+
+`cargo build` does not run `beforeBuildCommand` — only `tauri build` does. So a bare
+`cargo build --release -p sgdb-app` happily embeds whatever is in `apps/desktop/dist` from the
+last time anything wrote there, which may be several milestones old.
+
+This bites *precisely* when the Rust side changed too, because everything looks right: the build
+succeeds, the app starts, the window titles correctly, and the dev-server tripwire below
+correctly reports that it is serving the embedded frontend. It is serving the embedded frontend —
+just last month's. Caught here by comparing `apps/desktop/dist` mtimes against `apps/desktop/src`:
+dist was 3 hours older than the sources it supposedly contained.
+
+`bun run app:release` is `bun run build:desktop && cargo build --release -p sgdb-app`, in that
+order, and exists so the obvious command is the correct one. Same reasoning as putting
+`custom-protocol` in `default` below.
+
+**The check, when in doubt:**
+```powershell
+(Get-ChildItem apps\desktop\dist -Recurse -File | Sort LastWriteTime -Desc)[0].LastWriteTime
+(Get-ChildItem apps\desktop\src,packages\shared\src -Recurse -File | Sort LastWriteTime -Desc)[0].LastWriteTime
+# dist older than src -> the exe has a stale UI
+```
 
 #### 🔴 Three separate traps produced the same "connection refused" page
 
@@ -339,6 +482,8 @@ flash, the wart this project exists to remove.
 | `steam::locate` | Registry cascade with the lowercase/forward-slash normalisation. `locate_with()` takes the override as a parameter so tests need no `unsafe` env mutation. |
 | `steam::account` | `ActiveUser` → `loginusers.vdf` → sole `userdata/` dir. **Refuses to guess** between several accounts. |
 | `steam::library` | `libraryfolders.vdf` + `appmanifest_*.acf`. One corrupt manifest never empties the library. |
+| `steam::librarycache` | Steam's own default artwork, resolved through `appinfo.vdf`'s index rather than by filename. **Read-only, structurally** — contains no write at all, so it needs no `boundary-ok` and must never acquire one. `safe_join` refuses a path that would escape the app directory. |
+| `steam::localconfig` | The `apps` map in `localconfig.vdf` — the offline "all games" source, and where playtimes come from. Read-only; reuses `vdf::text`. |
 | `vdf::appinfo` | `appcache/appinfo.vdf` reader. **Not the same format as `vdf::binary`** — v29 keys are u32 string-table indices. Extracts only `common/{type,name,clienticon}`. |
 | `steam::apptype` | `common/type` → "does this belong in the library list". Every unknown resolves toward **showing** the app. |
 | `sgdb::key` | `ApiKey`. Custom `Debug` prints a fingerprint; **no `Display`, no `Serialize`** — leaking it is a compile error. |
@@ -368,9 +513,22 @@ result says which path ran, so the UI can say whether a restart is needed rather
 the user staring at unchanged art. Falling back is *not* an error — it carries
 `fell_back_because` and renders as a note.
 
-The `asset:` protocol scope is granted **at runtime to exactly one directory**, the account's
-`grid/`. It cannot be set in `tauri.conf.json` because the path depends on the install and
-account id, and scoping it to that one directory keeps the webview unable to read anything else.
+The `asset:` protocol scope is granted **at runtime**, because both paths depend on the install
+and the account id and so cannot be set in `tauri.conf.json`. Two directories:
+
+| Directory | Recursive | Why |
+|---|---|---|
+| the account's `grid/` | **no** | custom artwork; flat by construction |
+| `appcache/librarycache/` | **yes** | Steam's default art. 278 of 2248 apps store theirs one level down under a sha1 directory, and a non-recursive grant would 403 exactly those |
+
+🔴 **The recursive flag is the trap.** Copying the `grid/` grant's `false` looks right and fails
+only for the nested minority — which reads as "some games have no art", indistinguishable from
+the cache genuinely not having it. It is not unit-testable; verify by launching the app and
+confirming **1030300** renders. 620 rendering proves nothing, because it is flat.
+
+This is a real widening — ~2248 directories of Steam-owned store artwork — accepted because it
+is still far narrower than the Steam root and contains nothing but public images. A grant
+failure is a `warn!`, not fatal: the UI then falls through to the CDN and still shows art.
 | `steam::process` | ToolHelp process enumeration; `-shutdown` → poll → relaunch. **The only minter of `SteamStopped`.** Waits on *processes*, never on the registry pid. |
 | `steam::shortcuts` | Read/edit/write `shortcuts.vdf`. Round-trip verified on **load**; write needs a `SteamStopped` token *and* re-checks it. Mutation surface is `set_icon` / `clear_icon` only. |
 
@@ -968,7 +1126,9 @@ Consequences for the product:
   **and** set the `icon` field in `shortcuts.vdf` (Steam must be shut down; then restart).
   That is what decky-steamgriddb does, and it is why its icon flow prompts for a restart.
 - **Real Steam apps** — decky writes `appcache/librarycache/<appid>_icon.jpg`, the **legacy
-  flat** layout. This box's cache is sha1-keyed, so that path is `[INFERRED]` dead here.
+  flat** layout, which does not exist here. *Reading* Steam's own icon is now solved
+  (`common/icon`, above), so the tab can show the current icon; **writing** one still has no
+  route, so it stays disabled for Steam apps with an explanation.
   Ship the Icon tab **disabled for Steam apps** with an explanation, rather than a control that
   silently does nothing.
 
@@ -1234,7 +1394,7 @@ declares which it needs, so losing `SliderField` costs the zoom slider, not the 
 |---|---|
 | **User supplies their own SGDB API key** | Decky's is hardcoded with an explicit *"attempting to use this in your own projects will cause you to be automatically banned and blacklisted"*. Non-negotiable. `[VERIFIED-SOURCE]` |
 | **BPM UI is a modal, not a route** | Decky registers a route because it *has* `routerHook`. We'd have to patch Steam's minified router. `showModal` is a smaller, more stable target with the same UX. |
-| **Installed games + non-Steam shortcuts only** | Fully offline; no Steam Web API. `librarycache`'s 2245 dirs are a known future path to an owned-games view — noted, not built. |
+| **Installed games, or everything `localconfig.vdf` knows (518 here)** | Fully offline; no Steam Web API. 🔴 **Neither is an ownership list** — `licensecache` is encrypted — so "All games" is labelled as such and never as "owned". |
 | **No MOTD, donation modal, or tutorial video** | Decky-store furniture. The first-run API-key flow replaces the tutorial. |
 | **Library style tweaks ship behind "Experimental"** | Square Capsules / Matching Recents / Capsule Glow patch Steam's own library rendering *globally* — the most fragile surface in the product. Same features, honest labelling, individually disableable. |
 | **Plus, not in Decky: a diagnostics screen and the build-stamped module map** | The reliability gap is the actual reason to build this. |

@@ -1,0 +1,57 @@
+{
+  "_comment": [
+    "The filter vocabularies, asserted by BOTH packages/shared/src/assets.test.ts and the",
+    "Rust tests in crates/sgdb-core/src/sgdb/query.rs. Neither side owns it.",
+    "",
+    "Why this file exists: these lists have to agree across two languages. The UI offers values",
+    "from the TypeScript tables and `AssetQuery::from_params` validates against the Rust ones,",
+    "so a value present on one side and missing on the other is refused locally with a 'not a",
+    "style the grids endpoint offers' error -- for a checkbox the UI itself rendered. The",
+    "symptom is a filter that silently returns nothing, which is a miserable thing to debug.",
+    "",
+    "Same pattern as fixtures/logo-positions.json, for the same reason.",
+    "",
+    "🔴 Every dimension here returned 200 against the live API on 2026-07-30. Values are",
+    "endpoint-specific: heroes?dimensions=600x900 is a 400, and icons rejects `dimensions`",
+    "entirely. Do not add a value without probing it."
+  ],
+
+  "dimensions": {
+    "grid_p": {
+      "all": ["600x900", "342x482", "660x930", "512x512", "1024x1024"],
+      "default": ["600x900", "342x482", "660x930"]
+    },
+    "grid_l": {
+      "all": ["460x215", "920x430", "512x512", "1024x1024"],
+      "default": ["460x215", "920x430"]
+    },
+    "hero": {
+      "all": ["1920x620", "3840x1240", "1600x650"],
+      "default": ["1920x620", "3840x1240", "1600x650"]
+    },
+    "logo": { "all": [], "default": [] },
+    "icon": { "all": [], "default": [] }
+  },
+
+  "styles": {
+    "grid_p": ["alternate", "white_logo", "no_logo", "blurred", "material"],
+    "grid_l": ["alternate", "white_logo", "no_logo", "blurred", "material"],
+    "hero": ["alternate", "blurred", "material"],
+    "logo": ["official", "white", "black", "custom"],
+    "icon": ["official", "custom"]
+  },
+
+  "mimes": {
+    "grid_p": ["image/png", "image/jpeg", "image/webp"],
+    "grid_l": ["image/png", "image/jpeg", "image/webp"],
+    "hero": ["image/png", "image/jpeg", "image/webp"],
+    "logo": ["image/png", "image/webp"],
+    "icon": ["image/png", "image/vnd.microsoft.icon"]
+  },
+
+  "types": ["static", "animated"],
+
+  "tri": ["any", "true", "false"],
+
+  "pageLimit": 50
+}

@@ -3,6 +3,8 @@
 //! - [`locate`] — find Steam; normalise the registry's lowercase/forward-slash paths.
 //! - [`account`] — which `userdata/<accountid>` we are editing.
 //! - [`library`] — library folders and installed apps.
+//! - [`librarycache`] — Steam's own default artwork. Read-only; Steam re-downloads over it.
+//! - [`localconfig`] — apps Steam holds local config for. The offline "all games" source.
 //! - [`process`] — is Steam running, and stopping it. The only minter of [`SteamStopped`].
 //! - [`shortcuts`] — non-Steam shortcuts. **The only writer in this subtree.**
 //!
@@ -13,6 +15,8 @@
 pub mod account;
 pub mod apptype;
 pub mod library;
+pub mod librarycache;
+pub mod localconfig;
 pub mod locate;
 pub mod process;
 pub mod shortcuts;
@@ -20,6 +24,8 @@ pub mod shortcuts;
 pub use account::Account;
 pub use apptype::{AppType, AppTypes};
 pub use library::{InstalledApp, LibraryFolder};
+pub use librarycache::{LibraryCache, SteamSlot};
+pub use localconfig::AppRecord;
 pub use locate::SteamInstall;
 pub use process::{SteamProcess, SteamStopped};
 pub use shortcuts::{Shortcut, Shortcuts};

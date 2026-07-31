@@ -120,6 +120,68 @@ export function filtersToQuery(filters: Filters): QueryParams {
 /** Values above 50 are ignored by the API, so asking for more is a wasted round trip. */
 export const PAGE_LIMIT = 50;
 
+/**
+ * The stored shape, as `sgdb-core`'s `FilterState` serialises it.
+ *
+ * Distinct from {@link Filters} in two ways that matter: it has no `gameIdOverride` (that lives
+ * in `Settings.game_overrides`, keyed by appid, because it is per-game rather than per-tab), and
+ * it is what actually round-trips through `settings.json`.
+ */
+export interface StoredFilters {
+  untagged: boolean;
+  adult: boolean;
+  humor: boolean;
+  epilepsy: boolean;
+  styles: string[];
+  dimensions: string[];
+  mimes: string[];
+  animated: boolean;
+  static: boolean;
+}
+
+/**
+ * Stored filters → working filters, falling back to the defaults.
+ *
+ * `undefined` means the user has never customised this tab. The defaults are filled in here
+ * rather than in Rust so they have exactly one implementation — the one `defaultFilters` above
+ * already tests.
+ */
+export function fromStored(type: AssetType, stored: StoredFilters | undefined): Filters {
+  if (!stored) return defaultFilters(type);
+  return pruneToType(type, {
+    styles: stored.styles,
+    dimensions: stored.dimensions,
+    mimes: stored.mimes,
+    animated: stored.animated,
+    static: stored.static,
+    adult: stored.adult,
+    humor: stored.humor,
+    epilepsy: stored.epilepsy,
+    untagged: stored.untagged,
+  });
+}
+
+/**
+ * Working filters → the stored shape.
+ *
+ * 🔴 **`gameIdOverride` is deliberately dropped.** It is not a filter and it is not stored here.
+ * Round-tripping it would also make {@link isDefault} return false forever for any game with an
+ * override, pinning "Reset Filters" permanently visible on a filter set that is untouched.
+ */
+export function toStored(filters: Filters): StoredFilters {
+  return {
+    untagged: filters.untagged,
+    adult: filters.adult,
+    humor: filters.humor,
+    epilepsy: filters.epilepsy,
+    styles: filters.styles,
+    dimensions: filters.dimensions,
+    mimes: filters.mimes,
+    animated: filters.animated,
+    static: filters.static,
+  };
+}
+
 /** Clamp a filter's selections to the options its asset type actually offers. */
 export function pruneToType(type: AssetType, filters: Filters): Filters {
   const keep = (values: string[], allowed: string[]) => values.filter((v) => allowed.includes(v));

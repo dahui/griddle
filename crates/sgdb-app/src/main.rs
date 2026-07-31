@@ -47,6 +47,27 @@ fn main() {
                 }
             }
 
+            // The second scope: Steam's own artwork cache, so the library list can show default
+            // art for games the user has never customised. Read-only — nothing in this app
+            // writes there, and `steam::librarycache` contains no write at all.
+            //
+            // 🔴 `recursive = true`, unlike the grid grant above. 278 of the 2248 cached apps
+            // store their art one level down under a sha1 directory, and a non-recursive grant
+            // would 403 exactly those — the failure would look like "some games have no art",
+            // which is indistinguishable from the cache simply not having it.
+            //
+            // This is a genuine widening: ~2248 directories of Steam-owned store artwork. It is
+            // still far narrower than the Steam root, and contains nothing but public images.
+            if let Ok(ctx) = state.steam() {
+                let cache = ctx.install.library_cache_dir();
+                match app.asset_protocol_scope().allow_directory(&cache, true) {
+                    Ok(()) => tracing::info!(path = %cache.display(), "librarycache scope granted"),
+                    // Deliberately not fatal: without this the UI falls through to Steam's CDN
+                    // and still shows art, just over the network.
+                    Err(e) => tracing::warn!(error = %e, "could not grant the librarycache scope"),
+                }
+            }
+
             app.manage(state);
             Ok(())
         })
@@ -56,6 +77,13 @@ fn main() {
             commands::set_api_key,
             commands::clear_api_key,
             commands::library,
+            commands::prefs,
+            commands::set_library_view,
+            commands::set_filters,
+            commands::reset_filters,
+            commands::set_game_override,
+            commands::search_games,
+            commands::current_game_match,
             commands::search_assets,
             commands::apply_asset,
             commands::clear_asset,

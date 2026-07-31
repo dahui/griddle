@@ -122,6 +122,41 @@ pub struct Settings {
 
     /// Resolved Steam module map, keyed by the build it was resolved against.
     pub module_map: Option<ModuleMap>,
+
+    /// Whether the library list shows only installed games, or everything Steam knows about.
+    pub library_scope: LibraryScope,
+
+    /// How the library list is ordered.
+    pub library_sort: LibrarySort,
+}
+
+/// Which apps the library list shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LibraryScope {
+    /// Apps with a fully-installed `appmanifest`. The default, because it is what you can
+    /// actually play right now.
+    #[default]
+    Installed,
+    /// Installed apps plus everything `localconfig.vdf` has a record for.
+    ///
+    /// 🔴 Not the same as "owned" — see [`crate::steam::localconfig`]. There is no offline
+    /// ownership list, and this will both miss games you own but never launched and include
+    /// ones whose license has lapsed.
+    All,
+}
+
+/// How the library list is ordered.
+///
+/// The "all games" scope turns a 51-row list into a ~518-row one, at which point alphabetical
+/// order stops being navigable — this is what makes that scope usable rather than merely large.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LibrarySort {
+    #[default]
+    Name,
+    RecentlyPlayed,
+    MostPlayed,
 }
 
 impl Default for Settings {
@@ -135,6 +170,8 @@ impl Default for Settings {
             filters: PerAssetType::new(),
             game_overrides: BTreeMap::new(),
             module_map: None,
+            library_scope: LibraryScope::default(),
+            library_sort: LibrarySort::default(),
         }
     }
 }
@@ -152,6 +189,12 @@ pub struct TabSettings {
 ///
 /// Mirrors the Decky plugin's per-type filter state. The tag→query *inversion* lives in
 /// `packages/shared/src/filters.ts` and is not duplicated in Rust; this is storage only.
+///
+/// 🔴 **`Default` here is not the app's default filter set.** Every boolean defaults to `false`,
+/// whereas `defaultFilters()` in TypeScript turns most of them on. That is deliberate: the
+/// defaults have one implementation, in the place that already tests them, and `Settings` stores
+/// only what the user actually chose. Reimplementing them here would be a second source of truth
+/// for the most error-prone rule in the product.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct FilterState {
@@ -160,8 +203,16 @@ pub struct FilterState {
     pub humor: bool,
     pub epilepsy: bool,
     pub styles: Vec<String>,
+    /// Selected dimension filters, e.g. `600x900`.
+    ///
+    /// Was missing entirely until M4, so persisting a filter set silently dropped the user's
+    /// dimension choice and the tab quietly reverted to its defaults on reload.
+    pub dimensions: Vec<String>,
     pub mimes: Vec<String>,
     pub animated: bool,
+    /// `static` on the wire — the TypeScript `Filters` interface calls it that, and it is a
+    /// Rust keyword, so the field name and the JSON key cannot match.
+    #[serde(rename = "static")]
     pub statik: bool,
 }
 
@@ -383,10 +434,24 @@ mod tests {
 
         let mut s = Settings {
             live_apply: true,
+            library_scope: LibraryScope::All,
+            library_sort: LibrarySort::RecentlyPlayed,
             ..Default::default()
         };
         let _ = s.zoom.insert("Capsule".into(), 1.75);
         let _ = s.game_overrides.insert(620, 17830);
+        let _ = s.filters.insert(
+            "grid_p".into(),
+            FilterState {
+                untagged: true,
+                humor: true,
+                styles: vec!["alternate".into()],
+                dimensions: vec!["600x900".into()],
+                animated: true,
+                statik: true,
+                ..Default::default()
+            },
+        );
         s.tabs.order = vec!["Hero".into(), "Capsule".into()];
         s.module_map = Some(ModuleMap {
             clstamp: "10840511".into(),
@@ -403,6 +468,43 @@ mod tests {
         store.save(&s).unwrap();
         assert_eq!(store.load().unwrap(), s);
         assert!(store.path().is_file(), "parent directories must be created");
+    }
+
+    #[test]
+    fn filter_state_serialises_static_not_statik() {
+        // The field cannot be called `static` in Rust, so the JSON key is a rename — and the
+        // TypeScript side sends `static`. A mismatch here would not fail anything loudly: serde
+        // would simply take the default and the user's static/animated choice would vanish on
+        // every reload.
+        let json = serde_json::to_string(&FilterState {
+            statik: true,
+            ..Default::default()
+        })
+        .unwrap();
+
+        assert!(json.contains("\"static\":true"), "{json}");
+        assert!(!json.contains("statik"), "{json}");
+
+        // The other direction, which is the one that actually breaks: a payload written by the
+        // frontend must deserialise.
+        let back: FilterState =
+            serde_json::from_str(r#"{"static":true,"animated":false}"#).unwrap();
+        assert!(back.statik);
+        assert!(!back.animated);
+    }
+
+    #[test]
+    fn an_older_settings_file_without_the_m4_keys_still_loads() {
+        // `#[serde(default)]` is what makes this true, and it is easy to lose. A settings file
+        // written before the library scope existed must not fail to load.
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::at(dir.path().join("settings.json"));
+        std::fs::write(store.path(), r#"{"version":1,"live_apply":true}"#).unwrap(); // boundary-ok: test fixture
+
+        let loaded = store.load().unwrap();
+        assert!(loaded.live_apply, "the keys that were present must survive");
+        assert_eq!(loaded.library_scope, LibraryScope::Installed);
+        assert_eq!(loaded.library_sort, LibrarySort::Name);
     }
 
     #[test]

@@ -113,6 +113,15 @@ impl SteamInstall {
         self.user_config_dir(account_id).join("shortcuts.vdf")
     }
 
+    /// `userdata/<accountid>/config/localconfig.vdf`.
+    ///
+    /// The closest thing to an owned-games list available offline: its `apps` map held **518**
+    /// appids on this box against 51 `appmanifest` files. `[VERIFIED-BOX 2026-07-30]` See
+    /// [`crate::steam::localconfig`].
+    pub fn localconfig_vdf(&self, account_id: u32) -> PathBuf {
+        self.user_config_dir(account_id).join("localconfig.vdf")
+    }
+
     pub fn loginusers_vdf(&self) -> PathBuf {
         self.root.join("config").join("loginusers.vdf")
     }
@@ -343,6 +352,7 @@ mod tests {
                 .contains("16274804")
         );
         assert!(s.shortcuts_vdf(16_274_804).ends_with("shortcuts.vdf"));
+        assert!(s.localconfig_vdf(16_274_804).ends_with("localconfig.vdf"));
         assert!(s.cef_sentinel().ends_with(".cef-enable-remote-debugging"));
         assert!(s.library_cache_dir().ends_with("librarycache"));
     }

@@ -13,7 +13,8 @@
     "typecheck": "tsc --build --force",
     "test": "bun test",
     "app": "cd crates/sgdb-app && tauri dev",
-    "app:build": "cd crates/sgdb-app && tauri build"
+    "app:build": "cd crates/sgdb-app && tauri build",
+    "app:release": "bun run build:desktop && cargo build --release -p sgdb-app"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

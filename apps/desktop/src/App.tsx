@@ -4,9 +4,13 @@
  * Library list with current art, the five asset tabs, SteamGridDB browsing with infinite
  * scroll, and apply. The apply path tries live first and falls back to writing files; the UI's
  * only job there is to say clearly whether a Steam restart is needed.
+ *
+ * `assetType` lives here rather than in `AssetBrowser` so the chosen tab survives going back to
+ * the list and opening a different game — the tab bar itself is rendered by `AssetBrowser`,
+ * because those tabs only mean anything for a single game.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { ASSET_LABEL, ASSET_TYPES, type AssetType } from '@sgdb/shared';
+import type { AssetType } from '@sgdb/shared';
 import { api, asUiError, type LibraryEntry, type Status, type UiError } from './api';
 import { ErrorNote, Spinner } from './components';
 import { Library } from './views/Library';
@@ -73,20 +77,6 @@ export function App() {
             Settings
           </button>
         </div>
-        {tab === 'library' && (
-          <div className="tab-group">
-            {ASSET_TYPES.map((t) => (
-              <button
-                type="button"
-                key={t}
-                className={assetType === t ? 'tab active' : 'tab'}
-                onClick={() => setAssetType(t)}
-              >
-                {ASSET_LABEL[t]}
-              </button>
-            ))}
-          </div>
-        )}
       </nav>
 
       {tab === 'settings' ? (
@@ -95,6 +85,7 @@ export function App() {
         <AssetBrowser
           entry={selected}
           assetType={assetType}
+          onAssetType={setAssetType}
           onBack={() => {
             setSelected(null);
             // Re-read on the way back so newly applied art shows in the list.
@@ -102,7 +93,7 @@ export function App() {
           }}
         />
       ) : (
-        <Library assetType={assetType} onPick={setSelected} />
+        <Library onPick={setSelected} />
       )}
     </Shell>
   );
