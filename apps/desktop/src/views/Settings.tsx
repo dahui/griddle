@@ -1,6 +1,14 @@
-/** API key, live apply, and diagnostics. */
+/** API key, resetting artwork, and diagnostics. */
 import { useState } from 'react';
-import { api, asUiError, type ModuleReport, type Status, type UiError } from '../api';
+import {
+  api,
+  asUiError,
+  type ModuleReport,
+  type ResetAll,
+  type ResetPlan,
+  type Status,
+  type UiError,
+} from '../api';
 import { ErrorNote, ExternalLink, Spinner } from '../components';
 
 const KEY_PAGE = 'https://www.steamgriddb.com/profile/preferences/api';
@@ -9,8 +17,169 @@ export function Settings({ status, onStatus }: { status: Status; onStatus: (s: S
   return (
     <>
       <ApiKeyPanel status={status} onStatus={onStatus} />
+      <ResetAllPanel />
       <DiagnosticsPanel status={status} />
     </>
+  );
+}
+
+/**
+ * Remove every piece of custom artwork at once.
+ *
+ * 🔴 The only bulk *destructive* action in the product, and the one place a confirmation is
+ * genuinely earned. Two things make it safe rather than merely guarded:
+ *
+ * - **The counts are measured, not estimated.** `resetAllPlan` is a read-only command run when
+ *   the button is pressed, so the dialog quotes what is actually on disk right now. Naming every
+ *   file — what the per-game reset does — is useless at this scale, so counts stand in for it.
+ * - **Nothing opens if nothing would happen.** With no custom artwork the button reports that and
+ *   stops, rather than presenting a dialog whose confirm button would do nothing.
+ */
+function ResetAllPanel() {
+  const [plan, setPlan] = useState<ResetPlan | null>(null);
+  const [done, setDone] = useState<ResetAll | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<UiError | null>(null);
+  // Distinct from `plan === null`: this is "we looked and there was nothing", which needs saying
+  // out loud, otherwise the button reads as broken.
+  const [nothing, setNothing] = useState(false);
+
+  async function check() {
+    setBusy(true);
+    setError(null);
+    setDone(null);
+    setNothing(false);
+    try {
+      const p = await api.resetAllPlan();
+      if (p.files === 0) setNothing(true);
+      else setPlan(p);
+    } catch (e: unknown) {
+      setError(asUiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirm() {
+    setBusy(true);
+    setError(null);
+    try {
+      setDone(await api.resetAllArt());
+    } catch (e: unknown) {
+      setError(asUiError(e));
+    } finally {
+      setBusy(false);
+      setPlan(null);
+    }
+  }
+
+  return (
+    <section>
+      <h2>Reset all artwork</h2>
+      <p>
+        Removes the custom artwork for every game and puts Steam&rsquo;s own back. Useful for
+        starting over, or before handing the machine to someone else.
+      </p>
+
+      <div className="row">
+        <button type="button" className="danger" disabled={busy} onClick={() => void check()}>
+          {busy ? 'Working…' : 'Reset all artwork…'}
+        </button>
+      </div>
+
+      {nothing && <p className="hint">No custom artwork to reset — every game is already on Steam&rsquo;s own.</p>}
+      {error && <ErrorNote error={error} />}
+      {done && <ResetDoneNote result={done} />}
+
+      {plan && (
+        <ConfirmReset
+          plan={plan}
+          busy={busy}
+          onCancel={() => setPlan(null)}
+          onConfirm={() => void confirm()}
+        />
+      )}
+    </section>
+  );
+}
+
+/**
+ * The confirmation.
+ *
+ * The confirm button restates the consequence *at the moment of committing* rather than saying
+ * "OK" — a count on the button is the last thing read before the click. Cancel is the plain
+ * action and is focused first, so the dangerous one is never the default.
+ */
+function ConfirmReset({
+  plan,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  plan: ResetPlan;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const games = `${plan.games} ${plan.games === 1 ? 'game' : 'games'}`;
+  const files = `${plan.files} ${plan.files === 1 ? 'file' : 'files'}`;
+
+  return (
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !busy) onCancel();
+      }}
+    >
+      <div className="modal" role="dialog" aria-modal="true" aria-label="Reset all artwork">
+        <div className="modal-head">
+          <h2>Reset all artwork?</h2>
+        </div>
+
+        <p>
+          This deletes your custom artwork for <strong>{games}</strong> — {files} in
+          Steam&rsquo;s <code>grid</code> folder — and puts Steam&rsquo;s own artwork back.
+        </p>
+        <p className="note note-bad">
+          <strong>This can&rsquo;t be undone.</strong> Artwork applied by other tools lives in the
+          same folder, so it goes too.
+        </p>
+        <p className="hint">
+          Steam&rsquo;s own artwork is stored separately and isn&rsquo;t touched, so every game
+          keeps a picture.
+        </p>
+
+        <div className="row modal-actions">
+          <button type="button" className="ghost" autoFocus disabled={busy} onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="button" className="danger" disabled={busy} onClick={onConfirm}>
+            {busy ? 'Removing…' : `Remove ${files}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Partial failure is stated rather than folded into a success message. */
+function ResetDoneNote({ result }: { result: ResetAll }) {
+  const games = `${result.games} ${result.games === 1 ? 'game' : 'games'}`;
+  return (
+    <div className={`note ${result.failed.length > 0 ? 'note-bad' : 'note-ok'}`}>
+      <p className="note-message">
+        Reset {games}.{result.needs_restart && ' Restart Steam to see it.'}
+      </p>
+      {result.fell_back_because && <p className="note-action">{result.fell_back_because}</p>}
+      {result.failed.length > 0 && (
+        <ul className="hint">
+          {result.failed.map((f) => (
+            <li key={f}>{f}</li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

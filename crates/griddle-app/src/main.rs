@@ -116,6 +116,8 @@ fn main() {
             commands::apply_asset,
             commands::asset_status,
             commands::clear_asset,
+            commands::reset_all_plan,
+            commands::reset_all_art,
             commands::resolve_modules,
         ])
         .run(tauri::generate_context!())

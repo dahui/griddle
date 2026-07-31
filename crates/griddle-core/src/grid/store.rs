@@ -222,21 +222,88 @@ impl GridDir {
             if !path.is_file() {
                 continue;
             }
-            let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+            let Some(id) = app_id_of(&path) else {
                 continue;
             };
-            // Strip any known suffix to recover the leading appid.
-            let digits: String = stem.chars().take_while(|c| c.is_ascii_digit()).collect();
-            let Ok(id) = digits.parse::<u32>() else {
-                continue;
-            };
-            if !known.contains(&AppId::new(id)) {
+            if !known.contains(&id) {
                 out.push(path);
             }
         }
         out.sort();
         Ok(out)
     }
+
+    /// Every file [`clear`](Self::clear) would remove for one app, across all editable slots.
+    ///
+    /// 🔴 **Exists so a confirmation can quote a number that matches what actually gets deleted.**
+    /// The obvious version — summing [`existing`](Self::existing) over the asset types —
+    /// under-counts by one whenever a logo has a position sidecar, because that `.json` is not a
+    /// sibling of any slot but `clear` takes it anyway. Under-reporting a deletion is precisely
+    /// what this project's "name it before it happens" rule exists to prevent, so the count comes
+    /// from here and a test pins it to `clear`'s actual behaviour.
+    pub fn removable(&self, app: AppId) -> Vec<PathBuf> {
+        let mut out = Vec::new();
+        for asset in AssetType::EDITABLE {
+            out.extend(self.existing(app, asset));
+        }
+        // Unconditional, matching `clear`: a sidecar can outlive the logo it positioned.
+        let json = self.root.join(names::logo_position_file_name(app));
+        if json.is_file() {
+            out.push(json);
+        }
+        out
+    }
+
+    /// Every appid with at least one file in this directory.
+    ///
+    /// The enumeration behind "reset everything": the grid directory *is* the record of what has
+    /// been customised, so it is asked directly rather than by walking the library and probing
+    /// each game in it. That also picks up artwork belonging to apps no longer in the library,
+    /// which is right — those files are exactly as stale as the rest.
+    ///
+    /// 🔴 **A missing directory is an empty list, not an error.** Steam creates `grid/` only when
+    /// the first custom art appears, so "has never customised anything" is an ordinary state, and
+    /// it must not surface as a failure on a screen whose whole job is to say *nothing to reset*.
+    /// [`orphans`](Self::orphans) errors instead, because it is only reached from a directory
+    /// already known to hold artwork.
+    pub fn customised_apps(&self) -> Result<Vec<AppId>, Error> {
+        let entries = match std::fs::read_dir(&self.root) {
+            Ok(e) => e,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(e) => {
+                return Err(Error::Read {
+                    path: self.root.clone(),
+                    source: e,
+                });
+            }
+        };
+        // Deduplicated and sorted: one app owns up to six files, and a stable order keeps the
+        // count the confirmation dialog quotes reproducible between runs.
+        let mut out = std::collections::BTreeSet::new();
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file()
+                && let Some(id) = app_id_of(&path)
+            {
+                let _ = out.insert(id);
+            }
+        }
+        Ok(out.into_iter().collect())
+    }
+}
+
+/// The appid a grid filename belongs to, from its leading digits.
+///
+/// Shared by [`GridDir::orphans`] and [`GridDir::customised_apps`] so the two cannot disagree
+/// about what counts as artwork — one deciding a file belongs to an app while the other does not
+/// would mean "reset everything" quietly skipping whatever the other one found.
+///
+/// Returns `None` for anything not starting with digits, which is what keeps a stray file in
+/// `grid/` invisible to both.
+fn app_id_of(path: &Path) -> Option<AppId> {
+    let stem = path.file_stem()?.to_str()?;
+    let digits: String = stem.chars().take_while(|c| c.is_ascii_digit()).collect();
+    digits.parse::<u32>().ok().map(AppId::new)
 }
 
 /// Write via a same-directory temp file and rename.
@@ -476,6 +543,107 @@ mod tests {
     /// partial suffix like `"_icon.ico"` silently never matches.
     fn name_of(p: &Path) -> &str {
         p.file_name().and_then(|s| s.to_str()).unwrap_or("")
+    }
+
+    #[test]
+    fn customised_apps_lists_each_app_once() {
+        let (_t, g) = dir();
+        // Six files across two apps. The count the confirmation dialog quotes is *games*, so
+        // one app with several slots must not read as several games.
+        g.apply(APP, AssetType::Capsule, "png", b"a").unwrap();
+        g.apply(APP, AssetType::Hero, "png", b"b").unwrap();
+        g.apply(APP, AssetType::Logo, "png", b"c").unwrap();
+        let other = AppId::new(620);
+        g.apply(other, AssetType::Capsule, "png", b"d").unwrap();
+
+        assert_eq!(g.customised_apps().unwrap(), vec![other, APP]);
+    }
+
+    #[test]
+    fn customised_apps_ignores_files_that_are_not_artwork() {
+        let (t, g) = dir();
+        g.apply(APP, AssetType::Capsule, "png", b"a").unwrap();
+        std::fs::write(t.path().join("notes.txt"), b"mine").unwrap();
+        std::fs::write(t.path().join("README"), b"mine").unwrap();
+
+        // Premise: the bystanders really are there, or this would pass against an empty dir.
+        assert_eq!(std::fs::read_dir(t.path()).unwrap().count(), 3);
+        assert_eq!(g.customised_apps().unwrap(), vec![APP]);
+    }
+
+    #[test]
+    fn a_grid_directory_that_was_never_created_has_nothing_to_reset() {
+        // Steam only creates `grid/` on the first custom art, so this is an ordinary first-run
+        // state. It must not be an error on the screen that exists to report "nothing to do".
+        let t = tempfile::tempdir().unwrap();
+        let g = GridDir::new(t.path().join("never-created"));
+        assert_eq!(g.customised_apps().unwrap(), Vec::new());
+    }
+
+    #[test]
+    fn the_predicted_count_is_exactly_what_clearing_deletes() {
+        // 🔴 The confirmation dialog quotes `removable`; the reset calls `clear`. If those two
+        // ever disagree the user is shown one number and given another — and the direction that
+        // matters is under-reporting, which is what "name it before it happens" forbids.
+        let (_t, g) = dir();
+        g.apply(APP, AssetType::Capsule, "png", b"a").unwrap();
+        // Applying a logo with no position writes the sidecar, which is the file a naive count
+        // misses: it is a sibling of no slot, yet `clear` removes it.
+        g.apply(APP, AssetType::Logo, "png", b"b").unwrap();
+
+        let predicted = g.removable(APP).len();
+        // Premise, or this could pass for the wrong reason on a two-file directory.
+        assert_eq!(predicted, 3, "capsule + logo + the logo position sidecar");
+
+        let mut actual = 0;
+        for asset in AssetType::EDITABLE {
+            actual += g.clear(APP, asset).unwrap().len();
+        }
+        assert_eq!(
+            actual, predicted,
+            "the quoted count must match the deletion"
+        );
+    }
+
+    #[test]
+    fn a_stranded_logo_position_is_still_counted_and_removed() {
+        // The sidecar can outlive the logo — clearing the logo takes it, but a hand-edited or
+        // half-migrated directory can leave one behind. It must not become invisible.
+        let (t, g) = dir();
+        std::fs::write(t.path().join("4048848997.json"), b"{}").unwrap();
+
+        assert_eq!(g.removable(APP).len(), 1);
+        assert_eq!(g.clear(APP, AssetType::Logo).unwrap().len(), 1);
+        assert!(g.removable(APP).is_empty());
+    }
+
+    #[test]
+    fn resetting_every_app_leaves_files_it_does_not_own() {
+        // The bulk reset composed end to end, and the property that makes it safe: `clear` only
+        // ever removes names it builds itself, so anything else in `grid/` survives — the same
+        // guarantee `cache::clear` carries, and for the same reason.
+        let (t, g) = dir();
+        g.apply(APP, AssetType::Capsule, "png", b"a").unwrap();
+        g.apply(APP, AssetType::Logo, "png", b"b").unwrap();
+        g.apply(AppId::new(620), AssetType::Hero, "png", b"c")
+            .unwrap();
+        let bystander = t.path().join("my-notes.txt");
+        std::fs::write(&bystander, b"not ours").unwrap();
+
+        let mut removed = 0;
+        for app in g.customised_apps().unwrap() {
+            for asset in AssetType::EDITABLE {
+                removed += g.clear(app, asset).unwrap().len();
+            }
+        }
+
+        // Four: three images plus the logo's position sidecar, which `apply` created.
+        assert_eq!(removed, 4);
+        assert!(g.customised_apps().unwrap().is_empty());
+        assert!(
+            bystander.is_file(),
+            "a full reset must not delete files it did not write"
+        );
     }
 
     #[test]

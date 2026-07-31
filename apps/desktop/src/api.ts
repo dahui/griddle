@@ -152,6 +152,23 @@ export interface Cleared {
   fell_back_because: string | null;
 }
 
+/** What a full reset would remove. Counted without deleting anything. */
+export interface ResetPlan {
+  games: number;
+  files: number;
+}
+
+/** What a full reset actually did. */
+export interface ResetAll {
+  games: number;
+  files_removed: number;
+  method: 'live' | 'file';
+  needs_restart: boolean;
+  fell_back_because: string | null;
+  /** Games whose files could not be removed. Empty on a clean run. */
+  failed: string[];
+}
+
 export interface ModuleReport {
   clstamp: string;
   total_modules: number;
@@ -212,6 +229,9 @@ export const api = {
   assetStatus: (appId: number) => invoke<AssetSlot[]>('asset_status', { appId }),
   clearAsset: (appId: number, assetType: AssetType) =>
     invoke<Cleared>('clear_asset', { appId, assetType }),
+  /** Read-only: counts what a full reset would delete, so the confirmation can quote it. */
+  resetAllPlan: () => invoke<ResetPlan>('reset_all_plan'),
+  resetAllArt: () => invoke<ResetAll>('reset_all_art'),
   prefs: () => invoke<Prefs>('prefs'),
   setLibraryView: (scope: LibraryScope, sort: LibrarySort) =>
     invoke<Prefs>('set_library_view', { scope, sort }),

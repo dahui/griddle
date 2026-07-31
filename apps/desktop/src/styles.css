@@ -118,6 +118,22 @@ button.ghost:hover:not(:disabled) {
   background: var(--panel-hi);
 }
 
+/*
+ * Destructive actions. Outlined rather than filled: a solid red button is the most eye-catching
+ * thing on the screen, which is the opposite of what an irreversible action wants. It fills in
+ * on hover, so the colour arrives as you commit rather than inviting the click.
+ */
+button.danger {
+  background: transparent;
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
+button.danger:hover:not(:disabled) {
+  background: var(--bad);
+  color: #12131a;
+}
+
 .search {
   font: inherit;
   font-size: 0.85rem;
@@ -538,6 +554,12 @@ figcaption {
 .modal .search {
   width: 100%;
   margin: 0.6rem 0;
+}
+
+/* Pushed right, so the destructive button is not where the cursor already is. */
+.modal-actions {
+  justify-content: flex-end;
+  margin-top: 1.1rem;
 }
 
 .matches {
