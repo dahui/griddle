@@ -490,7 +490,7 @@ flash, the wart this project exists to remove.
 | `sgdb::model` | Response types, every field read off a real response. Only `id` and `url` are required. |
 | `sgdb::query` | Endpoint + filter selection. `Dimensions` is a closed set, every value probed. |
 | `sgdb::client` | **The only place the key is used.** Concurrency cap 3, backoff with jitter, content-type checked before parsing. |
-| `settings` | `%APPDATA%\<AppName>\settings.json`, atomic. **Third and last writer.** A corrupt file is preserved, never overwritten. |
+| `settings` | `%APPDATA%\<AppName>\settings.json`, atomic. **Third and last writer.** A corrupt file is preserved, never overwritten. Filters are **one shared set**, not per asset type — see below. |
 | `settings::dpapi` | `CryptProtectData` round-trip for the API key. Windows-only, with **no plaintext fallback**. |
 | `cache` | `%LOCALAPPDATA%\<AppName>\cache`. JSON on a TTL, images forever. Entries are self-describing, so a collision or torn write is a **miss**. |
 | `base64` | Shared by `settings` (DPAPI blob) and `cdp` (image payloads). `is_base64()` is the JS-injection guard. |
@@ -730,7 +730,56 @@ both the desktop library and Big Picture, because Chromium sniffs content.
 which the CEF host binds and Valve cannot rename without breaking their own client. The most
 valuable feature is the least exposed to a Steam update. Worth keeping true.
 
-#### Twelve bugs worth remembering
+#### Eighteen bugs worth remembering
+
+**🔴 The shared filter set is clamped at *query* time, never on save.** `pruneToType` narrows the
+one shared `Filters` to what the current tab's endpoint accepts, and the result is deliberately
+thrown away after building the query. Pruning on save would be the obvious simplification and is
+a data-loss bug: the Logo tab offers no sizes at all, so opening it once would wipe every size
+the user had chosen, for every tab, permanently. Tests assert both halves — that a query is
+clamped, and that a round trip through storage is not.
+
+**🔴 A settings migration that would have failed *quietly*.** Filters moved from
+`{"grid_p": {…}, "hero": {…}}` to one flat object. Serde reads that old map into the new
+`FilterState` as "every field missing" → all-`false`, which is **not** `defaultFilters()` — it
+reads as though the user had deliberately switched every content filter off. No error, no panic,
+just wrong. `filters_compat` recognises the old shape (its values are all objects; a current
+`FilterState` holds booleans and arrays) and carries `grid_p` across. The same applies to
+`game_overrides`, which went from a bare id to `{id, name}`. **A type change under `#[serde(default)]`
+is not a no-op — it is a silent default.**
+
+**🔴 One piece of state that belonged to a *variant*, refilled asynchronously — and the wrong
+answer was plausible, not an error.** The asset browser held a single `Filters` value and
+repopulated it from `prefs()` on every tab change. That left a window in which the state belonged
+to the *previous* tab, so switching Capsule → Wide Capsule issued a request carrying `600x900`.
+Both tabs are the **same** `grids` endpoint separated only by `dimensions`, so it returned real
+artwork — portrait capsules, in the wide tab. It looked like the tab switch was being ignored.
+
+`query.rs` already carries a warning about exactly this failure ("fills it with portrait art…
+which is worse than failing") and the code still walked into it *from a different direction*: the
+warning was about sending **no** dimensions, and this sent the **wrong** ones. Fixed by making the
+invariant unrepresentable — `filtersForType(type, edited, stored)` resolves synchronously from a
+per-type map and cannot return another tab's filters. **A documented hazard is not a solved one
+unless the shape of the code enforces it.**
+
+**🔴 A guard that was right for one caller, applied to every caller, turned a flicker into a
+permanent wrong state.** `if (inFlight.current) return;` exists to stop the infinite-scroll
+observer requesting the same page twice. But the *reset* path used the same function, so when a
+tab or filter change fired while a request was in flight, the corrective fetch was refused — and
+never retried. The stale response then landed and stuck. That is what turned the bug above from a
+brief flash into "this tab is broken". Now every request carries a generation and a newer one
+supersedes an older one; the in-flight guard applies only to the observer, which is the caller
+that actually needs it.
+
+**🔴 Reading a setting that a separate round trip had not written yet.** The library list read
+`library_sort` from `Settings` while the UI persisted the choice through a *different* command.
+Picking "Recently played" reloaded the list before the write landed, so it came back in the old
+order and the control looked dead. `scope` and `sort` are now **parameters** to `library`. A value
+the caller already has should be passed, not re-read from shared state.
+
+**🔴 `<details open={…}>` is controlled by React.** Binding `open` to "are the filters modified"
+slammed the panel shut the instant the user clicked "Reset filters", with their cursor still
+inside it. Seed from the derived value once, then let the user own it.
 
 **`Path::ends_with` matches whole components, not string suffixes.** `p.ends_with("_icon.ico")`
 is always false for `4048848997_icon.ico`. Compare `file_name()` instead.
@@ -1395,6 +1444,7 @@ declares which it needs, so losing `SliderField` costs the zoom slider, not the 
 | **User supplies their own SGDB API key** | Decky's is hardcoded with an explicit *"attempting to use this in your own projects will cause you to be automatically banned and blacklisted"*. Non-negotiable. `[VERIFIED-SOURCE]` |
 | **BPM UI is a modal, not a route** | Decky registers a route because it *has* `routerHook`. We'd have to patch Steam's minified router. `showModal` is a smaller, more stable target with the same UX. |
 | **Installed games, or everything `localconfig.vdf` knows (518 here)** | Fully offline; no Steam Web API. 🔴 **Neither is an ownership list** — `licensecache` is encrypted — so "All games" is labelled as such and never as "owned". |
+| **One filter set for all five tabs**, not `filters_<type>` | Decky keys filters per asset type. Re-picking "no adult content" on five tabs is busywork, not a feature. Per-endpoint vocabularies (sizes, styles) are handled by **clamping at query time**, so a selection another tab cannot show is kept rather than discarded. |
 | **No MOTD, donation modal, or tutorial video** | Decky-store furniture. The first-run API-key flow replaces the tutorial. |
 | **Library style tweaks ship behind "Experimental"** | Square Capsules / Matching Recents / Capsule Glow patch Steam's own library rendering *globally* — the most fragile surface in the product. Same features, honest labelling, individually disableable. |
 | **Plus, not in Decky: a diagnostics screen and the build-stamped module map** | The reliability gap is the actual reason to build this. |

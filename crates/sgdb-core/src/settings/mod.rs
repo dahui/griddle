@@ -113,12 +113,23 @@ pub struct Settings {
     /// `zoomlevel_<type>` in the Decky plugin.
     pub zoom: PerAssetType<f32>,
 
-    /// `filters_<type>` in the Decky plugin.
-    pub filters: PerAssetType<FilterState>,
+    /// The content filters, **shared by every asset type**.
+    ///
+    /// The Decky plugin keys these per type (`filters_<type>`) and so did this, until it became
+    /// clear that having to re-pick "no adult content" five times is busywork rather than a
+    /// feature. Values that only apply to some types — sizes especially — are held here as a
+    /// union and clamped to the current type when the query is built, so switching tabs never
+    /// discards a selection that the other tab could not show.
+    ///
+    /// `None` means the user has never changed them, which is *not* the same as
+    /// [`FilterState::default`]: the app's defaults live in TypeScript, in one place.
+    #[serde(default, deserialize_with = "filters_compat")]
+    pub filters: Option<FilterState>,
 
-    /// `nonsteam_<appid>`: a manual Steam-appid → SteamGridDB-game-id override, for when the
+    /// `nonsteam_<appid>`: a manual Steam appid → SteamGridDB game override, for when the
     /// automatic match is wrong or absent.
-    pub game_overrides: BTreeMap<u32, u64>,
+    #[serde(default, deserialize_with = "overrides_compat")]
+    pub game_overrides: BTreeMap<u32, GameOverride>,
 
     /// Resolved Steam module map, keyed by the build it was resolved against.
     pub module_map: Option<ModuleMap>,
@@ -167,7 +178,7 @@ impl Default for Settings {
             live_apply: false,
             tabs: TabSettings::default(),
             zoom: PerAssetType::new(),
-            filters: PerAssetType::new(),
+            filters: None,
             game_overrides: BTreeMap::new(),
             module_map: None,
             library_scope: LibraryScope::default(),
@@ -185,10 +196,74 @@ pub struct TabSettings {
     pub default_tab: Option<String>,
 }
 
-/// The content filters for one asset type.
+/// Which SteamGridDB game an appid pulls artwork from.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GameOverride {
+    /// SteamGridDB's own game id — **not** a Steam appid.
+    pub id: u64,
+    /// The game's name as it read when the user chose it.
+    ///
+    /// Purely so the UI can say *"Cyberpunk 2077"* rather than *"SteamGridDB game #17830"*.
+    /// Stored rather than looked up because the id is all the asset endpoints need, and this
+    /// project does not ship an endpoint it has not probed against the live API. Optional so an
+    /// override written before this field existed still loads.
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
+/// Accept both the current shape and the pre-M4 per-asset-type map.
 ///
-/// Mirrors the Decky plugin's per-type filter state. The tag→query *inversion* lives in
-/// `packages/shared/src/filters.ts` and is not duplicated in Rust; this is storage only.
+/// Filters used to be stored per type (`{"grid_p": {…}, "hero": {…}}`) and are one shared set
+/// now. Simply changing the type would have serde read that old map as a `FilterState` with
+/// every field missing — yielding all-`false`, which is **not** the app's defaults and would
+/// look to the user like they had deliberately switched everything off. So the old shape is
+/// recognised and the tab that opens first is carried across.
+fn filters_compat<'de, D>(d: D) -> Result<Option<FilterState>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let Some(value) = Option::<serde_json::Value>::deserialize(d)? else {
+        return Ok(None);
+    };
+    let Some(map) = value.as_object() else {
+        return Ok(None);
+    };
+    // The old shape is the one whose every value is itself an object. A current `FilterState`
+    // has booleans and arrays in it, so the two cannot be confused.
+    if !map.is_empty() && map.values().all(serde_json::Value::is_object) {
+        return Ok(map
+            .get("grid_p")
+            .or_else(|| map.values().next())
+            .and_then(|v| serde_json::from_value(v.clone()).ok()));
+    }
+    Ok(serde_json::from_value(value).ok())
+}
+
+/// Accept both the current shape and the pre-M4 bare id.
+///
+/// Overrides used to be `{"620": 17830}`; they now carry the game's name alongside.
+fn overrides_compat<'de, D>(d: D) -> Result<BTreeMap<u32, GameOverride>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw = BTreeMap::<u32, serde_json::Value>::deserialize(d)?;
+    Ok(raw
+        .into_iter()
+        .filter_map(|(app_id, value)| {
+            if let Some(id) = value.as_u64() {
+                return Some((app_id, GameOverride { id, name: None }));
+            }
+            serde_json::from_value::<GameOverride>(value)
+                .ok()
+                .map(|g| (app_id, g))
+        })
+        .collect())
+}
+
+/// The content filters, shared by every asset type.
+///
+/// The tag→query *inversion* lives in `packages/shared/src/filters.ts` and is not duplicated in
+/// Rust; this is storage only.
 ///
 /// 🔴 **`Default` here is not the app's default filter set.** Every boolean defaults to `false`,
 /// whereas `defaultFilters()` in TypeScript turns most of them on. That is deliberate: the
@@ -439,19 +514,22 @@ mod tests {
             ..Default::default()
         };
         let _ = s.zoom.insert("Capsule".into(), 1.75);
-        let _ = s.game_overrides.insert(620, 17830);
-        let _ = s.filters.insert(
-            "grid_p".into(),
-            FilterState {
-                untagged: true,
-                humor: true,
-                styles: vec!["alternate".into()],
-                dimensions: vec!["600x900".into()],
-                animated: true,
-                statik: true,
-                ..Default::default()
+        let _ = s.game_overrides.insert(
+            620,
+            GameOverride {
+                id: 17830,
+                name: Some("Portal 2".into()),
             },
         );
+        s.filters = Some(FilterState {
+            untagged: true,
+            humor: true,
+            styles: vec!["alternate".into()],
+            dimensions: vec!["600x900".into()],
+            animated: true,
+            statik: true,
+            ..Default::default()
+        });
         s.tabs.order = vec!["Hero".into(), "Capsule".into()];
         s.module_map = Some(ModuleMap {
             clstamp: "10840511".into(),
@@ -491,6 +569,96 @@ mod tests {
             serde_json::from_str(r#"{"static":true,"animated":false}"#).unwrap();
         assert!(back.statik);
         assert!(!back.animated);
+    }
+
+    #[test]
+    fn a_pre_m4_per_type_filter_map_is_carried_across_not_read_as_all_false() {
+        // 🔴 The dangerous migration. Filters were stored per asset type and are one shared set
+        // now. Without the shim serde reads the old map as a `FilterState` with every field
+        // missing — all-`false`, which is not the app's defaults, and looks to the user like
+        // they had switched every content filter off themselves.
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::at(dir.path().join("settings.json"));
+        std::fs::write(
+            store.path(),
+            r#"{"version":1,"filters":{
+                 "grid_p":{"untagged":true,"humor":true,"styles":["alternate"],"animated":true,"static":true},
+                 "hero":{"untagged":false}
+               }}"#,
+        )
+        .unwrap(); // boundary-ok: test fixture
+
+        let loaded = store.load().unwrap();
+        let Some(filters) = loaded.filters else {
+            panic!("the old per-type map must carry across, not vanish");
+        };
+
+        // Premise and behaviour together: the carried values are grid_p's, and they are the
+        // ones that would have been lost. All-false would satisfy none of these.
+        assert!(filters.untagged);
+        assert!(filters.humor);
+        assert!(filters.statik);
+        assert_eq!(filters.styles, vec!["alternate".to_owned()]);
+    }
+
+    #[test]
+    fn the_current_flat_filter_shape_is_not_mistaken_for_the_old_map() {
+        // The control for the shim's discriminator. A current `FilterState` has booleans and
+        // arrays in it; the old shape had objects. Both must round-trip correctly, or the shim
+        // would quietly eat every filter the user sets from now on.
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::at(dir.path().join("settings.json"));
+        std::fs::write(
+            store.path(),
+            r#"{"version":1,"filters":{"untagged":false,"adult":true,"styles":["blurred"],"static":true}}"#,
+        )
+        .unwrap(); // boundary-ok: test fixture
+
+        let filters = store.load().unwrap().filters.unwrap();
+        assert!(!filters.untagged);
+        assert!(filters.adult);
+        assert!(filters.statik);
+        assert_eq!(filters.styles, vec!["blurred".to_owned()]);
+    }
+
+    #[test]
+    fn an_absent_filter_key_stays_none_rather_than_becoming_all_false() {
+        // `None` means "never customised", which is what lets the frontend apply its own
+        // defaults. Collapsing it to `FilterState::default()` here would silently turn every
+        // content filter off for a first-run user.
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::at(dir.path().join("settings.json"));
+        std::fs::write(store.path(), r#"{"version":1}"#).unwrap(); // boundary-ok: test fixture
+        assert_eq!(store.load().unwrap().filters, None);
+    }
+
+    #[test]
+    fn a_pre_m4_bare_override_id_still_loads() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::at(dir.path().join("settings.json"));
+        std::fs::write(
+            store.path(),
+            r#"{"version":1,"game_overrides":{"620":17830,"440":{"id":123,"name":"TF2"}}}"#,
+        )
+        .unwrap(); // boundary-ok: test fixture
+
+        let loaded = store.load().unwrap();
+        // The old bare-id form keeps working, with no name to show.
+        assert_eq!(
+            loaded.game_overrides.get(&620),
+            Some(&GameOverride {
+                id: 17830,
+                name: None
+            }),
+        );
+        // The control: the current form parses too, so the shim is not swallowing everything.
+        assert_eq!(
+            loaded.game_overrides.get(&440),
+            Some(&GameOverride {
+                id: 123,
+                name: Some("TF2".into())
+            }),
+        );
     }
 
     #[test]

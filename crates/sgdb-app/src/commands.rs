@@ -136,13 +136,13 @@ pub async fn clear_api_key(state: State<'_, AppState>) -> Res<()> {
 pub struct Prefs {
     pub library_scope: LibraryScope,
     pub library_sort: LibrarySort,
-    /// Keyed by [`AssetType::sgdb_name`] — `grid_p`, `grid_l`, `hero`, `logo`, `icon`.
+    /// The content filters, shared by every asset type.
     ///
-    /// Only asset types the user has actually customised appear. The frontend fills the gaps
-    /// with `defaultFilters(type)`, which is where the defaults are defined and tested.
-    pub filters: BTreeMap<String, sgdb_core::settings::FilterState>,
+    /// `null` when the user has never changed them; the frontend then applies
+    /// `defaultFilters()`, which is where the defaults are defined and tested.
+    pub filters: Option<sgdb_core::settings::FilterState>,
     pub zoom: BTreeMap<String, f32>,
-    pub game_overrides: BTreeMap<u32, u64>,
+    pub game_overrides: BTreeMap<u32, sgdb_core::settings::GameOverride>,
 }
 
 async fn snapshot(state: &State<'_, AppState>) -> Prefs {
@@ -176,34 +176,29 @@ pub async fn set_library_view(
     Ok(snapshot(&state).await)
 }
 
-/// Store the filter set for one asset type.
-///
-/// The asset type is parsed before anything is written, so a typo cannot leave an unreachable
-/// key behind in `settings.json`.
+/// Store the filter set. One set, shared by every asset type.
 #[tauri::command]
 pub async fn set_filters(
     state: State<'_, AppState>,
-    asset_type: String,
     filters: sgdb_core::settings::FilterState,
 ) -> Res<Prefs> {
-    let asset = parse_asset_type(&asset_type)?;
     {
         let mut settings = state.settings.lock().await;
-        let _ = settings
-            .filters
-            .insert(asset.sgdb_name().to_owned(), filters);
+        settings.filters = Some(filters);
         state.store.save(&settings)?;
     }
     Ok(snapshot(&state).await)
 }
 
-/// Forget the stored filters for one asset type, so it falls back to the defaults.
+/// Forget the stored filters, so they fall back to the defaults.
+///
+/// Stores `None` rather than `FilterState::default()`: the defaults live in TypeScript, and
+/// writing an all-`false` struct here would mean "the user turned everything off".
 #[tauri::command]
-pub async fn reset_filters(state: State<'_, AppState>, asset_type: String) -> Res<Prefs> {
-    let asset = parse_asset_type(&asset_type)?;
+pub async fn reset_filters(state: State<'_, AppState>) -> Res<Prefs> {
     {
         let mut settings = state.settings.lock().await;
-        let _ = settings.filters.remove(asset.sgdb_name());
+        settings.filters = None;
         state.store.save(&settings)?;
     }
     Ok(snapshot(&state).await)
@@ -213,17 +208,22 @@ pub async fn reset_filters(state: State<'_, AppState>, asset_type: String) -> Re
 ///
 /// `None` clears it. Without that, an override set once could never be undone from the UI, and
 /// a wrong choice would be permanent.
+/// `name` is stored alongside so the UI can name the override later without a lookup — see
+/// [`sgdb_core::settings::GameOverride`].
 #[tauri::command]
 pub async fn set_game_override(
     state: State<'_, AppState>,
     app_id: u32,
     sgdb_id: Option<u64>,
+    name: Option<String>,
 ) -> Res<Prefs> {
     {
         let mut settings = state.settings.lock().await;
         match sgdb_id {
             Some(id) => {
-                let _ = settings.game_overrides.insert(app_id, id);
+                let _ = settings
+                    .game_overrides
+                    .insert(app_id, sgdb_core::settings::GameOverride { id, name });
             }
             None => {
                 let _ = settings.game_overrides.remove(&app_id);
@@ -263,11 +263,17 @@ pub struct LibraryEntry {
 /// Shortcuts are never scoped away: a non-Steam shortcut is always "installed" in the only sense
 /// that matters here, and hiding them behind a toggle they have nothing to do with would be
 /// baffling.
+///
+/// `scope` and `sort` are **parameters, not reads of `Settings`**. Persisting a view preference
+/// and reloading the list are separate round trips, so reading the stored value here would race
+/// the write: picking "Recently played" reloaded the list before the setting had landed and it
+/// came back in the old order, which looked like the control did nothing.
 #[tauri::command]
 pub async fn library(
     state: State<'_, AppState>,
     asset_type: String,
     scope: LibraryScope,
+    sort: LibrarySort,
 ) -> Res<Vec<LibraryEntry>> {
     let asset = parse_asset_type(&asset_type)?;
     let ctx = state.steam()?;
@@ -378,7 +384,6 @@ pub async fn library(
         Err(e) => tracing::warn!(error = %e, "could not read shortcuts.vdf"),
     }
 
-    let sort = { state.settings.lock().await.library_sort };
     sort_entries(&mut entries, sort);
     Ok(entries)
 }
@@ -470,7 +475,7 @@ pub async fn search_assets(
     let target = {
         let settings = state.settings.lock().await;
         match settings.game_overrides.get(&app_id) {
-            Some(sgdb_id) => Target::Sgdb(*sgdb_id),
+            Some(over) => Target::Sgdb(over.id),
             None => Target::Steam(AppId::new(app_id)),
         }
     };
@@ -538,26 +543,32 @@ pub async fn current_game_match(state: State<'_, AppState>, app_id: u32) -> Res<
             .await
             .game_overrides
             .get(&app_id)
-            .copied()
+            .cloned()
     };
+
+    // An override needs no network call at all: the name was stored when the user chose it.
+    //
+    // This used to synthesise `SteamGridDB game #17830` because only the id was kept — honest,
+    // but useless to read. Storing the name is also why there is no by-id lookup here: this
+    // project does not ship an endpoint it has not probed against the live API, and with the
+    // name in hand it does not need one.
+    if let Some(over) = over {
+        return Ok(Some(GameMatch {
+            id: over.id,
+            name: over
+                .name
+                .unwrap_or_else(|| format!("SteamGridDB game #{}", over.id)),
+            verified: false,
+            types: Vec::new(),
+        }));
+    }
 
     let guard = state.sgdb.lock().await;
     let client = guard.as_ref().ok_or_else(UiError::no_api_key)?;
-
-    match over {
-        // An override names a SteamGridDB id directly, and there is no by-id endpoint in use
-        // here — report what we know rather than pretending to have resolved a name.
-        Some(id) => Ok(Some(GameMatch {
-            id,
-            name: format!("SteamGridDB game #{id}"),
-            verified: false,
-            types: Vec::new(),
-        })),
-        None => Ok(client
-            .game_by_steam_appid(AppId::new(app_id))
-            .await?
-            .map(GameMatch::from)),
-    }
+    Ok(client
+        .game_by_steam_appid(AppId::new(app_id))
+        .await?
+        .map(GameMatch::from))
 }
 
 // -- applying -------------------------------------------------------------------------------

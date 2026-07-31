@@ -24,8 +24,20 @@
  * functionality."* `[VERIFIED-DOCS — openapi.yml 2.10.0]`
  */
 
-import { DIMENSIONS, MIMES, STYLES, type AssetType } from './assets';
+import { ASSET_TYPES, DIMENSIONS, MIMES, STYLES, type AssetType } from './assets';
 
+/**
+ * The content filters — **one set, shared by every asset type**.
+ *
+ * The Decky plugin keys these per type (`filters_<type>`) and so did this, until it became clear
+ * that having to re-pick "no adult content" on five separate tabs is busywork rather than a
+ * feature.
+ *
+ * Sizes and styles *do* have per-type vocabularies, and that is handled by **clamping rather
+ * than splitting**: this object holds the union, and {@link pruneToType} narrows it to whatever
+ * the current tab can use at the moment the query is built. A selection another tab cannot show
+ * is therefore kept rather than discarded, so switching back restores it.
+ */
 export interface Filters {
   styles: string[];
   dimensions: string[];
@@ -38,14 +50,22 @@ export interface Filters {
   humor: boolean;
   epilepsy: boolean;
   untagged: boolean;
-  /** Overrides which SteamGridDB game to pull from. Non-Steam shortcuts always set this. */
-  gameIdOverride?: number;
 }
 
-export function defaultFilters(type: AssetType): Filters {
+/**
+ * Every dimension that is on by default for *some* asset type.
+ *
+ * Derived from {@link DIMENSIONS} rather than written out, so adding a size cannot leave this
+ * behind. Clamping this union with {@link pruneToType} reproduces each type's own default set
+ * exactly — which is the property that lets one shared filter set replace five without changing
+ * what any tab shows out of the box.
+ */
+const DEFAULT_DIMENSIONS: string[] = [...new Set(ASSET_TYPES.flatMap((t) => DIMENSIONS[t].default))];
+
+export function defaultFilters(): Filters {
   return {
     styles: [],
-    dimensions: [...DIMENSIONS[type].default],
+    dimensions: [...DEFAULT_DIMENSIONS],
     mimes: [],
     animated: true,
     static: true,
@@ -57,8 +77,8 @@ export function defaultFilters(type: AssetType): Filters {
 }
 
 /** True when `filters` still matches {@link defaultFilters} — drives "Reset Filters" visibility. */
-export function isDefault(type: AssetType, filters: Filters): boolean {
-  const d = defaultFilters(type);
+export function isDefault(filters: Filters): boolean {
+  const d = defaultFilters();
   const sameSet = (a: string[], b: string[]) =>
     a.length === b.length && [...a].sort().join(',') === [...b].sort().join(',');
   return (
@@ -70,8 +90,7 @@ export function isDefault(type: AssetType, filters: Filters): boolean {
     filters.adult === d.adult &&
     filters.humor === d.humor &&
     filters.epilepsy === d.epilepsy &&
-    filters.untagged === d.untagged &&
-    filters.gameIdOverride === undefined
+    filters.untagged === d.untagged
   );
 }
 
@@ -123,9 +142,8 @@ export const PAGE_LIMIT = 50;
 /**
  * The stored shape, as `sgdb-core`'s `FilterState` serialises it.
  *
- * Distinct from {@link Filters} in two ways that matter: it has no `gameIdOverride` (that lives
- * in `Settings.game_overrides`, keyed by appid, because it is per-game rather than per-tab), and
- * it is what actually round-trips through `settings.json`.
+ * Structurally identical to {@link Filters}; kept as its own name because it is the wire
+ * contract with Rust, where `static` is a keyword and therefore a `#[serde(rename)]`.
  */
 export interface StoredFilters {
   untagged: boolean;
@@ -142,13 +160,14 @@ export interface StoredFilters {
 /**
  * Stored filters → working filters, falling back to the defaults.
  *
- * `undefined` means the user has never customised this tab. The defaults are filled in here
+ * `null`/`undefined` means the user has never changed them. The defaults are filled in here
  * rather than in Rust so they have exactly one implementation — the one `defaultFilters` above
- * already tests.
+ * already tests. **No pruning happens here**: the stored set is the union across every type, and
+ * narrowing it on load would permanently discard whatever the current tab cannot show.
  */
-export function fromStored(type: AssetType, stored: StoredFilters | undefined): Filters {
-  if (!stored) return defaultFilters(type);
-  return pruneToType(type, {
+export function fromStored(stored: StoredFilters | null | undefined): Filters {
+  if (!stored) return defaultFilters();
+  return {
     styles: stored.styles,
     dimensions: stored.dimensions,
     mimes: stored.mimes,
@@ -158,16 +177,10 @@ export function fromStored(type: AssetType, stored: StoredFilters | undefined): 
     humor: stored.humor,
     epilepsy: stored.epilepsy,
     untagged: stored.untagged,
-  });
+  };
 }
 
-/**
- * Working filters → the stored shape.
- *
- * 🔴 **`gameIdOverride` is deliberately dropped.** It is not a filter and it is not stored here.
- * Round-tripping it would also make {@link isDefault} return false forever for any game with an
- * override, pinning "Reset Filters" permanently visible on a filter set that is untouched.
- */
+/** Working filters → the stored shape. */
 export function toStored(filters: Filters): StoredFilters {
   return {
     untagged: filters.untagged,
@@ -182,13 +195,30 @@ export function toStored(filters: Filters): StoredFilters {
   };
 }
 
-/** Clamp a filter's selections to the options its asset type actually offers. */
+/**
+ * Clamp a filter set to the options one asset type actually offers.
+ *
+ * 🔴 **This is what keeps a shared filter set honest, and it must run at query time — every
+ * time — against the tab being queried.** `grid_p` and `grid_l` are the *same* SteamGridDB
+ * endpoint separated only by `dimensions`, so a query built for the Wide Capsule tab while
+ * carrying the Capsule tab's `600x900` does not fail: it returns portrait art, in the wide tab.
+ * That is a real bug this project has already shipped once.
+ *
+ * The result is deliberately **not** written back to storage. Narrowing on save would discard a
+ * selection the moment the user visited a tab that could not display it.
+ */
 export function pruneToType(type: AssetType, filters: Filters): Filters {
-  const keep = (values: string[], allowed: string[]) => values.filter((v) => allowed.includes(v));
+  const keep = (values: string[], allowed: readonly string[]) =>
+    values.filter((v) => allowed.includes(v));
   return {
     ...filters,
     styles: keep(filters.styles, STYLES[type]),
     dimensions: keep(filters.dimensions, DIMENSIONS[type].all),
     mimes: keep(filters.mimes, MIMES[type]),
   };
+}
+
+/** The query parameters for one tab: clamp to what it offers, then translate. */
+export function queryFor(type: AssetType, filters: Filters): QueryParams {
+  return filtersToQuery(pruneToType(type, filters));
 }

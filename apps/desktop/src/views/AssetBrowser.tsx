@@ -4,11 +4,12 @@ import {
   ASSET_LABEL,
   ASSET_TYPES,
   defaultFilters,
-  filtersToQuery,
   fromStored,
+  queryFor,
   toStored,
   type AssetType,
   type Filters,
+  type StoredFilters,
 } from '@sgdb/shared';
 import {
   api,
@@ -42,32 +43,39 @@ export function AssetBrowser({
   const [error, setError] = useState<UiError | null>(null);
   const [applying, setApplying] = useState<number | null>(null);
   const [applied, setApplied] = useState<Applied | null>(null);
-  const [filters, setFilters] = useState<Filters>(() => defaultFilters(assetType));
+  // One filter set for every tab. `null` until the stored value arrives — which is also the
+  // gate on fetching, because a request built before then would use the wrong filters.
+  //
+  // 🔴 The per-tab clamp happens at *query* time, in `queryFor`, never here. Storing a clamped
+  // set would throw away a size the moment the user visited a tab that cannot show it; and
+  // clamping late is what stops the Wide Capsule tab being queried with the Capsule tab's
+  // `600x900`, which returns portrait art rather than an error.
+  const [filters, setFilters] = useState<Filters | null>(null);
   const [picking, setPicking] = useState(false);
   const [match, setMatch] = useState<GameMatch | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   const sentinel = useRef<HTMLDivElement | null>(null);
-  // Guards against the observer firing again while a fetch is already in flight, which would
-  // request the same page several times and duplicate every card.
-  const inFlight = useRef(false);
 
-  // Load this tab's stored filters. A tab the user has never customised has nothing stored, and
-  // `fromStored` fills in the defaults — which live in one place, in TypeScript.
+  // Read once. A tab change needs no round trip, so there is no window in which the filters in
+  // hand belong to something other than what is about to be queried.
   useEffect(() => {
     let cancelled = false;
     api
       .prefs()
       .then((p) => {
-        if (!cancelled) setFilters(fromStored(assetType, p.filters[assetType]));
+        if (!cancelled) setFilters(fromStored(p.filters));
       })
+      // Unreadable settings must not block browsing — fall through to the defaults.
       .catch(() => {
-        if (!cancelled) setFilters(defaultFilters(assetType));
+        if (!cancelled) setFilters(defaultFilters());
       });
     return () => {
       cancelled = true;
     };
-  }, [assetType]);
+  }, []);
+
+  const ready = filters !== null;
 
   // Which SteamGridDB game we are pulling from, for the "Wrong game?" button's label.
   useEffect(() => {
@@ -86,16 +94,36 @@ export function AssetBrowser({
   }, [entry.app_id]);
 
   /**
-   * 🔴 A stable key for the filter set, and the reason `loadPage` does not depend on `filters`
-   * directly: `filters` is a fresh object on every render, so using it as a dependency would
-   * rebuild `loadPage`, re-fire the reset effect below, and refetch page 0 forever.
+   * The query parameters, clamped to the current tab.
+   *
+   * A JSON string rather than an object, and the reason `loadPage` does not depend on `filters`
+   * directly: `filters` would be a fresh reference on every render, so using it as a dependency
+   * would rebuild `loadPage`, re-fire the reset effect below, and refetch page 0 forever. It
+   * also folds the tab in — `queryFor` clamps to `assetType`, so a tab change changes this key.
    */
-  const queryKey = useMemo(() => JSON.stringify(filtersToQuery(filters)), [filters]);
+  const queryKey = useMemo(
+    () => JSON.stringify(filters ? queryFor(assetType, filters) : {}),
+    [assetType, filters],
+  );
+
+  /**
+   * Every request carries a generation, and a newer one **supersedes** an older one.
+   *
+   * 🔴 This replaces a plain `if (inFlight) return;` guard, which was right for the scroll
+   * observer and badly wrong for everything else: when a tab or filter change fired while a
+   * request was in flight, the corrective fetch was refused and never retried, so the stale
+   * response landed and stuck. That is what made the wrong-filters bug above permanent rather
+   * than a flicker.
+   *
+   * `inFlightPage` still exists, but only to stop the observer requesting the same page twice.
+   */
+  const generation = useRef(0);
+  const inFlightPage = useRef<number | null>(null);
 
   const loadPage = useCallback(
     async (next: number) => {
-      if (inFlight.current) return;
-      inFlight.current = true;
+      const mine = ++generation.current;
+      inFlightPage.current = next;
       setLoading(true);
       try {
         const result = await api.searchAssets(
@@ -104,6 +132,9 @@ export function AssetBrowser({
           next,
           JSON.parse(queryKey) as Record<string, string>,
         );
+        // Superseded: a tab, filter or game change happened while this was in flight. Drop it
+        // silently — merging it would mix two different result sets.
+        if (generation.current !== mine) return;
         setAssets((prev) => {
           // Deduplicate by id: a page boundary can repeat an item if the underlying list
           // changed between requests, and React would then warn about duplicate keys.
@@ -115,11 +146,16 @@ export function AssetBrowser({
         setPage(next);
         setError(null);
       } catch (e: unknown) {
+        if (generation.current !== mine) return;
         setError(asUiError(e));
         setHasMore(false);
       } finally {
-        setLoading(false);
-        inFlight.current = false;
+        // Only the newest request owns the shared flags; a superseded one must leave them to
+        // whichever request replaced it, or the observer would fire during that one.
+        if (generation.current === mine) {
+          inFlightPage.current = null;
+          setLoading(false);
+        }
       }
     },
     [entry.app_id, assetType, queryKey],
@@ -132,6 +168,7 @@ export function AssetBrowser({
   // overriding which SteamGridDB game we pull from. The Steam appid is unchanged, so without it
   // the new game's assets would be appended to the old game's.
   useEffect(() => {
+    if (!ready) return;
     setAssets([]);
     setPage(0);
     setTotal(0);
@@ -139,13 +176,16 @@ export function AssetBrowser({
     setError(null);
     setApplied(null);
     void loadPage(0);
-  }, [loadPage, reloadKey]);
+  }, [loadPage, ready, reloadKey]);
 
   useEffect(() => {
     const node = sentinel.current;
-    if (!node || !hasMore || error) return undefined;
+    if (!node || !hasMore || error || !ready) return undefined;
     const observer = new IntersectionObserver(
       (entries) => {
+        // Only the observer needs this guard: without it, scrolling requests the same next page
+        // repeatedly and duplicates every card.
+        if (inFlightPage.current !== null) return;
         if (entries.some((e) => e.isIntersecting)) void loadPage(page + 1);
       },
       // Start fetching before the sentinel is actually visible, so scrolling stays smooth.
@@ -153,18 +193,25 @@ export function AssetBrowser({
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [hasMore, error, page, loadPage]);
+  }, [hasMore, error, page, loadPage, ready]);
+
+  /**
+   * Apply a filter change locally and persist it.
+   *
+   * Local state leads so the grid refetches immediately rather than waiting on the write, and
+   * failing to *persist* a filter choice must not surface as a browsing error.
+   */
+  function applyFilters(next: Filters, persist: () => Promise<{ filters: StoredFilters | null }>) {
+    setFilters(next);
+    void persist().catch(() => undefined);
+  }
 
   function changeFilters(next: Filters) {
-    setFilters(next);
-    // Fire and forget: the grid already refetches from the state above, and failing to *persist*
-    // a filter choice should not surface as a browsing error.
-    void api.setFilters(assetType, toStored(next)).catch(() => undefined);
+    applyFilters(next, () => api.setFilters(toStored(next)));
   }
 
   function resetFilters() {
-    setFilters(defaultFilters(assetType));
-    void api.resetFilters(assetType).catch(() => undefined);
+    applyFilters(defaultFilters(), () => api.resetFilters());
   }
 
   async function apply(asset: Asset) {
@@ -206,14 +253,16 @@ export function AssetBrowser({
         ))}
       </nav>
 
-      <FilterPanel
-        assetType={assetType}
-        filters={filters}
-        onChange={changeFilters}
-        onReset={resetFilters}
-        onPickGame={() => setPicking(true)}
-        gameLabel={match?.name ?? null}
-      />
+      {filters && (
+        <FilterPanel
+          assetType={assetType}
+          filters={filters}
+          onChange={changeFilters}
+          onReset={resetFilters}
+          onPickGame={() => setPicking(true)}
+          gameLabel={match?.name ?? null}
+        />
+      )}
 
       {picking && (
         <GameSearchModal
@@ -261,7 +310,9 @@ export function AssetBrowser({
         ))}
       </div>
 
-      {loading && <Spinner label="Loading artwork…" />}
+      {/* `!ready` matters: nothing is fetched until the stored filters arrive, so without it
+          there is a frame showing neither a spinner nor a result. */}
+      {(loading || !ready) && <Spinner label="Loading artwork…" />}
       {!loading && !hasMore && assets.length === 0 && !error && (
         <Empty>SteamGridDB has no {ASSET_LABEL[assetType].toLowerCase()} artwork for this game.</Empty>
       )}

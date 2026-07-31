@@ -58,7 +58,7 @@ export function Library({ onPick }: { onPick: (entry: LibraryEntry) => void }) {
     setEntries(null);
     setError(null);
     api
-      .library(LIST_ASSET, scope)
+      .library(LIST_ASSET, scope, sort)
       .then((list) => {
         // Switching scope while a load is in flight would otherwise let the older, larger
         // response land last and show apps the user just filtered out.

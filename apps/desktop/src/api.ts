@@ -6,7 +6,10 @@
  * the whole reason the Rust side carries a discriminant across the boundary.
  */
 import { invoke } from '@tauri-apps/api/core';
-import type { AssetType } from '@sgdb/shared';
+// `StoredFilters` is the wire shape of Rust's `FilterState`. Imported rather than redeclared
+// here: a second copy of a nine-field struct is a drift waiting to happen, and the field that
+// would drift first is `static`, which is a rename on the Rust side.
+import type { AssetType, StoredFilters } from '@sgdb/shared';
 
 export type ErrorKind =
   | 'no_api_key'
@@ -129,32 +132,19 @@ export interface ModuleReport {
   features: [string, boolean, string][];
 }
 
-/** The content filters for one asset type, as stored. Mirrors Rust's `FilterState`. */
-export interface FilterState {
-  untagged: boolean;
-  adult: boolean;
-  humor: boolean;
-  epilepsy: boolean;
-  styles: string[];
-  dimensions: string[];
-  mimes: string[];
-  animated: boolean;
-  /** `static` on the wire; Rust calls the field `statik` because it is a keyword there. */
-  static: boolean;
-}
-
 export interface Prefs {
   library_scope: LibraryScope;
   library_sort: LibrarySort;
   /**
-   * Keyed by asset type (`grid_p`, …). **Sparse** — only types the user has customised are
-   * present, and the gaps are filled with `defaultFilters(type)` rather than by Rust, so the
-   * defaults have exactly one implementation.
+   * The content filters, shared by every asset type.
+   *
+   * `null` when the user has never changed them; the gap is filled with `defaultFilters()`
+   * rather than by Rust, so the defaults have exactly one implementation.
    */
-  filters: Partial<Record<AssetType, FilterState>>;
+  filters: StoredFilters | null;
   zoom: Partial<Record<AssetType, number>>;
-  /** Steam appid → SteamGridDB game id, for when the automatic match is wrong. */
-  game_overrides: Record<number, number>;
+  /** Steam appid → the SteamGridDB game to pull from, for when the automatic match is wrong. */
+  game_overrides: Record<number, { id: number; name: string | null }>;
 }
 
 /** A SteamGridDB game. `id` is SteamGridDB's own id, not a Steam appid. */
@@ -169,8 +159,12 @@ export const api = {
   status: () => invoke<Status>('status'),
   setApiKey: (key: string) => invoke<void>('set_api_key', { key }),
   clearApiKey: () => invoke<void>('clear_api_key'),
-  library: (assetType: AssetType, scope: LibraryScope) =>
-    invoke<LibraryEntry[]>('library', { assetType, scope }),
+  /**
+   * `sort` is passed rather than read from the stored settings, because persisting the choice
+   * and reloading the list are separate round trips and the read would race the write.
+   */
+  library: (assetType: AssetType, scope: LibraryScope, sort: LibrarySort) =>
+    invoke<LibraryEntry[]>('library', { assetType, scope, sort }),
   /** `filters` is the output of `filtersToQuery()`; omit it to use the tab's defaults. */
   searchAssets: (
     appId: number,
@@ -185,12 +179,17 @@ export const api = {
   prefs: () => invoke<Prefs>('prefs'),
   setLibraryView: (scope: LibraryScope, sort: LibrarySort) =>
     invoke<Prefs>('set_library_view', { scope, sort }),
-  setFilters: (assetType: AssetType, filters: FilterState) =>
-    invoke<Prefs>('set_filters', { assetType, filters }),
-  resetFilters: (assetType: AssetType) => invoke<Prefs>('reset_filters', { assetType }),
-  /** `null` clears the override and returns to the automatic Steam-appid match. */
-  setGameOverride: (appId: number, sgdbId: number | null) =>
-    invoke<Prefs>('set_game_override', { appId, sgdbId }),
+  /** One filter set, shared by every asset type. */
+  setFilters: (filters: StoredFilters) => invoke<Prefs>('set_filters', { filters }),
+  resetFilters: () => invoke<Prefs>('reset_filters'),
+  /**
+   * `null` clears the override and returns to the automatic Steam-appid match.
+   *
+   * `name` is stored alongside purely so the UI can name the override later; there is no by-id
+   * lookup, and this project does not ship an endpoint it has not probed against the live API.
+   */
+  setGameOverride: (appId: number, sgdbId: number | null, name: string | null) =>
+    invoke<Prefs>('set_game_override', { appId, sgdbId, name }),
   searchGames: (term: string) => invoke<GameMatch[]>('search_games', { term }),
   currentGameMatch: (appId: number) => invoke<GameMatch | null>('current_game_match', { appId }),
   setLiveApply: (enabled: boolean) => invoke<Status>('set_live_apply', { req: { enabled } }),

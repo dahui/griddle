@@ -62,7 +62,9 @@ export function GameSearchModal({
 
   async function choose(game: GameMatch | null) {
     try {
-      await api.setGameOverride(appId, game?.id ?? null);
+      // The name goes with the id: it is the only chance to capture it, and it is what stops
+      // the override reading as "SteamGridDB game #17830" next time this game is opened.
+      await api.setGameOverride(appId, game?.id ?? null, game?.name ?? null);
       onPicked(game);
     } catch (e: unknown) {
       setError(asUiError(e));
