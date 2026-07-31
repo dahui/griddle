@@ -78,6 +78,58 @@ export function Empty({ children }: { children: ReactNode }) {
   return <div className="empty">{children}</div>;
 }
 
+/**
+ * A right-click menu anchored at the cursor.
+ *
+ * Closes on Escape, on a click anywhere, and on scroll — a menu that outlives what it points at
+ * is worse than no menu, because the next click lands on an action the user has stopped looking
+ * at. `position: fixed` so the coordinates are viewport-relative and no scroll offset maths is
+ * needed.
+ */
+export function ContextMenu({
+  x,
+  y,
+  onClose,
+  children,
+}: {
+  x: number;
+  y: number;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    const close = () => onClose();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    // `capture` so the menu closes even if something below stops propagation.
+    window.addEventListener('click', close, true);
+    window.addEventListener('contextmenu', close, true);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('click', close, true);
+      window.removeEventListener('contextmenu', close, true);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="context-menu"
+      role="menu"
+      style={{
+        // Keep the menu on screen when the click lands near an edge.
+        left: Math.min(x, window.innerWidth - 260),
+        top: Math.min(y, window.innerHeight - 120),
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 /** Content-warning chips. Shown because a user filtering for them wants to see which is which. */
 export function Flags({ asset }: { asset: { nsfw: boolean; humor: boolean; epilepsy: boolean } }) {
   const flags = [

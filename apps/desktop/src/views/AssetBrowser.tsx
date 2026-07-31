@@ -22,6 +22,7 @@ import {
   type UiError,
 } from '../api';
 import { Empty, ErrorNote, Flags, Spinner } from '../components';
+import { CurrentAssets } from './CurrentAssets';
 import { FilterPanel } from './FilterPanel';
 import { GameSearchModal } from './GameSearchModal';
 
@@ -34,11 +35,18 @@ import { GameSearchModal } from './GameSearchModal';
  */
 const DEFAULT_TAB: AssetType = 'grid_p';
 
+/** The five browsing tabs, plus the overview of what is currently applied. */
+type BrowserTab = AssetType | 'current';
+
 export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: () => void }) {
   // Held here, not in `App`, so it resets to the Capsule tab for every game. This component is
   // unmounted whenever the library list is showing, which makes that structural — there is no
   // "reset the tab" call anyone can forget when a new game is opened.
-  const [assetType, setAssetType] = useState<AssetType>(DEFAULT_TAB);
+  const [tab, setTab] = useState<BrowserTab>(DEFAULT_TAB);
+  const browsing = tab !== 'current';
+  // A concrete type is still needed to key the fetch state; nothing is fetched while the
+  // overview is showing, so the placeholder is never actually queried.
+  const assetType: AssetType = browsing ? tab : DEFAULT_TAB;
   const [assets, setAssets] = useState<Asset[]>([]);
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
@@ -79,7 +87,10 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
     };
   }, []);
 
-  const ready = filters !== null;
+  // `browsing` is part of readiness so the overview tab issues no requests at all, and so
+  // returning to a browse tab refetches — which matters, because a reset may have happened in
+  // between and the grid would otherwise still show the old state.
+  const ready = filters !== null && browsing;
 
   // Which SteamGridDB game we are pulling from, for the "Wrong game?" button's label.
   useEffect(() => {
@@ -256,7 +267,7 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
         {/* Loaded *and* total, not just total. A count that only ever showed the total is what
             let "the browser is quietly showing 12 of 400" go unnoticed. */}
         <span className="count">
-          {total > 0
+          {browsing && total > 0
             ? `${assets.length} of ${total} ${ASSET_LABEL[assetType].toLowerCase()} options`
             : ''}
         </span>
@@ -269,15 +280,25 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
           <button
             type="button"
             key={t}
-            className={assetType === t ? 'tab active' : 'tab'}
-            onClick={() => setAssetType(t)}
+            className={tab === t ? 'tab active' : 'tab'}
+            onClick={() => setTab(t)}
           >
             {ASSET_LABEL[t]}
           </button>
         ))}
+        {/* Last, so the first tab is still the one every game opens on. */}
+        <button
+          type="button"
+          className={tab === 'current' ? 'tab active' : 'tab'}
+          onClick={() => setTab('current')}
+        >
+          Current
+        </button>
       </nav>
 
-      {filters && (
+      {!browsing && <CurrentAssets entry={entry} onBrowse={setTab} />}
+
+      {browsing && filters && (
         <FilterPanel
           assetType={assetType}
           filters={filters}
@@ -304,9 +325,12 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
         />
       )}
 
-      {applied && <AppliedNote applied={applied} />}
-      {error && assets.length === 0 && <ErrorNote error={error} onRetry={() => void loadPage(0)} />}
+      {browsing && applied && <AppliedNote applied={applied} />}
+      {browsing && error && assets.length === 0 && (
+        <ErrorNote error={error} onRetry={() => void loadPage(0)} />
+      )}
 
+      {browsing && (
       <div className={`assets assets-${assetType}`}>
         {assets.map((asset) => (
           <figure key={asset.id} className="asset">
@@ -333,19 +357,20 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
           </figure>
         ))}
       </div>
+      )}
 
       {/* `!ready` matters: nothing is fetched until the stored filters arrive, so without it
           there is a frame showing neither a spinner nor a result. */}
-      {(loading || !ready) && <Spinner label="Loading artwork…" />}
-      {!loading && !hasMore && assets.length === 0 && !error && (
+      {browsing && (loading || !ready) && <Spinner label="Loading artwork…" />}
+      {browsing && !loading && !hasMore && assets.length === 0 && !error && (
         <Empty>SteamGridDB has no {ASSET_LABEL[assetType].toLowerCase()} artwork for this game.</Empty>
       )}
-      {error && assets.length > 0 && <ErrorNote error={error} />}
+      {browsing && error && assets.length > 0 && <ErrorNote error={error} />}
 
       {/* An explicit way to load the rest. Infinite scroll depends on the viewport geometry
           working out, and when it does not there is otherwise nothing the user can do — the
           remaining artwork is simply unreachable. Shown only when there is genuinely more. */}
-      {!loading && hasMore && !error && assets.length > 0 && (
+      {browsing && !loading && hasMore && !error && assets.length > 0 && (
         <div className="load-more">
           <button type="button" className="ghost" onClick={() => void loadPage(page + 1)}>
             Load more

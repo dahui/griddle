@@ -86,6 +86,7 @@ fn main() {
             commands::current_game_match,
             commands::search_assets,
             commands::apply_asset,
+            commands::asset_status,
             commands::clear_asset,
             commands::set_live_apply,
             commands::remove_sentinel,

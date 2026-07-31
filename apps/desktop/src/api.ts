@@ -124,6 +124,26 @@ export interface Applied {
   fell_back_because: string | null;
 }
 
+/** What one artwork slot currently holds. */
+export interface AssetSlot {
+  asset_type: AssetType;
+  label: string;
+  /** The user's own artwork, if they have set any. */
+  custom_art: string | null;
+  /** Steam's own artwork — what a reset falls back to. */
+  steam_art: string | null;
+  /** Bare filenames a reset would delete, so the UI can name them before it happens. */
+  removes: string[];
+}
+
+/** What a reset actually did. */
+export interface Cleared {
+  method: 'live' | 'file';
+  needs_restart: boolean;
+  removed: string[];
+  fell_back_because: string | null;
+}
+
 export interface ModuleReport {
   clstamp: string;
   total_modules: number;
@@ -174,8 +194,9 @@ export const api = {
   ) => invoke<SearchResult>('search_assets', { appId, assetType, page, filters }),
   applyAsset: (appId: number, assetType: AssetType, url: string) =>
     invoke<Applied>('apply_asset', { appId, assetType, url }),
+  assetStatus: (appId: number) => invoke<AssetSlot[]>('asset_status', { appId }),
   clearAsset: (appId: number, assetType: AssetType) =>
-    invoke<void>('clear_asset', { appId, assetType }),
+    invoke<Cleared>('clear_asset', { appId, assetType }),
   prefs: () => invoke<Prefs>('prefs'),
   setLibraryView: (scope: LibraryScope, sort: LibrarySort) =>
     invoke<Prefs>('set_library_view', { scope, sort }),
