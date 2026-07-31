@@ -89,9 +89,7 @@ function ResetAllPanel() {
   return (
     <section>
       <h2>Reset all artwork</h2>
-      <p>
-        Removes all custom artwork, reverting all gamesd back to Steam's default.
-      </p>
+      <p>Removes all custom artwork, reverting all games back to Steam&rsquo;s default.</p>
 
       <div className="row">
         <button type="button" className="danger" disabled={busy} onClick={() => void check()}>
@@ -171,30 +169,6 @@ function ConfirmReset({
   );
 }
 
-
-/**
- * What the app set up on its own, shown once on first run.
- *
- * 🔑 Live apply is not a setting — applying artwork without restarting Steam is the whole
- * reason this app exists, so its prerequisite is arranged rather than offered. CSS Loader and
- * Decky set the same flag and tell nobody; this at least says what it did and how to undo it.
- */
-export function SetupNote() {
-  return (
-    <section>
-      <h2>What this set up</h2>
-      <p>
-        So artwork can apply without restarting Steam, this app creates an empty{' '}
-        <code>.cef-enable-remote-debugging</code> file in Steam&rsquo;s folder. It&rsquo;s
-        Valve&rsquo;s own setting — CSS Loader and Decky use the same one — and it takes effect
-        the next time Steam starts. Deleting the file undoes it.
-      </p>
-      <p className="hint">
-        Until Steam restarts, artwork still applies; it just needs a restart to show up.
-      </p>
-    </section>
-  );
-}
 
 export function ApiKeyPanel({
   status,

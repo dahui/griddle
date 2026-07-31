@@ -13,7 +13,7 @@ import { api, asUiError, type LibraryEntry, type Status, type UiError } from './
 import { ErrorNote, Spinner, ToastProvider } from './components';
 import { Library } from './views/Library';
 import { AssetBrowser } from './views/AssetBrowser';
-import { ApiKeyPanel, SetupNote, Settings } from './views/Settings';
+import { ApiKeyPanel, Settings } from './views/Settings';
 
 type Tab = 'library' | 'settings';
 
@@ -51,10 +51,6 @@ export function App() {
           </p>
         </section>
         <ApiKeyPanel status={status} onStatus={setStatus} />
-        {/* Shown here and only here: the app has already enabled live apply by this point, and
-            first run is the moment to say so. It is disclosure, not a permission prompt — see
-            `cdp::sentinel`. */}
-        <SetupNote />
       </Shell>
     );
   }

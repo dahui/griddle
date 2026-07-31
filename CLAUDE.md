@@ -442,9 +442,16 @@ behind a checkbox meant the product shipped switched off for anyone who never fo
 headline feature, off by default, in a settings tab. CSS Loader and Decky set the identical flag
 and mention it to no one.
 
-**What was kept from the old design is the disclosure, not the prompt.** The first-run screen
-says what the file is, that it is Valve's own setting, that CSS Loader and Decky use it too, and
-that deleting it undoes everything. That is more than the comparable tools do.
+🔵 **The first-run disclosure has since been removed too, on the maintainer's call.** For a while
+the setup screen said what the file was, that it is Valve's own setting, that CSS Loader and Decky
+use it too, and that deleting it undoes everything. That panel is gone; what remains is the
+**Live apply** row in Settings → Diagnostics, which reports the sentinel's state through
+`Status::sentinel_explanation`.
+
+So the flag is now created silently and explained only if the user goes looking — which is exactly
+what CSS Loader and Decky do, rather than more than they do. Recorded plainly because the section
+above argued the opposite case, and a document that quietly drops its own reasoning is worse than
+one that changes its mind out loud.
 
 Be clear-eyed about what it costs: Steam opens its CEF debugging port on loopback at next start,
 so any process already running as this user can drive Steam's JS. Modest, Valve's own mechanism,
@@ -611,7 +618,7 @@ flash, the wart this project exists to remove.
 | `cache` | `%LOCALAPPDATA%\<AppName>\cache`. JSON on a TTL, images forever. Entries are self-describing, so a collision or torn write is a **miss**. |
 | `base64` | Shared by `settings` (DPAPI blob) and `cdp` (image payloads). `is_base64()` is the JS-injection guard. |
 | `browser` | Opens a link in the default browser via `ShellExecuteW`. 🔴 **Allowlisted to https on `steamgriddb.com`** — handing an arbitrary string to the shell launches whatever handler is registered for it, and `file:///…exe` would run a program. A Tauri webview ignores `target="_blank"`, which is why this exists at all. |
-| `cdp::sentinel` | The `.cef-enable-remote-debugging` flag. **Created at startup, disclosed on first run** — see below. Never truncates a file someone else wrote. |
+| `cdp::sentinel` | The `.cef-enable-remote-debugging` flag. **Created at startup**, reported in Settings → Diagnostics — see below. Never truncates a file someone else wrote. |
 | `cdp::target` | Finds `SharedJSContext` and **refuses anything that is not Steam** — port 8080 is a very common dev-server port. |
 | `cdp::client` | Minimal CDP: `Runtime.evaluate` + `addScriptToEvaluateOnNewDocument`. A JS throw is a distinct error, not silent success. |
 | `cdp::SteamJs` | `probe` / `apply_artwork` / `clear_artwork` / `clstamp` / `app_name`. The live-apply path. |
