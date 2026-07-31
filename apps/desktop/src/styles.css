@@ -184,6 +184,51 @@ button.ghost:hover:not(:disabled) {
   flex-wrap: wrap;
 }
 
+/* -- sticky bar ----------------------------------------------------------------------- */
+
+/*
+ * A 1px marker sitting exactly where the bar begins, cancelled by its own negative margin so it
+ * costs no layout. Its leaving the viewport *is* the moment the bar pins — the one thing
+ * `position: sticky` will not report. See `StickyBar`.
+ */
+.sticky-probe {
+  height: 1px;
+  margin-bottom: -1px;
+}
+
+/*
+ * 🔴 Every box property here is deliberately the same in both states, so `.stuck` below changes
+ * paint and nothing else.
+ *
+ * A sticky element still occupies its place in the flow. Growing one when it pins — an extra
+ * border, more padding — shoves the entire page down by that much at the precise moment the user
+ * is scrolling, which reads as the list jumping away from the cursor.
+ *
+ * The horizontal margins and padding cancel out: the bar reaches the edges of the column when it
+ * is pinned, while its contents stay on the same line they were on before. `margin-top` does the
+ * same for the vertical padding, so the unpinned page is laid out exactly as it was without any
+ * of this.
+ */
+.sticky-bar {
+  position: sticky;
+  top: 0;
+  /* Above the content it scrolls over; below the modal backdrop (10) and context menu (20). */
+  z-index: 5;
+  padding: 0.55rem 1.75rem;
+  margin: -0.55rem -1.75rem 0.45rem;
+}
+
+/*
+ * The hairline is a `box-shadow`, not a `border-bottom`, for the reason above: a border is a
+ * pixel of height and would nudge the page every time the bar pins or unpins.
+ */
+.sticky-bar.stuck {
+  background: var(--bg);
+  box-shadow:
+    0 1px 0 var(--line),
+    0 10px 22px rgba(8, 9, 13, 0.55);
+}
+
 /* The per-game asset slots. Inline-flex so the pill hugs its buttons instead of stretching. */
 .asset-tabs {
   display: inline-flex;

@@ -101,6 +101,47 @@ export function ExternalLink({
   );
 }
 
+/**
+ * A bar that sits in the page normally and pins itself to the top of the window once it would
+ * otherwise scroll away.
+ *
+ * Infinite scroll is what makes this worth having: the further you browse, the more expensive
+ * "scroll back to the top to go back" becomes, and that cost grows exactly as the list gets more
+ * interesting.
+ *
+ * 🔴 **`position: sticky` cannot tell you that it is stuck**, and the styling has to know —
+ * a bar that carries a shadow while sitting in the page looks like a mistake. Hence the probe:
+ * a 1px element immediately above the bar, whose leaving the viewport *is* the pin. It is
+ * rendered here rather than by the caller so the two cannot be separated.
+ *
+ * The observer is safe from the re-fire trap that has bitten this codebase twice: every callback
+ * is acted on, nothing is skipped by a guard, and the probe genuinely crosses the boundary in
+ * both directions.
+ */
+export function StickyBar({ className, children }: { className?: string; children: ReactNode }) {
+  const probe = useRef<HTMLDivElement | null>(null);
+  const [stuck, setStuck] = useState(false);
+
+  useEffect(() => {
+    const node = probe.current;
+    if (!node) return undefined;
+    const observer = new IntersectionObserver((entries) =>
+      setStuck(!entries.some((e) => e.isIntersecting)),
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <>
+      <div ref={probe} className="sticky-probe" aria-hidden="true" />
+      <div className={`sticky-bar${stuck ? ' stuck' : ''}${className ? ` ${className}` : ''}`}>
+        {children}
+      </div>
+    </>
+  );
+}
+
 export function Spinner({ label }: { label: string }) {
   return (
     <div className="spinner" role="status">

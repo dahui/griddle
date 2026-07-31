@@ -21,7 +21,7 @@ import {
   type LibraryEntry,
   type UiError,
 } from '../api';
-import { Empty, ErrorNote, Flags, Spinner } from '../components';
+import { Empty, ErrorNote, Flags, Spinner, StickyBar } from '../components';
 import { CurrentAssets } from './CurrentAssets';
 import { FilterPanel } from './FilterPanel';
 import { GameSearchModal } from './GameSearchModal';
@@ -259,7 +259,10 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
 
   return (
     <>
-      <div className="toolbar">
+      {/* Sticky, because this is the only way back and infinite scroll can put it a very long
+          way above you. The game name and count come along for free, which is what makes the
+          pinned bar read as a header rather than a stray button. */}
+      <StickyBar className="toolbar">
         <button type="button" className="ghost" onClick={onBack}>
           ← Library
         </button>
@@ -270,7 +273,7 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
         <span className="count">
           {browsing && total > 0 ? `${assets.length} of ${total}` : ''}
         </span>
-      </div>
+      </StickyBar>
 
       {/* The asset slots belong to a single game, which is why this bar lives here and not in
           the app-level nav — on the library list it was a control with nothing to control. */}
