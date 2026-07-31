@@ -4,9 +4,9 @@
   "version": "0.0.0",
   "identifier": "net.digital-apathy.sgdb-artwork",
   "build": {
-    "beforeDevCommand": "bun run --cwd ../../apps/desktop dev",
+    "beforeDevCommand": "bun run --filter @sgdb/desktop dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "bun run --cwd ../../apps/desktop build",
+    "beforeBuildCommand": "bun run --filter @sgdb/desktop build",
     "frontendDist": "../../apps/desktop/dist"
   },
   "app": {

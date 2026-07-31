@@ -22,8 +22,28 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 # `assetProtocol` in tauri.conf.json must stay in step with this.
 tauri = { version = "2.11.5", features = ["protocol-asset"] }
 
+# 🔴 Load-bearing, and easy to lose.
+#
+# `custom-protocol` is what makes a build serve the frontend from `frontendDist` (embedded in
+# the exe) instead of from `build.devUrl`. It is **not** one of tauri's default features, so
+# without this section *every* build — debug and release alike — points at
+# http://localhost:1420 and shows a connection-refused page unless a Vite dev server happens
+# to be running.
+#
+# `tauri build` passes `--features custom-protocol` automatically; a hand-rolled
+# `cargo build --release` must pass it too. That asymmetry is why the release binary looked
+# fine (it started, the window titled correctly) while rendering nothing.
+# It is in `default` on purpose, which the stock Tauri template does not do. The template
+# leaves it opt-in and relies on `tauri build` adding `--features custom-protocol`, so a plain
+# `cargo build --release` silently produces a binary that renders a connection-refused page.
+# `tauri dev` passes `--no-default-features`, so making it default keeps hot-reload working
+# while making the obvious command correct.
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
 [lints]
 workspace = true
 
 [build-dependencies]
-tauri-build = "2.6.3"
+tauri-build = { version = "2.6.3", features = [] }

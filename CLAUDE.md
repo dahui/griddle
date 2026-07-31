@@ -269,7 +269,62 @@ architecture.
 | **M3** | 🟢 **The app runs.** Library list with current art, five asset tabs, SteamGridDB browsing with infinite scroll, apply with the live→file ladder, first-run key flow, and a diagnostics screen. **256 Rust + 62 TS tests**, clippy clean at `-D warnings`, gate green. |
 | **Next** | M4 desktop parity (filters, details modal, zoom, logo positioner, non-Steam picker), then M5/M6. |
 
-**Run it:** `bun run build:desktop && cargo run -p sgdb-app`.
+### Running it
+
+| | Command | What it does |
+|---|---|---|
+| **Dev** | `bun run app` | Vite + the app, hot reload. |
+| **Real** | `cargo build --release -p sgdb-app`, then `target\release\sgdb-app.exe` | Frontend embedded in the exe. No dev server. |
+| Installer | `bun run app:build` | NSIS bundle. |
+
+#### 🔴 Three separate traps produced the same "connection refused" page
+
+All three make the webview point at `http://localhost:1420` when nothing is serving it.
+
+1. **`cargo run -p sgdb-app` is not enough on its own.** Without `custom-protocol` (below) it
+   loads `devUrl`; building the frontend first changes nothing.
+2. **`custom-protocol` was missing from `sgdb-app`'s `Cargo.toml` entirely.** That feature is
+   what makes a build serve `frontendDist` from inside the exe, and it is **not** one of
+   `tauri`'s defaults — the stock template leaves it opt-in and lets `tauri build` add
+   `--features custom-protocol`. So a hand-rolled `cargo build --release` produced a binary
+   that started, titled its window correctly, and rendered nothing. It is now in `default`,
+   which the template does not do: `tauri dev` passes `--no-default-features`, so hot reload
+   still works while the obvious command becomes the correct one.
+3. **`beforeDevCommand` used `bun run --cwd <relative>`.** bun documents `--cwd` as taking an
+   **absolute** path; a relative one works from the repo root by luck and fails with `ENOENT`
+   from the Tauri CLI's cwd. Use `--filter @sgdb/desktop`, which resolves through the
+   workspace from anywhere. Note `frontendDist` *is* relative to `tauri.conf.json` — the two
+   keys use **different bases**, which is what made this look inconsistent.
+
+`tauri.conf.json` is schema-validated and rejects unknown keys, so an `_comment` entry is a
+hard error. Notes like these belong here.
+
+#### 🔴 "A window opened" is not "the app works"
+
+The release binary was reported working on the strength of the process staying alive, the
+window title being right, and the PE subsystem reading 2. **All three were true while the page
+showed a connection-refused error.** Checking the binary for embedded strings was no better:
+the JS is brotli-compressed so it is not greppable, and `localhost:1420` appears in the
+embedded config in *both* modes.
+
+The decisive test is behavioural — **listen on `[::1]:1420` and see whether the app connects**:
+
+```powershell
+$l = New-Object System.Net.Sockets.TcpListener ([System.Net.IPAddress]::IPv6Loopback, 1420)
+$l.Start(); Start-Process target\release\sgdb-app.exe
+# $l.Pending() true  -> still dev mode
+# stays false        -> serving the embedded frontend
+```
+
+🟡 It must be `::1`, not `127.0.0.1`: **Vite binds IPv6 only**, and `localhost` resolves to
+`::1` first on Windows — a `127.0.0.1` health check reports "nothing listening" while the page
+serves fine. That is the exact mirror of the CDP rule, where Steam binds **v4** and we must use
+`127.0.0.1` and never `localhost`.
+
+**Verified 2026-07-30:** `bun run app` serves and renders; the release exe runs with **no dev
+server**, does not reach for 1420, loads 2930 apps from `appinfo.vdf`, grants the asset scope
+to exactly the account's `grid/`, and has PE subsystem **2 = `WINDOWS_GUI`** — no console
+flash, the wart this project exists to remove.
 
 ### `sgdb-core` module map
 
