@@ -137,6 +137,24 @@ impl SteamInstall {
     pub fn appinfo_vdf(&self) -> PathBuf {
         self.root.join("appcache").join("appinfo.vdf")
     }
+
+    /// `steamui/changelist.txt` — Steam's build stamp, on disk.
+    ///
+    /// The same number is readable from the live page as `CLSTAMP`, and being able to get it
+    /// from **both** is what makes the build-stamped module map work: the resolved module map
+    /// can be cached against the stamp and invalidated without connecting to anything.
+    /// Verified equal on this machine: both read `10840511`. `[VERIFIED-BOX 2026-07-27]`
+    pub fn steamui_changelist(&self) -> PathBuf {
+        self.root.join("steamui").join("changelist.txt")
+    }
+
+    /// The build stamp from disk, trimmed. `None` if the file is absent or unreadable.
+    pub fn clstamp_from_disk(&self) -> Option<String> {
+        std::fs::read_to_string(self.steamui_changelist())
+            .ok()
+            .map(|s| s.trim().to_owned())
+            .filter(|s| !s.is_empty())
+    }
 }
 
 /// Normalise a Steam-supplied path: forward slashes to backslashes on Windows, and trim.

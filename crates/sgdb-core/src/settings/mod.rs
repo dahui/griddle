@@ -32,6 +32,7 @@
 
 pub mod dpapi;
 
+use crate::base64;
 use crate::sgdb::ApiKey;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -199,7 +200,7 @@ impl Settings {
     /// Store the key, DPAPI-wrapped.
     pub fn set_api_key(&mut self, key: &ApiKey) -> Result<(), Error> {
         let sealed = dpapi::protect(key.expose().as_bytes())?;
-        self.api_key_protected = Some(base64_encode(&sealed));
+        self.api_key_protected = Some(base64::encode(&sealed));
         Ok(())
     }
 
@@ -220,7 +221,7 @@ impl Settings {
         let Some(encoded) = &self.api_key_protected else {
             return Ok(None);
         };
-        let sealed = base64_decode(encoded).ok_or(Error::BadBase64)?;
+        let sealed = base64::decode(encoded).ok_or(Error::BadBase64)?;
         let plain = dpapi::unprotect(&sealed)?;
         let text = String::from_utf8(plain).map_err(|_| Error::BadKeyText)?;
         // Reuse the same validation as a freshly pasted key rather than trusting the file.
@@ -338,124 +339,12 @@ fn sibling_with_suffix(path: &Path, suffix: &str) -> PathBuf {
     path.with_file_name(name)
 }
 
-// -- base64 --------------------------------------------------------------------------------
-//
-// Hand-rolled rather than pulling in a crate for ~30 lines. Standard alphabet with padding,
-// which is all the DPAPI blob needs.
-
-const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-fn base64_encode(input: &[u8]) -> String {
-    let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
-    for chunk in input.chunks(3) {
-        let b = [
-            chunk[0],
-            chunk.get(1).copied().unwrap_or(0),
-            chunk.get(2).copied().unwrap_or(0),
-        ];
-        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
-        out.push(B64[(n >> 18) as usize & 63] as char);
-        out.push(B64[(n >> 12) as usize & 63] as char);
-        out.push(if chunk.len() > 1 {
-            B64[(n >> 6) as usize & 63] as char
-        } else {
-            '='
-        });
-        out.push(if chunk.len() > 2 {
-            B64[n as usize & 63] as char
-        } else {
-            '='
-        });
-    }
-    out
-}
-
-fn base64_decode(input: &str) -> Option<Vec<u8>> {
-    let value = |c: u8| -> Option<u32> {
-        match c {
-            b'A'..=b'Z' => Some(u32::from(c - b'A')),
-            b'a'..=b'z' => Some(u32::from(c - b'a') + 26),
-            b'0'..=b'9' => Some(u32::from(c - b'0') + 52),
-            b'+' => Some(62),
-            b'/' => Some(63),
-            _ => None,
-        }
-    };
-
-    let bytes: Vec<u8> = input.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
-    if !bytes.len().is_multiple_of(4) {
-        return None;
-    }
-
-    let mut out = Vec::with_capacity(bytes.len() / 4 * 3);
-    for chunk in bytes.chunks(4) {
-        let pad = chunk.iter().filter(|&&c| c == b'=').count();
-        if pad > 2 {
-            return None;
-        }
-        let mut n = 0u32;
-        for (i, &c) in chunk.iter().enumerate() {
-            let v = if c == b'=' {
-                // Padding is only legal at the end.
-                if i < 2 {
-                    return None;
-                }
-                0
-            } else {
-                value(c)?
-            };
-            n = (n << 6) | v;
-        }
-        out.push((n >> 16) as u8);
-        if pad < 2 {
-            out.push((n >> 8) as u8);
-        }
-        if pad < 1 {
-            out.push(n as u8);
-        }
-    }
-    Some(out)
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used, reason = "test assertions are allowed to panic")]
 mod tests {
     use super::*;
 
     const FAKE_KEY: &str = "0123456789abcdef0123456789abcdef";
-
-    #[test]
-    fn base64_round_trips_including_every_padding_case() {
-        for len in 0..40usize {
-            let data: Vec<u8> = (0..len).map(|i| (i * 7 + 3) as u8).collect();
-            let encoded = base64_encode(&data);
-            assert_eq!(encoded.len() % 4, 0, "len {len} produced unpadded output");
-            assert_eq!(base64_decode(&encoded).unwrap(), data, "len {len}");
-        }
-    }
-
-    #[test]
-    fn base64_matches_known_vectors() {
-        // RFC 4648 test vectors — a hand-rolled codec that only agrees with itself is not
-        // worth much.
-        assert_eq!(base64_encode(b""), "");
-        assert_eq!(base64_encode(b"f"), "Zg==");
-        assert_eq!(base64_encode(b"fo"), "Zm8=");
-        assert_eq!(base64_encode(b"foo"), "Zm9v");
-        assert_eq!(base64_encode(b"foob"), "Zm9vYg==");
-        assert_eq!(base64_encode(b"fooba"), "Zm9vYmE=");
-        assert_eq!(base64_encode(b"foobar"), "Zm9vYmFy");
-        assert_eq!(base64_decode("Zm9vYmFy").unwrap(), b"foobar");
-        assert_eq!(base64_decode("Zg==").unwrap(), b"f");
-    }
-
-    #[test]
-    fn base64_rejects_malformed_input() {
-        assert_eq!(base64_decode("Zg="), None, "wrong length");
-        assert_eq!(base64_decode("Z!=="), None, "illegal character");
-        assert_eq!(base64_decode("=Zm8"), None, "padding at the front");
-        assert_eq!(base64_decode("====").unwrap_or_default(), Vec::<u8>::new());
-    }
 
     #[test]
     fn defaults_round_trip_through_json() {
@@ -640,7 +529,7 @@ mod tests {
 
         // Corrupt only the ciphertext.
         let mut damaged = store.load().unwrap();
-        damaged.api_key_protected = Some(base64_encode(b"not a real dpapi blob"));
+        damaged.api_key_protected = Some(base64::encode(b"not a real dpapi blob"));
         store.save(&damaged).unwrap();
 
         let loaded = store.load().unwrap();

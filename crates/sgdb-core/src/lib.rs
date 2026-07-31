@@ -10,7 +10,9 @@
 //!    library folder locations.
 
 pub mod appid;
+pub mod base64;
 pub mod cache;
+pub mod cdp;
 pub mod grid;
 pub mod logo;
 pub mod settings;

@@ -35,6 +35,22 @@ Full plan: `C:\Users\jeff\.claude\plans\i-want-to-start-valiant-shamir.md`
 |---|---|
 | `[VERIFIED-BOX]` | Confirmed read-only on this machine, with the date. The strongest tag. |
 | `[VERIFIED-BOX @ CLSTAMP n]` | Read out of Steam's shipped JS bundle. **These expire** — Steam rewrites `steamui/` on update. The stamp says which build it was true for. |
+
+> ### 🔴 The CLSTAMP-tagged facts have already expired once
+>
+> Steam is on build **`10856968`** as of 2026-07-30. Every fact below tagged
+> `@ CLSTAMP 10840511` was measured on 2026-07-27 — **three days earlier**. The module ids
+> (`28869`, `3673`, `5808`, `4690`, `87498`, `51745`, `98131`, `39590`) and every mangled
+> export key are therefore **unverified on the current build** and must be re-resolved before
+> anything depends on them.
+>
+> What *survived* the update, re-verified on `10856968`:
+> `SetCustomArtworkForApp` still present · `webpackChunksteamui` still present · `CLSTAMP`
+> still readable from both the live page and `steamui/changelist.txt`, and still equal.
+>
+> This is the design working. Three days was enough — which is exactly why the module map is
+> keyed by build stamp and diffed rather than trusted, and why finders are structural rather
+> than name-based.
 | `[VERIFIED-SOURCE]` | Read in someone's actual source (Valve's bundle, SGDBoop, decky-steamgriddb). Quote it. |
 | `[VERIFIED-DOCS]` | The project's own docs. Weaker — docs lie. |
 | `[INFERRED]` | Reasoning, analogy, or a third-party blog. **Must be promoted before it becomes load-bearing.** |
@@ -274,6 +290,11 @@ architecture.
 | `settings` | `%APPDATA%\<AppName>\settings.json`, atomic. **Third and last writer.** A corrupt file is preserved, never overwritten. |
 | `settings::dpapi` | `CryptProtectData` round-trip for the API key. Windows-only, with **no plaintext fallback**. |
 | `cache` | `%LOCALAPPDATA%\<AppName>\cache`. JSON on a TTL, images forever. Entries are self-describing, so a collision or torn write is a **miss**. |
+| `base64` | Shared by `settings` (DPAPI blob) and `cdp` (image payloads). `is_base64()` is the JS-injection guard. |
+| `cdp::sentinel` | The `.cef-enable-remote-debugging` opt-in. Created **only** on explicit user action; never truncates a file someone else wrote. |
+| `cdp::target` | Finds `SharedJSContext` and **refuses anything that is not Steam** — port 8080 is a very common dev-server port. |
+| `cdp::client` | Minimal CDP: `Runtime.evaluate` + `addScriptToEvaluateOnNewDocument`. A JS throw is a distinct error, not silent success. |
+| `cdp::SteamJs` | `probe` / `apply_artwork` / `clear_artwork` / `clstamp` / `app_name`. The live-apply path. |
 | `steam::process` | ToolHelp process enumeration; `-shutdown` → poll → relaunch. **The only minter of `SteamStopped`.** Waits on *processes*, never on the registry pid. |
 | `steam::shortcuts` | Read/edit/write `shortcuts.vdf`. Round-trip verified on **load**; write needs a `SteamStopped` token *and* re-checks it. Mutation surface is `set_icon` / `clear_icon` only. |
 
@@ -447,7 +468,7 @@ as a client default, precisely so image downloads cannot carry it.
 account still yields every tab preference and filter; only the key is reported as unreadable.
 Failing the load would look to the user like every setting had been lost.
 
-#### Eight bugs worth remembering
+#### Nine bugs worth remembering
 
 **`Path::ends_with` matches whole components, not string suffixes.** `p.ends_with("_icon.ico")`
 is always false for `4048848997_icon.ico`. Compare `file_name()` instead.
@@ -455,6 +476,13 @@ is always false for `4048848997_icon.ico`. Compare `file_name()` instead.
 **`StateFlags` is a bitfield, not an enum.** `6` = `StateFullyInstalled | StateUpdateRequired` —
 installed *and* update-pending, which is playable; FINAL FANTASY TACTICS reads `6` here. A test
 asserting `6` meant "not installed" failed against correct code.
+
+**🔴 A `\` at the end of a line in a Rust *raw* string is literal, and three tests passed
+anyway.** The CDP fixtures wrapped a long user-agent across lines inside `r#"..."#`, producing
+invalid JSON. The tests that expected a *rejection* all still passed — for the wrong reason (a
+parse failure, not the identity check they claimed to test). Only the **control** test, the one
+asserting a real Steam handshake *succeeds*, could catch it. Same lesson as the focus-tree
+probes: an all-negative test suite cannot tell "correctly refused" from "broken fixture".
 
 **🔴 A hand-rolled FNV-1a had a mistyped prime, and the empty-string vector still passed.**
 `0x1000_0000_01b3` is one hex digit too many; the correct prime is `0x100_0000_01b3`. The
