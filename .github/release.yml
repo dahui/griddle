@@ -1,0 +1,37 @@
+# Groups GitHub's auto-generated release notes into sections.
+#
+# The commit history is loosely Conventional Commits, and GitHub generates notes from pull
+# request titles and labels rather than commits -- so this only shapes the output for work that
+# arrives via a PR. Direct pushes to main land in "Other changes".
+#
+# CHANGELOG.md stays hand-written for anything that deserves prose. This is for the list.
+
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+      - dependencies
+
+  categories:
+    # Ordered by what a user scanning a release actually looks for: what is new, then what is
+    # fixed, then everything else. Breaking changes lead because they are the only entry that
+    # can cost somebody their afternoon.
+    - title: Breaking changes
+      labels: [breaking]
+
+    - title: New features
+      labels: [feature, enhancement]
+
+    - title: Fixes
+      labels: [bug, fix]
+
+    - title: Documentation
+      labels: [documentation, docs]
+
+    - title: Internal
+      labels: [refactor, chore, ci, test]
+
+    # Catch-all. Without it, a PR carrying none of the labels above vanishes from the notes
+    # entirely rather than being listed uncategorised -- which is worse than an untidy section.
+    - title: Other changes
+      labels: ['*']

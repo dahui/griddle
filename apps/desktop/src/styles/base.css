@@ -1,0 +1,140 @@
+:root {
+  color-scheme: dark;
+  --bg: #12131a;
+  --panel: #1b1d27;
+  --panel-hi: #232634;
+  --line: #2c2f3d;
+  --text: #e6e8f0;
+  --muted: #9aa0b4;
+  --ok: #6ee7a8;
+  --bad: #ff8095;
+  --info: #7aa2ff;
+  --accent: #7aa2ff;
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/*
+ * The focus ring — read from a sofa, not from eighteen inches away.
+ *
+ * There was none at all before this: not one `:focus` rule in the file, so focus was whatever
+ * Chromium's default outline happened to be. That is unusable with a controller, where the ring
+ * *is* the cursor — nothing else says where a button press will land.
+ *
+ * `outline` with an offset rather than a border, because `.asset-button` and `.slot-art` both use
+ * `overflow: hidden` and would clip an inset ring, and because a border would resize the element
+ * and reflow the grid as focus moved through it.
+ *
+ * Two selectors, one appearance: `.focused` is the model's own state, driven by the arrow keys
+ * and (later) the pad; `:focus-visible` covers plain Tab and keeps native behaviour honest.
+ */
+.focused,
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Tiles carry their own radius, so the ring should follow it rather than square off a corner. */
+.game.focused,
+.asset-button.focused,
+.slot-art.focused,
+.match.focused {
+  outline-offset: 3px;
+  border-radius: inherit;
+}
+
+/*
+ * Keep a focused control clear of the sticky toolbar.
+ *
+ * `scrollIntoView({block:'nearest'})` stops as soon as the element is inside the viewport, and
+ * the bar sits *over* the viewport rather than in the flow — so without this the top row of every
+ * grid scrolls to exactly where the bar covers it.
+ *
+ * 🔴 This belongs on the focusable element itself, not its `<li>`/`<figure>` wrapper: the scroll
+ * is requested on the element the focus model registered, which is the button inside.
+ */
+button,
+input,
+select,
+summary,
+a {
+  scroll-margin-top: 3.5rem;
+  scroll-margin-bottom: 1.5rem;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+main {
+  max-width: 78rem;
+  margin: 0 auto;
+  padding: 2rem 1.75rem 4rem;
+}
+
+header {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+h1 {
+  font-size: 1.35rem;
+  margin: 0 0 0.25rem;
+  font-weight: 600;
+}
+
+h2 {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 0 0 0.85rem;
+  font-weight: 600;
+}
+
+.sub,
+p {
+  margin: 0 0 0.6rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.hint {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+section {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 1.15rem 1.3rem;
+  margin-bottom: 1.1rem;
+}
+
+a {
+  color: var(--accent);
+}
+
+strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+code {
+  font-family: 'Cascadia Mono', ui-monospace, monospace;
+  font-size: 0.8rem;
+  background: #0e0f16;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0.1rem 0.35rem;
+  overflow-wrap: anywhere;
+}

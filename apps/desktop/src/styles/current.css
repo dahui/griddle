@@ -1,0 +1,119 @@
+/* -- current assets ------------------------------------------------------------------- */
+
+.slots {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 1.1rem;
+  align-items: start;
+}
+
+.slot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.slot-art {
+  position: relative;
+  padding: 0;
+  background: #0e0f16;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  /* Left-click enlarges, so `zoom-in` names the primary action. The right-click reset is called
+     out in the hint above the grid, which `context-menu` was never a very loud way to say. */
+  cursor: zoom-in;
+  display: grid;
+  place-items: center;
+  /* Each slot is a different shape; showing them at the wrong one would misrepresent the art
+     the user is about to judge. */
+  aspect-ratio: 2 / 3;
+}
+
+.slot-art-grid_l { aspect-ratio: 92 / 43; }
+.slot-art-hero   { aspect-ratio: 96 / 31; }
+.slot-art-logo   { aspect-ratio: 16 / 9; }
+.slot-art-icon   { aspect-ratio: 1 / 1; }
+
+/* Nothing to enlarge, so don't promise it. */
+.slot-art-flat {
+  cursor: context-menu;
+}
+
+.slot-art:hover {
+  border-color: var(--accent);
+}
+
+.slot-art img,
+.slot-art video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Logos are usually transparent; a checkerboard makes them readable. */
+.slot-art-logo,
+.preview-art-logo {
+  background-image: linear-gradient(45deg, #23252f 25%, transparent 25%),
+    linear-gradient(-45deg, #23252f 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #23252f 75%),
+    linear-gradient(-45deg, transparent 75%, #23252f 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+
+.slot-name {
+  font-size: 0.85rem;
+}
+
+.slot-state {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.slot-custom {
+  color: var(--ok);
+}
+
+/* -- artwork preview ------------------------------------------------------------------ */
+
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  align-items: center;
+  /* No panel behind it. The artwork is the content, and a frame around a capsule is just a
+     second border competing with the one the art already has. */
+}
+
+.preview-art {
+  display: grid;
+  place-items: center;
+  /* A floor, so a small icon lands in a frame rather than as a stray thumbnail in the middle of
+     a dimmed screen. The image itself is never stretched to fill it. */
+  min-width: 12rem;
+  min-height: 12rem;
+  background: #0e0f16;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+}
+
+.preview-art img,
+.preview-art video {
+  display: block;
+  /* Bounded by the viewport, not by a fixed size: a hero is 3× the width of a capsule and both
+     should end up as large as they can be without needing to scroll. */
+  max-width: min(86vw, 68rem);
+  max-height: 74vh;
+  object-fit: contain;
+}
+
+.preview-foot {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+}

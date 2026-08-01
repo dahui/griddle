@@ -1,0 +1,167 @@
+/* -- asset grid ----------------------------------------------------------------------- */
+
+.assets {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+}
+
+/* Wide and hero art needs far more width per card than a portrait capsule. */
+.assets-grid_l {
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+}
+
+.assets-hero {
+  grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr));
+}
+
+.assets-logo {
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+}
+
+.asset {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.asset-button {
+  position: relative;
+  padding: 0;
+  background: #0e0f16;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  display: block;
+}
+
+.asset-button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+/* Video covers the animated previews: SteamGridDB serves those thumbnails as .webm. */
+.asset-button img,
+.asset-button video {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Logos are usually transparent; a checkerboard makes them readable. */
+.assets-logo .asset-button {
+  background-image: linear-gradient(45deg, #23252f 25%, transparent 25%),
+    linear-gradient(-45deg, #23252f 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #23252f 75%),
+    linear-gradient(-45deg, transparent 75%, #23252f 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+
+.applying {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(14, 15, 22, 0.8);
+  color: var(--text);
+  font-size: 0.8rem;
+}
+
+figcaption {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.dims {
+  margin-left: auto;
+}
+
+.flags {
+  display: flex;
+  gap: 0.25rem;
+  flex-basis: 100%;
+}
+
+.flag {
+  background: var(--panel-hi);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 0.3rem;
+  font-size: 0.68rem;
+}
+
+.sentinel {
+  height: 1px;
+}
+
+.load-more {
+  display: flex;
+  justify-content: center;
+  padding: 1.25rem 0 0.5rem;
+}
+
+/* -- filters -------------------------------------------------------------------------- */
+
+.filters {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.7rem 0.95rem;
+  margin: 0 0 1rem;
+}
+
+.filters > summary {
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.filter-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  padding-top: 0.9rem;
+}
+
+.filter-group {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 8rem;
+}
+
+.filter-group legend {
+  padding: 0;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  margin-bottom: 0.4rem;
+}
+
+.filter-group .toggle {
+  font-size: 0.82rem;
+}
+
+.filter-hint {
+  max-width: 20rem;
+  margin: 0.5rem 0 0;
+  font-size: 0.76rem;
+}
+
+.filter-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-left: auto;
+  align-self: flex-start;
+}

@@ -1,0 +1,73 @@
+# Configuration for `cargo about generate`, which produces THIRD-PARTY-NOTICES.txt.
+#
+# Why this file exists: the release profile statically links every crate into griddle-app.exe, so
+# we redistribute their code. MIT and BSD both require their copyright notice travel with it.
+# Apache-2.0 on our own source does not discharge that.
+#
+# Regenerate with `scripts/notices.ps1`. CI regenerates and diffs, so a new dependency that
+# introduces an unlisted licence fails the build rather than shipping unattributed.
+
+# Only the Windows target ships. Without this, `cargo about` walks every platform's dependency
+# tree and attributes crates that are never linked here.
+targets = ["x86_64-pc-windows-msvc"]
+
+# Build- and dev-dependencies run on the build machine and are never in the binary.
+ignore-build-dependencies = true
+ignore-dev-dependencies = true
+
+# A crate whose licence is not on this list stops the build. That is the point: adding one is a
+# decision, and it should be made deliberately rather than by a lockfile update.
+#
+# Ordered by preference, which matters for the many crates offering `MIT OR Apache-2.0`:
+# Apache-2.0 first so the notices file matches the licence Griddle itself ships under.
+accepted = [
+    "Apache-2.0",
+    "MIT",
+    "MIT-0",
+    "ISC",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "Zlib",
+    "0BSD",
+    "BSL-1.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "Unlicense",
+    # The Unicode character tables in `icu_*` and the `unicode-*` crates. Permissive, and its
+    # own SPDX id since Unicode 15.1 -- not a variant of the two above it.
+    "Unicode-3.0",
+    # `ring` and `rustls` carry LLVM-exception alongside Apache-2.0.
+    "Apache-2.0 WITH LLVM-exception",
+    # The one weak-copyleft entry, and the only one that needed a decision. See below.
+    "MPL-2.0",
+]
+
+# Why MPL-2.0 is on that list, since it is the only non-permissive licence here.
+#
+# Five MPL-2.0 crates are in the graph: cssparser, cssparser-macros, selectors, dtoa-short and
+# option-ext. Four are unreachable from the binary -- they hang off `dom_query`, which only
+# `tauri-macros` (a proc-macro) and `tauri-build` pull in. `option-ext` is different and it is
+# easy to get wrong: `cargo tree -i option-ext` shows a `tauri-build [build-dependencies]` path
+# first, but there is a second one through `tauri -> dirs -> dirs-sys` that *is* linked in.
+#
+# The command that answers this without the trap, because it drops both proc-macro and build
+# edges:
+#
+#   cargo tree -p griddle-app --target x86_64-pc-windows-msvc -e normal,no-proc-macro -i <crate>
+#
+# "nothing to print" means not in the binary. option-ext prints a chain; the other four do not.
+#
+# So MPL code ships, and that is fine: MPL-2.0 is file-level copyleft. Its section 3.3 allows a
+# Larger Work under any terms as long as the MPL-covered *files* stay MPL and their source stays
+# available. Reproducing the licence text and the crate's repository URL below discharges that.
+# It does not reach Griddle's own source.
+#
+# All five are attributed rather than filtered down to the one that ships. Over-attribution is
+# the safe direction, and a hand-maintained exclusion list is exactly the kind of thing that goes
+# stale without anything failing.
+
+# Griddle's own crates are the subject of LICENSE, not third parties in their own notices file.
+# This keys off `publish = false` in their manifests, which is also what stops an accidental
+# `cargo publish` -- neither crate is meant for crates.io.
+[private]
+ignore = true

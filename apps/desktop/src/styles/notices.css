@@ -1,0 +1,79 @@
+/* -- notices -------------------------------------------------------------------------- */
+
+.note {
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: 8px;
+  padding: 0.75rem 0.95rem;
+  margin-bottom: 1rem;
+  background: var(--panel);
+}
+
+/* A note directly after a control needs air; without this the two touch. */
+.row + .note,
+.row + .hint {
+  margin-top: 0.9rem;
+}
+
+.note-bad {
+  border-left-color: var(--bad);
+}
+
+.note-info {
+  border-left-color: var(--info);
+}
+
+.note-ok {
+  border-left-color: var(--ok);
+}
+
+.note-message {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.88rem;
+}
+
+.note-action {
+  margin: 0.35rem 0 0;
+  font-size: 0.83rem;
+}
+
+.note button {
+  margin-top: 0.6rem;
+}
+
+.spinner {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 1.5rem 0;
+}
+
+.dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot { animation: none; }
+}
+
+.empty {
+  color: var(--muted);
+  font-size: 0.88rem;
+  padding: 2.5rem 0;
+  text-align: center;
+}
+
+.ok { color: var(--ok); }
+.bad { color: var(--bad); }

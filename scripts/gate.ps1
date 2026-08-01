@@ -46,6 +46,16 @@ $sh = Get-Sh
 Step "secret scan"             { & $sh scripts/check-secrets.sh --all }
 Step "architecture boundaries" { & $sh scripts/check-boundaries.sh }
 Step "encoding"                { python scripts/check-encoding.py }
+# Skips itself if cargo-about is absent rather than failing, so a fresh clone can run the gate.
+# CI installs it, so the check is never actually optional where it matters.
+Step "third-party notices" {
+    if (Get-Command cargo-about -ErrorAction SilentlyContinue) {
+        & $PSCommandPath.Replace('gate.ps1', 'notices.ps1') -Check
+        if ($LASTEXITCODE -ne 0) { throw "notices out of date" }
+    } else {
+        Write-Host "   (cargo-about not installed, skipping)"
+    }
+}
 Step "cargo fmt"               { cargo fmt --all -- --check }
 Step "cargo clippy"            { cargo clippy -q -p griddle-core --all-targets -- -D warnings }
 Step "cargo test"              { cargo test -q -p griddle-core }

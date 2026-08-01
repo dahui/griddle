@@ -1,0 +1,43 @@
+---
+title: Griddle
+description: Artwork for your Steam library, applied instantly — no Steam restart.
+template: splash
+hero:
+  tagline: Browse SteamGridDB artwork and apply it to your Steam library instantly. No restart.
+  actions:
+    - text: Install Griddle
+      link: /griddle/start/install/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/dahui/griddle
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<CardGrid>
+  <Card title="Artwork appears immediately" icon="star">
+    Every other Windows tool for this writes files and asks you to restart Steam. Griddle asks
+    Steam itself to change the artwork, so the capsule updates while you watch.
+  </Card>
+  <Card title="All five artwork slots" icon="seti:image">
+    Portrait capsule, wide capsule, hero banner, logo and icon — including for non-Steam
+    shortcuts.
+  </Card>
+  <Card title="Works with a controller" icon="approve-check">
+    Add Griddle to Steam as a non-Steam game and drive the whole app from Big Picture with a
+    gamepad.
+  </Card>
+  <Card title="It tells you what it touches" icon="information">
+    Griddle writes to one Steam folder and its own settings. Nothing is uploaded, and
+    [every path is listed](/griddle/notes/what-griddle-changes/).
+  </Card>
+</CardGrid>
+
+## Before you start
+
+Griddle needs **your own SteamGridDB API key** — it is free, takes a minute, and the app cannot
+fetch artwork without one. [Here is how to get it](/griddle/start/your-api-key/).
+
+It runs on **Windows 10 and 11** with Steam installed.

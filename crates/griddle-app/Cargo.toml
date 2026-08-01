@@ -5,6 +5,9 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 description = "Desktop shell. Thin — all logic lives in griddle-core."
+# An app internal, not a library for anyone else. Also how `about.toml` tells our own crates
+# apart from the third parties it has to attribute.
+publish = false
 
 [dependencies]
 griddle-core = { workspace = true }

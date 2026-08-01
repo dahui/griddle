@@ -1,0 +1,48 @@
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    # Filtered so a code-only push does not redeploy the site. The workflow file itself is
+    # included: a change to how the site deploys should deploy the site.
+    paths:
+      - 'docs/**'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  # Queued rather than cancelled, unlike the usual pattern. A cancelled Pages deployment can
+  # leave the site half-published, and these builds take seconds -- there is nothing to save.
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      # `docs/` is deliberately outside the bun workspace, so it has its own lockfile and its
+      # dependency tree never enters the app's `bun install --frozen-lockfile`.
+      - name: Build the site
+        uses: withastro/action@v4
+        with:
+          path: ./docs
+          package-manager: bun@latest
+      # The build fails on a broken internal link -- starlight-links-validator runs as part of
+      # `astro build`, so nothing extra is needed here.
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

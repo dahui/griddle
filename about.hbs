@@ -1,0 +1,45 @@
+Griddle -- third-party notices
+==============================
+
+Griddle is distributed under the Apache License, Version 2.0 (see LICENSE and
+NOTICE). Its release binary statically links the Rust crates listed below, and
+its frontend bundles the JavaScript packages listed at the end. Their licences
+require that these copyright notices travel with the distributed code.
+
+This file is generated -- do not edit it by hand. Run scripts/notices.ps1 after
+changing dependencies. CI regenerates it and fails on any difference.
+
+Licences in use:
+{{#each overview}}
+  - {{{name}}} ({{{count}}})
+{{/each}}
+{{#each licenses}}
+
+--------------------------------------------------------------------------------
+{{{name}}}
+--------------------------------------------------------------------------------
+
+Used by:
+{{#each used_by}}
+  - {{{crate.name}}} {{{crate.version}}}{{#if crate.repository}} -- {{{crate.repository}}}{{/if}}
+{{/each}}
+
+{{{text}}}
+{{/each}}
+
+================================================================================
+Bundled JavaScript
+================================================================================
+
+The frontend is compiled by Vite into the binary. The following packages are
+included in that bundle.
+
+  react, react-dom, scheduler, react-is -- MIT -- Copyright (c) Meta Platforms,
+  Inc. and affiliates. https://github.com/facebook/react
+
+  @tauri-apps/api -- MIT OR Apache-2.0 -- Copyright (c) 2019-2024 Tauri
+  Programme within The Commons Conservancy. https://github.com/tauri-apps/tauri
+
+The MIT and Apache-2.0 texts reproduced above apply to these packages equally.
+Build-time-only packages (TypeScript, Vite, the Tauri CLI, type definitions) are
+not distributed and are not listed here.

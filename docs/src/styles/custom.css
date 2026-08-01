@@ -1,0 +1,29 @@
+/*
+ * Starlight's defaults are deliberately left alone almost everywhere -- the point of choosing it
+ * was that it looks good without a design pass. This file only sets the accent colour to match
+ * the app's, so a screenshot does not sit on a page in a different palette.
+ *
+ * The values are Starlight's own generated scales for a hue near the app's --accent.
+ */
+
+:root {
+  --sl-color-accent-low: #10233d;
+  --sl-color-accent: #2a5fa8;
+  --sl-color-accent-high: #b6cdf0;
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: #c5d8f5;
+  --sl-color-accent: #2a5fa8;
+  --sl-color-accent-high: #17304f;
+}
+
+/*
+ * Screenshots are the substance of these pages, not decoration -- most of what Griddle does is
+ * visual. Giving them a border and radius keeps a dark UI capture from bleeding into a dark page
+ * background, which otherwise makes the window edges vanish.
+ */
+.sl-markdown-content img {
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.5rem;
+}

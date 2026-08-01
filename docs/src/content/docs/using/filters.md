@@ -1,0 +1,52 @@
+---
+title: Filters
+description: Narrowing SteamGridDB results by style, size, format and content tags.
+sidebar:
+  order: 3
+---
+
+The **Filters** panel above the results narrows what SteamGridDB returns.
+
+Everything starts **ticked** except Adult Content, so unticking a box always narrows the results.
+An empty result usually means the filters are too tight, not that the game has no artwork.
+
+## Styles
+
+Alternate, Blurred, White Logo, Material, No Logo — SteamGridDB's own categories. Which ones exist
+depends on the artwork type, so the Logo tab offers fewer than the Capsule tab.
+
+## Sizes
+
+Restricts results to specific dimensions. Sizes are per artwork type, and some combinations simply
+do not exist:
+
+- **Icons take no size filter at all** — the API rejects every value, so Griddle offers none.
+- **Hero at 1600×650** is valid but currently matches nothing.
+
+## Formats
+
+Static (JPEG, PNG) and animated (WebP, APNG). Untick **Animated** if you only want still images.
+
+## Content tags
+
+**Adult Content**, **Humor** and **Epilepsy Warning**, plus **Untagged**.
+
+These behave differently from the others and it is worth knowing which way round:
+
+- With **Untagged** ticked, the three tags act as *exclusions*. Untick Humor and humorous artwork
+  disappears; everything untagged still shows.
+- With **Untagged** unticked, they become *requirements*. Results are limited to artwork carrying
+  at least one of the tags you left ticked, and untagged artwork is excluded entirely.
+
+Adult Content is the only one off by default.
+
+## One set, shared across tabs
+
+Your filters are shared by all five tabs rather than kept separately per tab, so you set "no adult
+content" once.
+
+Where a tab cannot use one of your choices — a size that only applies to capsules, say — Griddle
+ignores it for that tab and keeps it for the others. Nothing is greyed out and nothing is quietly
+discarded, so switching back restores what you picked.
+
+**Reset filters** returns everything to the defaults.

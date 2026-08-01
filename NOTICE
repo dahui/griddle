@@ -1,0 +1,16 @@
+Griddle
+Copyright 2026 Jeff Hagadorn
+
+This product includes software developed as part of the Griddle project
+(https://github.com/dahui/griddle).
+
+Licensed under the Apache License, Version 2.0. See the LICENSE file for the
+full terms.
+
+Griddle statically links third-party Rust crates and bundles third-party
+JavaScript into its frontend. Their copyright notices and licence texts are
+reproduced in THIRD-PARTY-NOTICES.txt, which is distributed alongside this
+file in every release.
+
+Griddle is not affiliated with, endorsed by, or sponsored by Valve Corporation
+or SteamGridDB. "Steam" is a trademark of Valve Corporation.

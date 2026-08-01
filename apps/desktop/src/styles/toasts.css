@@ -1,0 +1,92 @@
+/* -- toasts --------------------------------------------------------------------------- */
+
+.toasts {
+  position: fixed;
+  bottom: 1.4rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  /* Above the modal backdrop (10) and the context menu (20): a confirmation raised while a
+     dialog is open still has to be seen. */
+  z-index: 30;
+  /* The container spans the window so its children can centre, but it must not swallow clicks
+     on whatever is behind it. The toasts themselves opt back in. */
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  display: grid;
+  gap: 0.15rem;
+  justify-items: center;
+  text-align: center;
+  max-width: min(32rem, 90vw);
+  padding: 0.6rem 1.1rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel-hi);
+  color: var(--text);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  /* One animation covers the whole life: in, hold, out. `--toast-life` is set inline to the
+     same value as the JS removal timer, so the fade-out finishes exactly as the node goes —
+     a separate exit timer would drift out of step with it. */
+  animation: toast-life var(--toast-life, 4000ms) ease forwards;
+}
+
+/* An action line wraps, so a toast carrying one is a rounded rectangle rather than a pill. */
+.toast:has(.toast-action) {
+  border-radius: 12px;
+}
+
+.toast-ok {
+  border-color: var(--ok);
+}
+
+.toast-bad {
+  border-color: var(--bad);
+}
+
+.toast-message {
+  font-size: 0.87rem;
+}
+
+.toast-action {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+@keyframes toast-life {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  8%,
+  88% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+/* Movement is the part that causes trouble; the fade still communicates arrival and departure. */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes toast-life {
+    0% {
+      opacity: 0;
+    }
+    8%,
+    88% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+}

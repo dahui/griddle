@@ -1,0 +1,136 @@
+name: Release
+
+# Pushing a tag is the entire release action. Nothing in the repository carries a version between
+# releases -- every manifest reads 0.0.0 on main and this job stamps the tag in before building,
+# so the four files cannot drift apart.
+on:
+  push:
+    tags: ['v*']
+  # For re-running a release whose upload failed, without moving the tag.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g. v0.1.0)'
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      # Split out and run first: a malformed tag must fail in seconds, before a ten-minute
+      # build, and must never produce a GitHub release named after a typo.
+      - name: Validate the tag
+        id: version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.event.inputs.tag || github.ref_name }}"
+          if ($tag -notmatch '^v(\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?)$') {
+              Write-Host "::error::'$tag' is not a valid release tag. Expected v<major>.<minor>.<patch>[-prerelease]."
+              exit 1
+          }
+          $version = $Matches[1]
+          # A suffix means a pre-release. GitHub then keeps it off the "Latest release" badge
+          # and out of the /releases/latest redirect the README download link uses.
+          $prerelease = if ($version -match '-') { 'true' } else { 'false' }
+          "version=$version"       >> $env:GITHUB_OUTPUT
+          "prerelease=$prerelease" >> $env:GITHUB_OUTPUT
+          Write-Host "building $version (prerelease: $prerelease)"
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: oven-sh/setup-bun@v2
+
+      - run: bun install --frozen-lockfile
+
+      - name: Stamp the version
+        shell: pwsh
+        run: ./scripts/set-version.ps1 ${{ steps.version.outputs.version }}
+
+      # One build produces both artifacts. `tauri build` runs `beforeBuildCommand`, so the
+      # frontend is always rebuilt from source here -- a bare `cargo build --release` would
+      # happily embed a stale `apps/desktop/dist` and the result looks completely correct: it
+      # compiles, starts, and titles its window.
+      - name: Build
+        run: bun run --cwd crates/griddle-app tauri build
+
+      - name: Assemble the artifacts
+        id: assemble
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+
+          # Renamed from griddle-app.exe: the crate name is an implementation detail and the
+          # product is called Griddle. The installer already does this rename itself.
+          $staging = "staging/Griddle"
+          New-Item -ItemType Directory -Force $staging | Out-Null
+          Copy-Item target/release/griddle-app.exe "$staging/Griddle.exe"
+          # Apache-2.0 section 4 requires LICENSE and NOTICE travel with every distribution, and
+          # the crates linked into the exe require their own notices. A zip is a distribution.
+          Copy-Item LICENSE, NOTICE, THIRD-PARTY-NOTICES.txt, README.md $staging
+
+          $portable = "artifacts/Griddle-$version-portable.zip"
+          Compress-Archive -Path "$staging/*" -DestinationPath $portable
+
+          $setup = Get-ChildItem target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          if (-not $setup) { throw "no NSIS installer was produced" }
+          Copy-Item $setup.FullName "artifacts/Griddle_${version}_x64-setup.exe"
+
+          # Written with names relative to the artifacts directory so `sha256sum -c` works after
+          # downloading them into one folder.
+          Push-Location artifacts
+          Get-ChildItem -File -Exclude SHA256SUMS.txt | ForEach-Object {
+              $h = (Get-FileHash $_.Name -Algorithm SHA256).Hash.ToLower()
+              "$h  $($_.Name)"
+          } | Set-Content -Encoding ascii SHA256SUMS.txt
+          Get-Content SHA256SUMS.txt
+          Pop-Location
+
+      # Uploaded before the release is published, so a failed upload does not leave a release
+      # advertising artifacts that are not there.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: griddle-${{ steps.version.outputs.version }}
+          path: artifacts/*
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: Griddle ${{ steps.version.outputs.version }}
+          prerelease: ${{ steps.version.outputs.prerelease }}
+          generate_release_notes: true
+          files: artifacts/*
+          # Every release body repeats the SmartScreen warning. Users meet it before they read
+          # any documentation, and an unexplained "Windows protected your PC" is where a download
+          # gets abandoned.
+          body: |
+            ## Download
+
+            - **`Griddle-${{ steps.version.outputs.version }}-portable.zip`** — unzip and run. Nothing is installed.
+            - **`Griddle_${{ steps.version.outputs.version }}_x64-setup.exe`** — installer, with a Start menu entry and an uninstaller.
+
+            > [!NOTE]
+            > **Windows will show "Windows protected your PC" the first time you run this.**
+            > Griddle is unsigned, and SmartScreen flags anything it has not seen widely run.
+            > Click **More info → Run anyway**; Windows remembers.
+
+            Verify your download against `SHA256SUMS.txt`:
+            ```powershell
+            Get-FileHash .\Griddle-${{ steps.version.outputs.version }}-portable.zip -Algorithm SHA256
+            ```
+
+            [Documentation](https://dahui.github.io/griddle/) · [Installing](https://dahui.github.io/griddle/start/install/)
+
+            ---

@@ -1,0 +1,84 @@
+# Griddle
+
+**Artwork for your Steam library, applied instantly — no Steam restart.**
+
+[![Latest release](https://img.shields.io/github/v/release/dahui/griddle?label=download&sort=semver)](https://github.com/dahui/griddle/releases/latest)
+[![CI](https://github.com/dahui/griddle/actions/workflows/ci.yml/badge.svg)](https://github.com/dahui/griddle/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
+<!-- Screenshot goes here once captured from the release build; see docs/src/assets/. -->
+
+Griddle browses [SteamGridDB](https://www.steamgriddb.com/) and applies artwork to your Steam
+library. Unlike every other Windows tool for this, **the artwork appears immediately** — Griddle
+asks Steam itself to change it rather than writing files and hoping you restart.
+
+It is a Windows-native replacement for the SteamGridDB plugin for Decky Loader.
+
+## Download
+
+Grab the [latest release](https://github.com/dahui/griddle/releases/latest):
+
+- **`Griddle-<version>-portable.zip`** — unzip and run. Nothing is installed.
+- **`Griddle_<version>_x64-setup.exe`** — installer, with a Start menu entry and an uninstaller.
+
+> [!NOTE]
+> **Windows will show "Windows protected your PC" on first run.** Griddle is unsigned, and
+> SmartScreen flags anything it has not seen widely run — signing certificates require a
+> registered company. Click **More info → Run anyway**; Windows remembers.
+>
+> Every release publishes `SHA256SUMS.txt` if you want to verify the download.
+
+## What it does
+
+- **Applies artwork instantly**, with no Steam restart, by calling Steam's own artwork API.
+- **All five slots** — portrait capsule, wide capsule, hero banner, logo and icon.
+- **Non-Steam shortcuts too**, including their icons.
+- **Animated artwork** works — Steam plays it in the library and in Big Picture.
+- **Full controller navigation.** Add Griddle to Steam as a non-Steam game and drive it from Big
+  Picture with a gamepad.
+- **Falls back gracefully.** With Steam closed, it writes the artwork to disk and tells you it
+  will appear at next launch, rather than failing.
+- **Uses your own free SteamGridDB API key.** Griddle does not ship one — a shared key inside a
+  downloaded app gets scraped and revoked, and then everybody's install breaks at once.
+
+## Requirements
+
+- Windows 10 or 11
+- Steam
+- Microsoft Edge WebView2 — already present on essentially every Windows 11 machine and almost
+  every Windows 10 one. The installer adds it if missing.
+
+## Status
+
+**Pre-release.** Griddle works and is used daily on the developer's machine, but it has not been
+tested widely. Expect rough edges, and please
+[report what you find](https://github.com/dahui/griddle/issues).
+
+It has been deliberately careful with your files: artwork writes are atomic, `shortcuts.vdf` is
+backed up before its first change and verified after every write, and Steam's own artwork cache is
+never written to at all. [Every path it touches is listed.](https://dahui.github.io/griddle/notes/what-griddle-changes/)
+
+## Documentation
+
+**[dahui.github.io/griddle](https://dahui.github.io/griddle/)** — installing, getting an API key,
+a walkthrough, and what the app changes on your system.
+
+## Building
+
+Requires [Rust](https://rustup.rs/) (MSVC) and [bun](https://bun.sh/). No Node.
+
+```powershell
+bun install
+bun run app              # dev, with hot reload
+bun run app:release      # release build -> target\release\griddle-app.exe
+```
+
+Run `scripts\gate.ps1` before pushing — it is exactly what CI runs. See
+[Contributing](https://dahui.github.io/griddle/contributing/).
+
+## Licence
+
+[Apache-2.0](LICENSE). Third-party attributions are in
+[THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt).
+
+Griddle is not affiliated with Valve or SteamGridDB.

@@ -31,6 +31,22 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
-    "icon": ["icons/icon.ico"]
+    "icon": ["icons/icon.ico"],
+    "publisher": "Jeff Hagadorn",
+    "shortDescription": "SteamGridDB artwork manager for Windows",
+    "longDescription": "Browse SteamGridDB and apply artwork to your Steam library instantly, with no Steam restart.",
+    "copyright": "Copyright 2026 Jeff Hagadorn",
+    "licenseFile": "../../LICENSE",
+    "resources": {
+      "../../LICENSE": "LICENSE",
+      "../../NOTICE": "NOTICE",
+      "../../THIRD-PARTY-NOTICES.txt": "THIRD-PARTY-NOTICES.txt"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": false
+      }
+    }
   }
 }

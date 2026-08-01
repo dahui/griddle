@@ -1,0 +1,8 @@
+# `bun test` runs from the repository root and picks up every workspace, so the DOM setup is
+# registered here rather than in apps/desktop -- a preload configured in the leaf package is not
+# applied to a root-level run, and the frontend tests would then fail with "document is not
+# defined" only in CI.
+#
+# Registering a DOM for the pure tests in packages/shared costs nothing: they never touch it.
+[test]
+preload = ["./apps/desktop/test-setup.ts"]
