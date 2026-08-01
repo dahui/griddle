@@ -9,7 +9,7 @@ if (!root) {
   throw new Error('#root missing from index.html');
 }
 
-// 🔴 `FocusProvider` sits **above** `App`, not inside its `Shell`. It used to be in `Shell`, which
+// `FocusProvider` sits **above** `App`, not inside its `Shell`. It used to be in `Shell`, which
 // put `App` itself outside the context — so the one component that owns which screen is showing
 // could not claim the buttons that switch screens.
 createRoot(root).render(

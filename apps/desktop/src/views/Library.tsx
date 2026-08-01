@@ -120,7 +120,7 @@ export function Library({ onPick }: { onPick: (entry: LibraryEntry) => void }) {
         </div>
 
         <FilterBox value={filter} onChange={setFilter} />
-        <SortSelect value={sort} onChange={(s) => view(scope, s)} />
+        <SortOptions value={sort} onChange={(s) => view(scope, s)} firstCol={3} />
 
         <span className="count">
           {shown.length === entries.length
@@ -196,34 +196,70 @@ function FilterBox({ value, onChange }: { value: string; onChange: (v: string) =
 }
 
 /**
- * ⚠️ Still a native `<select>`, which a controller cannot drive — its popup is an OS widget that
- * receives no synthesised input. Reachable and usable by keyboard, so it is not a hole in this
- * phase; replacing it with a listbox built from ordinary buttons is Phase D.
+ * The sort choice, as three buttons rather than a dropdown.
+ *
+ * It was a native `<select>`, and a controller **cannot open one**: the popup is an OS widget
+ * drawn outside the page, so it receives none of the input this app synthesises. The control was
+ * reachable and focusable, which made it worse than an obviously missing one — the cursor landed
+ * on it, A did nothing, and there was no way to tell that from a bug.
+ *
+ * Three ordinary buttons need no new mechanism, are reachable by exactly the same path as
+ * everything else, and match the scope tabs sitting beside them in this same toolbar row. It
+ * only works because there are three options; a longer list would need a real listbox.
  */
-function SortSelect({
+function SortOptions({
   value,
   onChange,
+  firstCol,
 }: {
   value: LibrarySort;
   onChange: (s: LibrarySort) => void;
+  /** Where this group starts in the toolbar row, so the columns stay contiguous. */
+  firstCol: number;
 }) {
-  const { ref, focused } = useFocusItem<HTMLSelectElement>('toolbar', 0, 3);
   return (
-    <label className="sort">
-      Sort
-      <select
-        ref={ref}
-        className={focused ? 'focused' : undefined}
-        value={value}
-        onChange={(e) => onChange(e.target.value as LibrarySort)}
-      >
-        {(Object.keys(SORT_LABEL) as LibrarySort[]).map((s) => (
-          <option key={s} value={s}>
+    <div className="sort" role="group" aria-label="Sort by">
+      <span className="sort-label">Sort</span>
+      <div className="tab-group">
+        {(Object.keys(SORT_LABEL) as LibrarySort[]).map((s, i) => (
+          <SortOption
+            key={s}
+            col={firstCol + i}
+            active={value === s}
+            onClick={() => onChange(s)}
+          >
             {SORT_LABEL[s]}
-          </option>
+          </SortOption>
         ))}
-      </select>
-    </label>
+      </div>
+    </div>
+  );
+}
+
+function SortOption({
+  col,
+  active,
+  onClick,
+  children,
+}: {
+  col: number;
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  const { ref, focused } = useFocusItem<HTMLButtonElement>('toolbar', 0, col);
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className={`tab tab-small${active ? ' active' : ''}${focused ? ' focused' : ''}`}
+      // The pressed state, not just a colour: a screen reader has no other way to know which of
+      // three visually-similar buttons is the current sort.
+      aria-pressed={active}
+      onClick={onClick}
+    >
+      {children}
+    </button>
   );
 }
 

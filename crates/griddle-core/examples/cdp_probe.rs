@@ -1,4 +1,4 @@
-//! M1 spike harness — talks to a live Steam client over the CEF debugger.
+//! Exploratory harness — talks to a live Steam client over the CEF debugger.
 //!
 //! ```powershell
 //! cargo run -p griddle-core --example cdp_probe             # env: realm, apply API, CSP
@@ -15,9 +15,8 @@
 //! than thrown away: the target-selection rules and the "is this actually Steam" check below
 //! are the real ones.
 //!
-//! Fourteen further probes existed during the spike and were deleted once their findings were
-//! recorded in CLAUDE.md — including the dead ends (detached React roots, name-based module
-//! searches), which are written up there specifically so they are not retried.
+//! CLAUDE.md records what a longer set of probes established, including the dead ends — detached
+//! React roots, name-based module searches — written up specifically so they are not retried.
 
 use std::io::{Read, Write};
 use std::net::TcpStream;

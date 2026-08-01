@@ -1,6 +1,6 @@
 //! Reading a game controller, natively.
 //!
-//! 🔴 **Not through the webview's Gamepad API**, and that is the whole reason this module exists
+//! **Not through the webview's Gamepad API**, and that is the whole reason this module exists
 //! rather than twenty lines of `navigator.getGamepads()` in TypeScript. Two open, unresolved
 //! WebView2 bugs rule it out, and one of them lands squarely on this product's main use case:
 //!
@@ -35,7 +35,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 /// What the UI is asked to do. One vocabulary, shared with the keyboard.
 ///
-/// 🔴 **`camelCase`, not `lowercase`.** These strings are matched literally by `NavAction` in
+/// **`camelCase`, not `lowercase`.** These strings are matched literally by `NavAction` in
 /// `apps/desktop/src/focus.tsx`, and `rename_all = "lowercase"` flattens `TabPrev` to `"tabprev"`
 /// — which no one notices while every variant is a single word, because then the two renames are
 /// identical. The first two-word action silently stopped arriving while all the others kept
@@ -71,14 +71,13 @@ impl From<Direction> for Action {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, reason = "test assertions are allowed to panic")]
 mod wire_tests {
     use super::Action;
 
     /// The frontend matches these strings literally, and nothing on the TypeScript side can check
     /// them — a mismatch is not a type error anywhere, it is an action that silently never fires.
     ///
-    /// 🔴 This exists because that happened: under `rename_all = "lowercase"`, `TabPrev` went out
+    /// This exists because that happened: under `rename_all = "lowercase"`, `TabPrev` went out
     /// as `"tabprev"` while `NavAction` expected `"tabPrev"`, and LB/RB did nothing at all. Every
     /// other action was a single word, so the rename was a no-op for them and the fault was
     /// invisible until the vocabulary grew a two-word entry.
@@ -108,7 +107,7 @@ mod wire_tests {
 
 /// A latch the host sets when the window gains or loses focus.
 ///
-/// 🔴 Load-bearing, not a nicety. This process reads the pad globally — nothing scopes it to our
+/// Load-bearing, not a nicety. This process reads the pad globally — nothing scopes it to our
 /// window — so without the gate, navigating a game with the controller would also be driving
 /// Griddle in the background. z13gui gates every event on window visibility for the same reason.
 #[derive(Clone, Default)]
@@ -128,7 +127,7 @@ impl FocusGate {
 
 /// The controllers visible right now, by name.
 ///
-/// 🔴 A returned value rather than a log line, because "the pad is not being read" and "the UI is
+/// A returned value rather than a log line, because "the pad is not being read" and "the UI is
 /// ignoring the pad" look identical from the outside and have nothing in common as causes. The
 /// runner below can only `warn!` about a backend that will not start, and a `warn!` is invisible
 /// in a `windows_subsystem = "windows"` binary with no console — so the one question worth asking
@@ -227,7 +226,7 @@ mod windows_impl {
 
     /// Buttons that fire once per press. Directions are held; these are not.
     ///
-    /// 🔴 `LeftTrigger`/`RightTrigger` are the **bumpers** in gilrs' vocabulary — LB and RB. The
+    /// `LeftTrigger`/`RightTrigger` are the **bumpers** in gilrs' vocabulary — LB and RB. The
     /// analog triggers are `LeftTrigger2`/`RightTrigger2`. Reading the names the other way round
     /// is an easy mistake that produces tab switching on a control nobody presses deliberately.
     const EDGE_BUTTONS: &[(Button, Action)] = &[
@@ -260,7 +259,7 @@ mod windows_impl {
             let now_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
             let open = gate.is_open();
 
-            // 🔴 Edge buttons come from **events**, not from polling `is_pressed`.
+            // Edge buttons come from **events**, not from polling `is_pressed`.
             //
             // `is_pressed(Button::X)` consults the gamepad's SDL mapping first and only falls back
             // to the button's native code, so a mapping that disagrees for one button leaves that

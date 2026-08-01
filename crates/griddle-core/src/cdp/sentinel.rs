@@ -4,30 +4,31 @@
 //! next start — **Valve's own mechanism**, not a hack: CSS Loader and Decky both depend on it,
 //! and the file needs no elevation to create `[VERIFIED-BOX 2026-07-27]`.
 //!
-//! # Created during setup, and disclosed rather than asked
+//! # Created at startup, not offered as a choice
 //!
-//! This used to be behind an opt-in checkbox. It no longer is: applying artwork *without a
-//! Steam restart* is the entire reason this app exists in preference to Steam Art Manager or
-//! SGDBoop, so making its one prerequisite a thing the user has to find and enable meant the
-//! product shipped switched off. CSS Loader and Decky set the same flag and mention it to
+//! **This is the canonical explanation of that decision. Everywhere else points here.**
+//!
+//! It was behind an opt-in checkbox once. It is not now: applying artwork *without a Steam
+//! restart* is the entire reason this app exists in preference to Steam Art Manager or SGDBoop,
+//! so putting its one prerequisite behind a setting meant the product shipped switched off for
+//! anyone who never found it. CSS Loader and Decky set the identical flag and mention it to
 //! nobody.
 //!
-//! The middle ground: it is created at startup, and the first-run screen **says so** — what the
-//! file is, that it is Valve's own flag, and that deleting it undoes everything. Disclosure
-//! without a permission prompt for the feature the user installed the app to get.
+//! It is created silently and explained on request — the **Live apply** row in Settings →
+//! Diagnostics reports its state through `Status::sentinel_explanation`. So this does exactly
+//! what those tools do rather than more.
 //!
-//! What the flag actually does is worth being clear-eyed about: Steam opens its CEF debugging
-//! port on loopback at next start, so any process already running as this user can drive
-//! Steam's JS. That is Valve's own mechanism and the same exposure CSS Loader and Decky have
-//! always carried, but it is a real widening and belongs in the disclosure, not in a footnote.
+//! Be clear-eyed about the cost: Steam opens its CEF debugging port on loopback at next start,
+//! so any process already running as this user can drive Steam's JS. Modest, Valve's own
+//! mechanism, and the same exposure those tools have always carried — but real.
 //!
-//! # 🔴 Creating it is not enough; Steam must restart
+//! # Creating it is not enough; Steam must restart
 //!
 //! The port opens at client start, so a freshly created sentinel does nothing until Steam is
 //! restarted. [`Sentinel::state`] reports that as a distinct state rather than letting the user
 //! wonder why nothing happened.
 //!
-//! # 🔴 Millennium deletes this file
+//! # Millennium deletes this file
 //!
 //! Millennium removes the sentinel and proxies `user32.dll` into `steam.exe` instead, which is
 //! why installing it breaks CSS Loader
@@ -68,7 +69,7 @@ pub enum State {
 impl State {
     /// A one-line status, for showing beside the live-apply control.
     ///
-    /// 🔴 **This is a status line, not an explanation.** It used to spell out what
+    /// **This is a status line, not an explanation.** It used to spell out what
     /// `.cef-enable-remote-debugging` is, that it is Valve's own setting and that Steam needs
     /// restarting — all of which the settings panel says immediately above it, so the screen
     /// said the same thing twice.
@@ -171,7 +172,6 @@ impl Sentinel {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, reason = "test assertions are allowed to panic")]
 mod tests {
     use super::*;
 

@@ -33,7 +33,7 @@ mod reset;
 mod search;
 mod status;
 
-// 🔴 Glob re-exports, and they cannot be narrowed to the command names.
+// Glob re-exports, and they cannot be narrowed to the command names.
 //
 // `#[tauri::command]` generates two hidden items beside each function — a `__cmd__<name>` macro
 // and a `__tauri_command_name_<name>` constant — and `generate_handler!` in `main.rs` expands to
@@ -85,7 +85,6 @@ pub(crate) fn first_existing(grid: &GridDir, app: AppId, asset: AssetType) -> Op
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, reason = "test assertions are allowed to panic")]
 mod tests {
     use super::*;
 

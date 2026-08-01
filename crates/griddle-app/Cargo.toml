@@ -41,6 +41,16 @@ tauri = { version = "2.11.5", features = ["protocol-asset"] }
 # `cargo build --release` silently produces a binary that renders a connection-refused page.
 # `tauri dev` passes `--no-default-features`, so making it default keeps hot-reload working
 # while making the obvious command correct.
+[target.'cfg(windows)'.dependencies]
+# Only for `fatal.rs`: a message box is the sole way to report a startup failure in a
+# `windows_subsystem = "windows"` binary, which has no console for `eprintln!` to reach. Already
+# in the tree via Tauri and griddle-core, so this costs no extra build.
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]

@@ -17,7 +17,7 @@
 //! Reading it out requires [`ApiKey::expose`], which is named to be conspicuous at a call site
 //! and in review.
 //!
-//! # 🔴 Do not ship a key with the application
+//! # Do not ship a key with the application
 //!
 //! decky-steamgriddb hardcodes one, and using it elsewhere is stated to get you banned. It now
 //! returns **401** anyway `[VERIFIED-BOX 2026-07-27]` — a shared secret inside a distributed
@@ -120,7 +120,6 @@ impl fmt::Debug for ApiKey {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, reason = "test assertions are allowed to panic")]
 mod tests {
     use super::*;
 

@@ -1,7 +1,7 @@
 //! Finding Steam's `SharedJSContext` on the CEF remote-debugging port — and refusing to touch
 //! anything that is not it.
 //!
-//! # 🔴 Port 8080 is a very common dev-server port
+//! # Port 8080 is a very common dev-server port
 //!
 //! Valve's debugger listens on 8080 and there is no authentication on it. That is Valve's
 //! design and it is loopback-only, but it means **something else may well be answering**: a
@@ -22,7 +22,7 @@
 //! Anything else is [`Error::NotSteam`], which the UI reports as "port 8080 is in use by
 //! another application" — a legible message rather than a mysterious failure.
 //!
-//! # 🔴 `127.0.0.1`, never `localhost`
+//! # `127.0.0.1`, never `localhost`
 //!
 //! `localhost` can resolve to `::1` first, and Steam binds IPv4. Using the literal address
 //! removes a whole class of "works on my machine".
@@ -233,7 +233,6 @@ fn classify(endpoint: &Endpoint, source: reqwest::Error) -> Error {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, reason = "test assertions are allowed to panic")]
 mod tests {
     use super::*;
 

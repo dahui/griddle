@@ -667,10 +667,39 @@ server**, does not reach for 1420, loads 2930 apps from `appinfo.vdf`, grants th
 to exactly the account's `grid/`, and has PE subsystem **2 = `WINDOWS_GUI`** — no console
 flash, the wart this project exists to remove.
 
+### 🟢 File layout, after the readability pass of 2026-08-01
+
+Two conventions were introduced, and both are worth knowing before adding a file.
+
+**Tests live in a `<module>_tests.rs` sibling**, wired up with `#[cfg(test)] #[path = "..."] mod
+tests;`. Twelve modules were 40–50% test code, which meant scrolling past several hundred lines of
+fixtures to reach the thing being tested. `#[path]` rather than a directory keeps the tests beside
+their subject instead of in a folder that exists to hold one file.
+
+🔴 **This made twenty file writes visible to `check-boundaries.sh` that had been hidden inside
+exempt modules** — every one a test fixture in a tempdir. They are annotated with `boundary-ok`
+rather than exempted by a `*_tests.rs` pattern, because a filename pattern would be exactly the
+"heuristic about layout" that the check's own header rejects.
+
+**`fsutil` is a fourth entry on the write-boundary allowlist**, and deliberately not a fourth
+writer: `grid::store`, `steam::shortcuts` and `settings` each had their own copy of the
+temp-write-fsync-rename dance, which is three chances to lose the `fsync`. It knows nothing about
+what it is writing, and each caller maps its `WriteError` into its own error type in one line.
+
+**`#[cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]`** sits once at each crate
+root, replacing 35 copies of the same per-module attribute. Verified to still deny `unwrap` in
+shipping code by adding one and watching Clippy fail.
+
+Files split: `commands.rs` (1352 → 9), `styles.css` (1046 → 11, **bundled output byte-identical**),
+`focus.tsx` (661 → 4), `appinfo.rs` (1200 → 3), `AssetBrowser.tsx`, `components.tsx`,
+`Settings.tsx`. Comments lost their emoji markers, milestone references and discovery narratives;
+the hazards stayed.
+
 ### `griddle-core` module map
 
 | Module | What it is |
 |---|---|
+| `fsutil` | The atomic write — temp file, `fsync`, rename — plus `sibling_with_suffix`. On the write-boundary allowlist; see above. |
 | `appid` | `AppId` newtype. Signed in `shortcuts.vdf`, unsigned in filenames **and** in the CDP APIs. **Contains no CRC32 function, deliberately** — the folklore algorithm is disproven and the way to never regress is for it not to exist. |
 | `vdf::binary` | Binary KV1. Read **and** write, byte-exact, including the extra trailing `0x08`. Validated against the live client in S9. |
 | `vdf::text` | Text KV1, read-only. Skips scalar siblings among numbered keys (`contentstatsid`); case-insensitive lookup; handles escapes, comments, `[$WIN32]` conditionals. |
@@ -707,7 +736,8 @@ flash, the wart this project exists to remove.
 |---|---|
 | `error` | `UiError { kind, message, action }`. The **`kind` is what keeps "Steam is running" and "network timeout" distinguishable** across the boundary; `action` is what the user should actually do. |
 | `state` | Loaded once at startup. **Nothing here may stop the window opening** — no Steam, no key and an unreadable `appinfo.vdf` are all ordinary first-run states. |
-| `commands` | The `invoke` surface. Thin; every decision belongs to `griddle-core`. |
+| `commands` | The `invoke` surface, one module per group: `status`, `apikey`, `prefs`, `library`, `search`, `apply`, `reset`, `diagnostics`. Thin; every decision belongs to `griddle-core`. 🔴 Re-exported with globs, not by name — `#[tauri::command]` generates hidden `__cmd__*` siblings that a named re-export drops, and the failure reads as a missing command. |
+| `fatal` | A `MessageBoxW` for a startup failure with no window to report it in. `eprintln!` under `windows_subsystem = "windows"` reaches nobody, so a missing WebView2 runtime made the app simply not appear. |
 
 **The apply ladder lives in `commands::apply_asset`:** live first, file-write as the floor. The
 result says which path ran, so the UI can say whether a restart is needed rather than leaving

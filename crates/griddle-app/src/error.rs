@@ -145,7 +145,6 @@ impl From<griddle_core::cdp::Error> for UiError {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, reason = "test assertions are allowed to panic")]
 mod tests {
     use super::*;
 

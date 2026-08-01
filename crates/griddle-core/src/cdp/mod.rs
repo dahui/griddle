@@ -62,12 +62,11 @@ pub enum Error {
 
 /// What the readiness probe found.
 ///
-/// Deliberately two fields. An earlier version also reported whether `webpackChunksteamui` was
-/// present, because the Big Picture deliverable needed to discover Steam's own React components
-/// by structural search. That deliverable is cut, and with it the only thing in this product that
-/// depended on Steam's internals: `SetCustomArtworkForApp` is a native CEF binding Valve cannot
-/// rename without breaking their own client. **There is nothing left here that a Steam update can
-/// silently take away.**
+/// Two fields, and that is the whole surface: nothing in this product discovers anything inside
+/// Steam's own bundle. `SetCustomArtworkForApp` is a native CEF binding, which Valve cannot
+/// rename without breaking their own client, so **there is nothing here that a Steam update can
+/// silently take away.** Adding a field that depends on Steam's minified internals would undo
+/// that property.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
 pub struct Readiness {
     /// Steam's build stamp, e.g. `10840511`. Reported in diagnostics so a bug report can name
@@ -189,7 +188,7 @@ impl SteamJs {
 
 /// Build the apply expression.
 ///
-/// 🔑 **The payload is validated as base64 before being spliced into a JavaScript string
+/// **The payload is validated as base64 before being spliced into a JavaScript string
 /// literal.** The base64 alphabet contains no quote, backslash or newline, so a value that
 /// passes [`base64::is_base64`] provably cannot break out of the literal — the check is an
 /// injection guarantee, not a tidiness test. The other two interpolations are integers.
@@ -209,7 +208,6 @@ fn apply_expression(app: AppId, asset: AssetType, base64_payload: &str) -> Resul
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, reason = "test assertions are allowed to panic")]
 mod tests {
     use super::*;
 

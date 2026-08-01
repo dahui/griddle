@@ -15,6 +15,10 @@ hero:
 ---
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
+import { Image } from 'astro:assets';
+import library from '../../assets/library.png';
+
+<Image src={library} alt="Griddle showing a Steam library as a grid of game capsules" />
 
 <CardGrid>
   <Card title="Artwork appears immediately" icon="star">

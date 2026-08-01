@@ -33,7 +33,7 @@ pub enum AssetType {
     Header = 3,
     /// → `<appid>_icon.<ext>`.
     ///
-    /// 🔴 **Not settable through `SteamClient.Apps.SetCustomArtworkForApp`** — ordinal 4 is a
+    /// **Not settable through `SteamClient.Apps.SetCustomArtworkForApp`** — ordinal 4 is a
     /// silent no-op there (returns normally after ~500 ms, writes nothing), for shortcuts and
     /// Steam apps alike. Icons must go through the file path, plus `shortcuts.vdf` and a Steam
     /// restart for non-Steam games. `[VERIFIED-BOX 2026-07-27]`
@@ -127,7 +127,7 @@ pub fn file_name(app: AppId, asset: AssetType, ext: &str) -> String {
 
 /// Every filename that could hold this asset — the set to delete before writing a new one.
 ///
-/// 🔴 **Cleaning siblings is required, not tidiness.** If `<appid>p.png` and `<appid>p.jpg`
+/// **Cleaning siblings is required, not tidiness.** If `<appid>p.png` and `<appid>p.jpg`
 /// both exist, which one Steam picks is undefined and has changed between versions. SGDBoop
 /// deletes the same set for the same reason. `[VERIFIED-SOURCE]`
 ///
@@ -152,6 +152,7 @@ pub fn logo_position_file_name(app: AppId) -> String {
 /// Legacy artwork filenames keyed by the 64-bit BPID, written by much older clients.
 ///
 /// Read-only concern: worth *finding* so a stale file can be reported, never worth writing.
+#[cfg(test)]
 pub fn legacy_file_name(app: AppId, asset: AssetType, ext: &str) -> String {
     format!(
         "{}{}.{}",
@@ -162,7 +163,6 @@ pub fn legacy_file_name(app: AppId, asset: AssetType, ext: &str) -> String {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, reason = "test assertions are allowed to panic")]
 mod tests {
     use super::*;
 

@@ -5,7 +5,7 @@
 //! to the OS is the only way, and it has to go through the backend because the webview cannot
 //! launch anything itself.
 //!
-//! # 🔴 The allowlist is the point
+//! # The allowlist is the point
 //!
 //! "Open this URL" is a real capability: it hands a string to the shell, which will launch
 //! whatever handler is registered for it. A frontend bug — or remote content, since this webview
@@ -131,7 +131,6 @@ impl Error {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, reason = "test assertions are allowed to panic")]
 mod tests {
     use super::*;
 
@@ -150,7 +149,7 @@ mod tests {
 
     #[test]
     fn a_lookalike_host_is_refused() {
-        // 🔴 The one a naive `ends_with` gets wrong. Without the leading dot,
+        // The one a naive `ends_with` gets wrong. Without the leading dot,
         // `evilsteamgriddb.com` matches the suffix and would be opened.
         assert_eq!(
             allowed("https://evilsteamgriddb.com/"),

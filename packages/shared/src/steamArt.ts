@@ -11,7 +11,7 @@
 import type { AssetType } from './assets';
 
 /**
- * 🔴 **The CDN basenames are NOT the on-disk basenames.** Measured `[VERIFIED-BOX 2026-07-30]`.
+ * **The CDN basenames are NOT the on-disk basenames.** Measured `[VERIFIED-BOX 2026-07-30]`.
  *
  * The disk name for a slot varies per app — 1030300's capsule is stored as
  * `<sha1>/library_capsule.jpg` — but the CDN serves every app's capsule as

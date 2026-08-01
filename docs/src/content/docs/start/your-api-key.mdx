@@ -5,6 +5,9 @@ sidebar:
   order: 2
 ---
 
+import { Image } from 'astro:assets';
+import settings from '../../../assets/settings.png';
+
 Griddle asks for a **SteamGridDB API key** the first time it runs. It is free, and it takes about
 a minute.
 
@@ -14,6 +17,8 @@ a minute.
 2. Open your **profile → Preferences → API**.
 3. Generate a key and copy it.
 4. Paste it into Griddle when it asks, or later under **Settings → API key**.
+
+<Image src={settings} alt="Griddle's settings screen, showing the API key panel" />
 
 ## Why yours and not one built in
 

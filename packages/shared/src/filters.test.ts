@@ -129,7 +129,7 @@ describe('defaults', () => {
   });
 
   test('the shared defaults clamp to exactly the default sizes each type used to get', () => {
-    // 🔴 The property that lets ONE filter set replace five. The stored defaults are the union
+    // The property that lets ONE filter set replace five. The stored defaults are the union
     // of every type's defaults; pruning that union per type has to reproduce what each tab used
     // to get on its own, or switching to a shared set silently changes what every tab shows.
     const shared = defaultFilters();
@@ -151,7 +151,7 @@ describe('defaults', () => {
   });
 
   test('every style and format starts ticked, as the Decky plugin does', () => {
-    // 🔴 Parity with `decky-steamgriddb`'s FiltersModal, which seeds each group from that type's
+    // Parity with `decky-steamgriddb`'s FiltersModal, which seeds each group from that type's
     // own vocabulary — so a box starts ticked and unticking it narrows. `[VERIFIED-SOURCE]`
     //
     // Asserted through `pruneToType` rather than against the raw union, because the union is an
@@ -223,7 +223,7 @@ describe('pruneToType', () => {
   });
 
   test('does not mutate the shared set it was given', () => {
-    // 🔴 Load-bearing for a shared filter set: pruning is a *view* for one query. If it edited
+    // Load-bearing for a shared filter set: pruning is a *view* for one query. If it edited
     // in place, visiting the Logo tab once — which offers no sizes at all — would wipe every
     // size the user had chosen, for every tab, permanently.
     const shared: Filters = { ...base, dimensions: ['600x900', '1920x620'], styles: ['blurred'] };
@@ -235,7 +235,7 @@ describe('pruneToType', () => {
 
 describe('queryFor', () => {
   test('clamps to the tab before translating', () => {
-    // 🔴 The regression this replaced a whole per-type state machine to prevent. grid_p and
+    // The regression this replaced a whole per-type state machine to prevent. grid_p and
     // grid_l are the SAME endpoint separated only by `dimensions`, so a query built for the
     // Wide Capsule tab while carrying the Capsule tab's 600x900 does not fail — it returns
     // portrait art, in the wide tab. That shipped once.
@@ -255,7 +255,7 @@ describe('queryFor', () => {
   });
 
   test('no size ticked widens to the tab, and never to no filter at all', () => {
-    // 🔴 The two are not interchangeable. `grid_p` and `grid_l` are the same endpoint, so
+    // The two are not interchangeable. `grid_p` and `grid_l` are the same endpoint, so
     // dropping `dimensions` would fill the Wide tab with portrait art rather than showing every
     // wide size — the exact failure the clamp above exists to prevent, arrived at from the
     // opposite direction.
@@ -327,7 +327,7 @@ describe('stored <-> working filter conversion', () => {
   });
 
   test('loading does NOT prune, so sizes belonging to other tabs survive a round trip', () => {
-    // 🔴 The counterpart to pruning at query time. If load pruned, opening the Logo tab and
+    // The counterpart to pruning at query time. If load pruned, opening the Logo tab and
     // saving would drop every size the user had picked — they would come back to the Capsule
     // tab and find their selection silently reset.
     const shared: Filters = { ...base, dimensions: ['600x900', '460x215', '1920x620'] };

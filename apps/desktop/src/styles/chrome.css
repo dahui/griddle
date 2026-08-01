@@ -63,15 +63,18 @@
   color: var(--muted);
 }
 
-.sort select,
-.filters select {
-  font: inherit;
-  font-size: 0.82rem;
-  background: #0e0f16;
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 0.4rem 0.5rem;
+.sort-label {
+  white-space: nowrap;
+}
+
+/*
+ * The sort options are the same control as the scope tabs beside them, one size down. They used
+ * to be a native `<select>`, which a controller cannot open at all -- its popup is an OS widget
+ * that never sees the input this app synthesises.
+ */
+.tab-small {
+  font-size: 0.78rem;
+  padding: 0.3rem 0.6rem;
 }
 
 .browsing {

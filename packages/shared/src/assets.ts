@@ -1,44 +1,19 @@
 /**
  * Asset types and their per-type option tables.
  *
- * The numeric values are Steam's own `ELibraryAssetType` ordinals, passed as the fourth
- * argument to `SteamClient.Apps.SetCustomArtworkForApp`. `HeroBlur` (5) exists in Steam but
- * neither the Decky plugin nor this app edits it.
+ * Note `grid_l` is SteamGridDB's wide capsule, which Steam calls `Header` — the two vocabularies
+ * do not line up, and this file is where the frontend's half of that is defined.
  *
- * Note `grid_l` maps to `Header` (3), not to something named "wide" — Steam's naming and
- * SteamGridDB's do not line up, and this table is the single place that reconciles them.
+ * Steam's own `ELibraryAssetType` ordinals used to be mirrored here too. They are not, now: the
+ * frontend never calls Steam, it calls Rust, so `griddle_core::grid::names::AssetType` is the
+ * only copy. Two hand-maintained tables of the same measured ordinals is exactly the kind of
+ * drift that would send hero art to the capsule slot.
  */
-export const ELibraryAssetType = {
-  Capsule: 0,
-  Hero: 1,
-  Logo: 2,
-  Header: 3,
-  Icon: 4,
-  HeroBlur: 5,
-} as const;
 
 /** SteamGridDB's names for the asset kinds we support. */
 export type AssetType = 'grid_p' | 'grid_l' | 'hero' | 'logo' | 'icon';
 
 export const ASSET_TYPES: readonly AssetType[] = ['grid_p', 'grid_l', 'hero', 'logo', 'icon'];
-
-/** SteamGridDB asset kind -> Steam's `ELibraryAssetType` ordinal. */
-export const STEAM_ASSET_TYPE: Record<AssetType, number> = {
-  grid_p: ELibraryAssetType.Capsule,
-  grid_l: ELibraryAssetType.Header,
-  hero: ELibraryAssetType.Hero,
-  logo: ELibraryAssetType.Logo,
-  icon: ELibraryAssetType.Icon,
-};
-
-/** The SteamGridDB API path segment for each asset kind. */
-export const SGDB_ENDPOINT: Record<AssetType, string> = {
-  grid_p: 'grids',
-  grid_l: 'grids',
-  hero: 'heroes',
-  logo: 'logos',
-  icon: 'icons',
-};
 
 export const ASSET_LABEL: Record<AssetType, string> = {
   grid_p: 'Capsule',
@@ -51,7 +26,7 @@ export const ASSET_LABEL: Record<AssetType, string> = {
 /**
  * Selectable dimensions per asset type, with the subset that is on by default.
  *
- * 🔴 **Every value here was probed against the live API on 2026-07-30.** An unrecognised
+ * **Every value here was probed against the live API on 2026-07-30.** An unrecognised
  * dimension is an HTTP 400, not an empty result, so a wrong entry breaks a whole tab the
  * moment someone ticks it.
  *
@@ -129,12 +104,12 @@ export const ZOOM: Record<AssetType, { min: number; max: number; default: number
 /**
  * Whether a SteamGridDB preview URL is a **video** rather than an image.
  *
- * 🔴 Animated artwork is served with a `.webm` *thumbnail* — the full asset is a WebP or an
+ * Animated artwork is served with a `.webm` *thumbnail* — the full asset is a WebP or an
  * APNG, but the preview is a video. Putting that in an `<img>` renders a broken-image icon,
  * which is exactly what it looks like: missing artwork. On Cyberpunk 2077, **23 of 200**
  * capsules (12%) hit this. `[VERIFIED-BOX 2026-07-30]`
  *
- * 🔴 **Test the extension, not the mime.** The obvious check — `mime === 'image/webp'` — misses
+ * **Test the extension, not the mime.** The obvious check — `mime === 'image/webp'` — misses
  * a third of them: 7 of those 23 report `image/png`, because an APNG is animated too and also
  * gets a `.webm` preview. Measured cross-tab on the same 200:
  *
@@ -154,11 +129,3 @@ export function isVideoPreview(url: string | null | undefined): boolean {
   return path.toLowerCase().endsWith('.webm');
 }
 
-/**
- * A 1x1 fully transparent PNG, used by the "Use Invisible Asset" action to blank an asset
- * without leaving Steam's default art showing through.
- *
- * Not offered for icons — a blank icon reads as a broken install rather than a deliberate one.
- */
-export const INVISIBLE_PNG_BASE64 =
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVQYV2NgYAAAAAMAAWgmWQ0AAAAASUVORK5CYII=';

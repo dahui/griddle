@@ -23,7 +23,7 @@ pub struct LibraryEntry {
     ///
     /// Kept rather than removed because that is exactly when the UI most needs to explain
     /// itself: a synthesised name with nothing to say for it reads as artwork that failed to
-    /// load, which is how it was reported.
+    /// load rather than as a label.
     pub named: bool,
     /// `"steam"` or `"shortcut"`.
     pub kind: &'static str,
@@ -45,13 +45,13 @@ pub struct LibraryEntry {
 
 /// Whether an app that only `localconfig.vdf` remembers should be left out of the library.
 ///
-/// 🔴 **An app `localconfig.vdf` knows and `appinfo.vdf` does not is one the account no longer
+/// **An app `localconfig.vdf` knows and `appinfo.vdf` does not is one the account no longer
 /// holds** — a refunded purchase, or a demo or beta Steam has withdrawn. Confirmed against a real
 /// library: all 29 such apps there were exactly that. `[VERIFIED-BOX 2026-07-31]` `localconfig` is
 /// a record of what was *configured*, never of what is *owned* — there is no offline ownership
 /// list, `licensecache` being encrypted — and absence from appinfo is the closest signal there is.
 ///
-/// 🔴 `appinfo_loaded` is the whole safety story, which is why it is a parameter rather than
+/// `appinfo_loaded` is the whole safety story, which is why it is a parameter rather than
 /// something this function works out. When `appinfo.vdf` cannot be read, **every** app looks
 /// nameless, and dropping on that would cut the All-games scope down to installed apps and
 /// shortcuts — surfacing as "some of my games are missing", which this codebase treats as the
@@ -242,7 +242,6 @@ fn sort_entries(entries: &mut [LibraryEntry], sort: LibrarySort) {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, reason = "test assertions are allowed to panic")]
 mod tests {
     use super::*;
 
@@ -259,7 +258,7 @@ mod tests {
 
     #[test]
     fn nothing_is_dropped_when_appinfo_could_not_be_read() {
-        // 🔴 The guard that keeps the rule above safe. With no readable `appinfo.vdf` every app
+        // The guard that keeps the rule above safe. With no readable `appinfo.vdf` every app
         // looks nameless, so dropping on that alone would cut the All-games scope down to
         // installed apps and shortcuts — "some of my games are missing", which is the hardest
         // kind of bug for a user to report and the one this codebase most wants to avoid.

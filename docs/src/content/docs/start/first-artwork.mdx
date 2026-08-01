@@ -5,13 +5,13 @@ sidebar:
   order: 3
 ---
 
+import { Image } from 'astro:assets';
+import library from '../../../assets/library.png';
+import browse from '../../../assets/browse.png';
+import current from '../../../assets/current.png';
+
 This walks through changing one game's portrait capsule — the tall image Steam shows in your
 library grid.
-
-:::note[Screenshots pending]
-This page is written for the shipping build; its screenshots are captured as part of the release
-and will appear here shortly.
-:::
 
 ## 1. Pick a game
 
@@ -20,15 +20,21 @@ widens that to everything Steam has a record of on this PC.
 
 Type in the filter box to narrow the list, then click a game to open it.
 
+<Image src={library} alt="The library grid, showing installed games as portrait capsules" />
+
 ## 2. Check what it has now
 
-The game view opens on **Current artwork**, showing all five slots side by side and what each one
-holds today. Anything you have not customised shows Steam's own artwork.
+The **Current** tab shows all five slots side by side and what each one holds today. Anything you
+have not customised is labelled *Steam default*.
+
+<Image src={current} alt="The Current tab, showing capsule, wide capsule, hero and logo side by side" />
 
 ## 3. Browse replacements
 
-Click the **Capsule** tab. Griddle searches SteamGridDB for that game and shows what is available.
-Scroll for more; results load as you go.
+The **Capsule** tab searches SteamGridDB for that game and shows what is available. Scroll for
+more; results load as you go, and the count above reads *loaded of total*.
+
+<Image src={browse} alt="The Capsule tab with the filter panel open and candidate artwork below" />
 
 If Griddle matched the wrong game — which happens with re-releases and remasters — use
 **Wrong game?** at the top to search by name and pick the right one.

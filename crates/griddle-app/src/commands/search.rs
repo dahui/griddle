@@ -45,7 +45,7 @@ pub async fn search_assets(
         None => base.clone(),
     };
 
-    // 🔴 Restore the tab's dimensions when the filter set carries none.
+    // Restore the tab's dimensions when the filter set carries none.
     //
     // Both grid slots use the *same* endpoint and are told apart only by `dimensions`. Querying
     // `grids` with none for the Header tab fills it with portrait art, which then gets written
@@ -247,7 +247,6 @@ pub async fn current_game_match(state: State<'_, AppState>, app_id: u32) -> Res<
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, reason = "test assertions are allowed to panic")]
 mod tests {
     use super::*;
     use griddle_core::grid::names::AssetType;
@@ -273,7 +272,7 @@ mod tests {
     fn a_filter_set_with_no_dimensions_keeps_the_tabs_own_dimensions() {
         use griddle_core::sgdb::Dimensions;
 
-        // 🔴 The most dangerous line in the filter path. Capsule and Header are the *same*
+        // The most dangerous line in the filter path. Capsule and Header are the *same*
         // endpoint, told apart only by `dimensions`. Letting an empty filter set through would
         // fill the Header tab with portrait art, which then applies to the wide slot — it works,
         // and it looks wrong, which is worse than failing.

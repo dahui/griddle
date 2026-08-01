@@ -45,7 +45,7 @@ pub struct Asset {
     #[serde(default)]
     pub thumb: Option<String>,
 
-    /// 🔴 **Zero is legal.** Icons routinely report `0x0` — an observed real response has
+    /// **Zero is legal.** Icons routinely report `0x0` — an observed real response has
     /// `"width": 0, "height": 0` for a `.ico`. Never divide by these or use them to compute an
     /// aspect ratio without checking.
     #[serde(default)]
@@ -171,7 +171,6 @@ pub(crate) struct Envelope<T> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, reason = "test assertions are allowed to panic")]
 mod tests {
     use super::*;
 
@@ -276,7 +275,7 @@ mod tests {
 
     #[test]
     fn a_short_page_does_not_mean_the_end_of_the_results() {
-        // 🔴 A page can come back with far fewer than `limit` items while hundreds remain. Any
+        // A page can come back with far fewer than `limit` items while hundreds remain. Any
         // logic that concludes "short page, therefore done" strands the rest of a large game's
         // artwork — which is exactly how a browser ends up showing 12 of 400 and stopping.
         let one: Asset =

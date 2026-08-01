@@ -1,3 +1,6 @@
+// Test assertions are allowed to panic; the shipping code is not. Stated once here rather than
+// repeated on every test module -- see the same attribute in `griddle-core/src/lib.rs`.
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 //! Desktop shell. Thin by design — every decision belongs to `griddle-core`.
 //!
 //! `windows_subsystem = "windows"` is the whole reason this project exists in preference to
@@ -7,6 +10,8 @@
 
 mod commands;
 mod error;
+#[cfg(windows)]
+mod fatal;
 mod state;
 
 use tauri::{Emitter as _, Manager as _};
@@ -40,7 +45,7 @@ fn main() {
             // art for games the user has never customised. Read-only — nothing in this app
             // writes there, and `steam::librarycache` contains no write at all.
             //
-            // 🔴 `recursive = true`, unlike the grid grant above. 278 of the 2248 cached apps
+            // `recursive = true`, unlike the grid grant above. 278 of the 2248 cached apps
             // store their art one level down under a sha1 directory, and a non-recursive grant
             // would 403 exactly those — the failure would look like "some games have no art",
             // which is indistinguishable from the cache simply not having it.
@@ -57,23 +62,12 @@ fn main() {
                 }
             }
 
-            // Live apply is set up, not offered.
+            // Live apply is set up, not offered. Why, and what it costs: `cdp::sentinel`.
             //
-            // Applying artwork without restarting Steam is the entire reason this app exists
-            // rather than Steam Art Manager or SGDBoop, and its one prerequisite is an empty
-            // `.cef-enable-remote-debugging` file in Steam's folder — Valve's own flag, the same
-            // one CSS Loader and Decky rely on. Behind an opt-in checkbox, the product shipped
-            // switched off for anyone who never found it.
-            //
-            // 🔑 Created silently, explained on request: Settings → Diagnostics reports the
-            // sentinel's state through `Status::sentinel_explanation`. Creating it opens Steam's
-            // CEF debugging port on loopback at Steam's next start — a real, if modest, widening,
-            // and the same one CSS Loader and Decky have always carried.
-            //
-            // Re-run on every launch on purpose — `enable()` is idempotent and never truncates,
-            // so this also repairs the file if something removed it. Millennium is known to.
-            //
-            // Never fatal: the apply ladder falls back to writing files, which needs no port.
+            // Two things specific to doing it *here*: it runs on every launch because `enable()`
+            // is idempotent and never truncates, so this also repairs the file if something
+            // removed it (Millennium is known to) — and it is never fatal, because the apply
+            // ladder falls back to writing files, which needs no port at all.
             if let Ok(ctx) = state.steam() {
                 let sentinel = griddle_core::cdp::Sentinel::for_install(&ctx.install);
                 match sentinel.enable() {
@@ -86,7 +80,7 @@ fn main() {
 
             // Controller navigation.
             //
-            // 🔴 Read natively rather than through the webview's Gamepad API, which two open
+            // Read natively rather than through the webview's Gamepad API, which two open
             // WebView2 bugs rule out — #5507 kills gamepad input in WebView2 apps whenever the
             // Steam Overlay is attached, and launching Griddle from Big Picture always attaches
             // it. See `griddle_core::input`.
@@ -95,7 +89,7 @@ fn main() {
             // playing a game with a controller would also be driving Griddle in the background.
             let gate = griddle_core::input::FocusGate::new(true);
 
-            // 🔴 Taken from the window list rather than looked up by the label `"main"`. The
+            // Taken from the window list rather than looked up by the label `"main"`. The
             // label is not set in `tauri.conf.json`, so it is only `"main"` by Tauri's default —
             // and an `if let Some(...)` on a wrong guess starts no input thread **and says
             // nothing**, which surfaces as "my controller does nothing" with no way to tell that
@@ -152,10 +146,9 @@ fn main() {
             commands::live_apply_check,
         ])
         .run(tauri::generate_context!())
-        .unwrap_or_else(|e| {
-            // The one place a hard exit is right: if the webview cannot start there is no UI
-            // in which to report the failure.
-            eprintln!("fatal: could not start the application window: {e}");
-            std::process::exit(1);
-        });
+        // The one place a hard exit is right: if the webview cannot start there is no UI in
+        // which to report the failure. `fatal::no_window` puts up a message box, because
+        // `eprintln!` in a `windows_subsystem = "windows"` binary reaches nobody at all — the
+        // app would simply fail to appear, with nothing anywhere to say why.
+        .unwrap_or_else(|e| fatal::no_window(&e));
 }

@@ -15,7 +15,7 @@
 //! `[VERIFIED-BOX 2026-07-27]` `appStore.GetAppOverviewByAppID(4048848997)` also resolves —
 //! so the **unsigned** form is what crosses the CDP boundary too.
 //!
-//! # 🔴 There is deliberately no CRC32 here
+//! # There is deliberately no CRC32 here
 //!
 //! Every tutorial says a shortcut's appid is `crc32_ieee(exe + appname) | 0x80000000`. It is
 //! **false** on modern Steam — four variants were computed against the real file and none
@@ -94,7 +94,6 @@ impl From<u32> for AppId {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, reason = "test assertions are allowed to panic")]
 mod tests {
     use super::*;
 

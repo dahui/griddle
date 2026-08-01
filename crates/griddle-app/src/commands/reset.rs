@@ -35,7 +35,7 @@ pub async fn reset_all_plan(state: State<'_, AppState>) -> Res<ResetPlan> {
     let mut files = 0usize;
     let mut games = 0usize;
     for app in &apps {
-        // 🔴 `removable`, not a sum of `existing` — the latter misses a logo's position sidecar,
+        // `removable`, not a sum of `existing` — the latter misses a logo's position sidecar,
         // and a confirmation that under-states a deletion is worse than no confirmation.
         let n = grid.removable(*app).len();
         files += n;
@@ -61,7 +61,7 @@ pub struct ResetAll {
 
 /// Remove every piece of custom artwork, restoring Steam's own everywhere.
 ///
-/// 🔴 **One CDP connection for the whole sweep.** [`super::clear_asset`] opens one per slot, which
+/// **One CDP connection for the whole sweep.** [`super::clear_asset`] opens one per slot, which
 /// is right for a single reset and would be hundreds of handshakes here. The connection is made
 /// once up front; if it fails, the entire run degrades to the file path and says so once rather
 /// than failing per game.

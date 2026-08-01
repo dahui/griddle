@@ -15,7 +15,7 @@ import { SCREEN_DEPTH } from './model';
 /**
  * Presses a key on `window`, where the provider listens. Returns whether the press was swallowed.
  *
- * 🔴 Read from the event afterwards rather than from a second listener. A probe listener cannot
+ * Read from the event afterwards rather than from a second listener. A probe listener cannot
  * answer this: React runs child effects before parent effects, so a probe registered by any child
  * of the provider is added to `window` *first* and therefore fires *before* the provider has
  * decided anything. It reported "not prevented" every time, whatever the provider did.
@@ -46,7 +46,7 @@ function Row({ count, onRegister }: { count: number; onRegister: () => void }) {
 
 function Cell({ col, onRegister }: { col: number; onRegister: () => void }) {
   const { ref, focused } = useFocusItem<HTMLButtonElement>('row', 0, col);
-  // 🔴 `ctx` must be in this dependency list, and it is the entire test.
+  // `ctx` must be in this dependency list, and it is the entire test.
   //
   // `useFocusItem`'s own registration effect depends on the context object, so this effect fires
   // exactly when that one does. An earlier version depended only on `onRegister` -- a stable mock
@@ -63,7 +63,7 @@ function Cell({ col, onRegister }: { col: number; onRegister: () => void }) {
 
 describe('focus registration', () => {
   test('moving the cursor does not re-register the controls', () => {
-    // 🔴 The regression this exists for. `focusedId` used to live in the same context as the
+    // The regression this exists for. `focusedId` used to live in the same context as the
     // registration API, so the context value was a new object after every arrow press and every
     // registration effect re-ran -- up to ~250 controls in a full asset grid, each unregistering
     // and re-registering and bumping the layout revision.
@@ -115,7 +115,7 @@ describe('Escape', () => {
   }
 
   test('is swallowed only when a screen actually handles it', () => {
-    // 🔴 Escape used to be prevented on every screen, including the library root where nothing
+    // Escape used to be prevented on every screen, including the library root where nothing
     // answers -- silently taking the key from the browser and from anything else that wants it.
     const onBack = mock(() => {});
 

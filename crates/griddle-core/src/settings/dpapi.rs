@@ -12,7 +12,7 @@
 //! too. That is a speed bump rather than a wall (the value is in this source file, which
 //! ships), but it costs nothing and it stops the most casual case.
 //!
-//! # 🔴 There is no non-Windows fallback, deliberately
+//! # There is no non-Windows fallback, deliberately
 //!
 //! Off Windows these functions return [`Error::UnsupportedPlatform`]. The tempting alternative
 //! — writing the key in plaintext with a warning — would mean a build where the secret is
@@ -159,7 +159,6 @@ mod imp {
 }
 
 #[cfg(all(test, windows))]
-#[allow(clippy::unwrap_used, reason = "test assertions are allowed to panic")]
 mod tests {
     use super::*;
 

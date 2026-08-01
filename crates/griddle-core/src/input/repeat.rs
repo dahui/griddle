@@ -7,7 +7,7 @@
 //!
 //! Modelled on z13gui's `keyrepeat.Tracker`. The idea it exists for:
 //!
-//! 🔴 **One direction owns the repeat at a time.** A thumbstick is analog and almost never held
+//! **One direction owns the repeat at a time.** A thumbstick is analog and almost never held
 //! on a perfect axis, so a diagonal push satisfies the threshold for *two* directions at once. If
 //! both repeat, the cursor walks diagonally in a stutter and feels broken. Ownership makes a hold
 //! unambiguous: the dominant axis wins, and it keeps the repeat until it is released.
@@ -47,7 +47,7 @@ fn interval_ms(count: u32) -> u64 {
 
 /// Which way a stick is being pushed, or `None` inside the deadzone.
 ///
-/// 🔴 The **dominant axis wins** rather than both being reported. See the module note: a diagonal
+/// The **dominant axis wins** rather than both being reported. See the module note: a diagonal
 /// must resolve to one direction or the repeat interleaves.
 ///
 /// `y` is in the convention the caller supplies; the gamepad runner negates the raw axis so that
@@ -121,7 +121,6 @@ impl Repeater {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, reason = "test assertions are allowed to panic")]
 mod tests {
     use super::*;
 

@@ -20,7 +20,7 @@
 //! case-insensitively. **A child is a Steam app iff its key parses as `u32` and its value is a
 //! map.** `[VERIFIED-BOX 2026-07-30: 519 children, 0 scalar siblings]`
 //!
-//! # 🔴 One key is negative, and it is a non-Steam shortcut
+//! # One key is negative, and it is a non-Steam shortcut
 //!
 //! The 519th key on this box is `-246118299` — the **signed** form of `0xF1548865`, the
 //! EmulationStationDE shortcut whose appid CLAUDE.md already records. `shortcuts.vdf` is
@@ -28,7 +28,7 @@
 //! duplicate row in the library under a different name. `u32::from_str` refuses it for free,
 //! which is the behaviour we want and is why there is no explicit sign check.
 //!
-//! # 🔴 `LastPlayed` has a sentinel that is not a date
+//! # `LastPlayed` has a sentinel that is not a date
 //!
 //! Eight entries here read `86400` — 1970-01-02, one day after the Unix epoch, and about
 //! thirty-three years before Steam existed. Treating those as real timestamps puts eight games
@@ -139,7 +139,6 @@ fn read_u64(entries: &[text::Entry], key: &str) -> Option<u64> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, reason = "test assertions are allowed to panic")]
 mod tests {
     use super::*;
 

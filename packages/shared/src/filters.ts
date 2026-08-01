@@ -79,7 +79,7 @@ const DEFAULT_DIMENSIONS: string[] = unionOf((t) => DIMENSIONS[t].default);
  *
  * The tag toggles were already identical to Decky's: everything on except Adult.
  *
- * 🔴 One deliberate divergence remains. Decky lists 39 icon dimensions; every one of them is an
+ * One deliberate divergence remains. Decky lists 39 icon dimensions; every one of them is an
  * HTTP 400 against the live `icons` endpoint, so {@link DIMENSIONS} carries none for that type.
  * A verified measurement outranks parity. `[VERIFIED-BOX 2026-07-30]`
  *
@@ -223,11 +223,11 @@ export function toStored(filters: Filters): StoredFilters {
 /**
  * Clamp a filter set to the options one asset type actually offers.
  *
- * 🔴 **This is what keeps a shared filter set honest, and it must run at query time — every
+ * **This is what keeps a shared filter set honest, and it must run at query time — every
  * time — against the tab being queried.** `grid_p` and `grid_l` are the *same* SteamGridDB
  * endpoint separated only by `dimensions`, so a query built for the Wide Capsule tab while
  * carrying the Capsule tab's `600x900` does not fail: it returns portrait art, in the wide tab.
- * That is a real bug this project has already shipped once.
+ * It applies cleanly and looks wrong, which is worse than an error.
  *
  * The result is deliberately **not** written back to storage. Narrowing on save would discard a
  * selection the moment the user visited a tab that could not display it.
@@ -246,7 +246,7 @@ export function pruneToType(type: AssetType, filters: Filters): Filters {
 /**
  * The query parameters for one tab: clamp to what it offers, widen an empty size list, translate.
  *
- * 🔴 **No size ticked means "any size this tab can show" — it must never mean "send no
+ * **No size ticked means "any size this tab can show" — it must never mean "send no
  * `dimensions` at all".** Those look equivalent and are not: `grid_p` and `grid_l` are the same
  * SteamGridDB endpoint told apart *only* by `dimensions`, so an unfiltered `grids` query fills
  * the Wide Capsule tab with portrait art. Widening to this tab's own list keeps that separation

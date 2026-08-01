@@ -5,10 +5,15 @@ sidebar:
   order: 3
 ---
 
+import { Image } from 'astro:assets';
+import browse from '../../../assets/browse.png';
+
 The **Filters** panel above the results narrows what SteamGridDB returns.
 
 Everything starts **ticked** except Adult Content, so unticking a box always narrows the results.
 An empty result usually means the filters are too tight, not that the game has no artwork.
+
+<Image src={browse} alt="The filter panel, showing style, size, format and content columns" />
 
 ## Styles
 

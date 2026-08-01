@@ -8,8 +8,8 @@
 //! cross-checks the build stamp against `steamui/changelist.txt` on disk. It applies nothing
 //! and writes nothing.
 //!
-//! The spike harness (`examples/cdp_probe.rs`) stays as the exploratory tool with its own JS
-//! payloads; this one proves the shipped library works, so what ships is what was tested.
+//! `examples/cdp_probe.rs` is the exploratory companion, with its own JS payloads. This one
+//! drives the shipped library instead, so what is tested is what ships.
 
 use griddle_core::appid::AppId;
 use griddle_core::cdp::{Endpoint, Sentinel, SteamJs, target};
@@ -94,7 +94,7 @@ async fn main() {
     let disk = install.clstamp_from_disk();
     match (&readiness.clstamp, &disk) {
         (Some(live), Some(d)) if live == d => println!("  ✅ both read {live}"),
-        (Some(live), Some(d)) => println!("  🔴 live {live} != disk {d}"),
+        (Some(live), Some(d)) => println!("  FAIL: live {live} != disk {d}"),
         (live, d) => println!("  incomplete: live {live:?}, disk {d:?}"),
     }
 
@@ -118,13 +118,12 @@ async fn main() {
         .await
     {
         Err(e) => println!("  ✅ reported: {e}"),
-        Ok(v) => println!("  🔴 a throw was NOT reported; got {v:?}"),
+        Ok(v) => println!("  FAIL: a throw was NOT reported; got {v:?}"),
     }
 
-    // There used to be a module-finder sweep here, resolving eleven of Steam's own React
-    // components by structural search. It went with the Big Picture deliverable, and its absence
-    // is the point: `SetCustomArtworkForApp` is bound by the CEF host rather than by Steam's
-    // bundle, so a build bump has nothing left in this product to break.
+    // No module-finder sweep, and the absence is the point: `SetCustomArtworkForApp` is bound
+    // by the CEF host rather than shipped in Steam's minified bundle, so a build bump has
+    // nothing in this product to break. Nothing here needs to grade Steam's internals.
     println!("\n== what a Steam update can take away ==");
     println!(
         "    {:<22} {}",

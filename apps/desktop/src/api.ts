@@ -59,7 +59,7 @@ export interface Status {
 /**
  * Which apps the library list shows.
  *
- * 🔴 `all` is not "owned". There is no offline ownership list — this is every app Steam holds
+ * `all` is not "owned". There is no offline ownership list — this is every app Steam holds
  * local config for, which in practice means everything played or configured. It can miss a game
  * you own and never launched.
  */
@@ -100,7 +100,7 @@ export interface Asset {
   id: number;
   url: string;
   thumb: string | null;
-  /** 🔴 Zero is legal — icons routinely report 0x0. Never derive an aspect ratio blindly. */
+  /** Zero is legal — icons routinely report 0x0. Never derive an aspect ratio blindly. */
   width: number;
   height: number;
   style: string | null;

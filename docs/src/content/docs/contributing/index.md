@@ -58,6 +58,16 @@ bun run dev
 
 It deploys automatically when anything under `docs/` reaches `main`.
 
+### Screenshots
+
+`scripts\screenshots.ps1` regenerates every image in the documentation from a release build, so
+recapturing is one command rather than a remembered procedure. Run it as part of a release: a
+stale screenshot fails silently, and the docs quietly start describing a version nobody has.
+
+It clicks at fixed coordinates, so **look at all four images before committing them** — a click
+that misses lands somewhere harmless and produces a duplicate of the previous capture rather than
+an error. It also resets the filter panel to its defaults, which writes to your settings file.
+
 ## Releases
 
 Pushing a tag is the entire release action:

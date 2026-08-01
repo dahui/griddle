@@ -170,7 +170,6 @@ pub fn resolve(install: &SteamInstall) -> Result<Account, Error> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, reason = "test assertions are allowed to panic")]
 mod tests {
     use super::*;
 

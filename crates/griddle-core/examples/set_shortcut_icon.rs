@@ -18,7 +18,7 @@
 //! - the pristine file is preserved at `shortcuts.vdf.sgdb-orig` before the first write,
 //! - and the result is read back and compared.
 //!
-//! ⚠️ This writes to a **real** `shortcuts.vdf`. It keeps the original, but a backup you have
+//! This writes to a **real** `shortcuts.vdf`. It keeps the original, but a backup you have
 //! not tested restoring is not a backup — `--restore` exists for that reason.
 
 use griddle_core::appid::AppId;
@@ -160,7 +160,7 @@ fn main() {
                     if icon == change.applied {
                         "✅ Steam accepted and kept our file"
                     } else {
-                        "🔴 Steam rewrote it — the value did not survive"
+                        "FAIL: Steam rewrote it — the value did not survive"
                     }
                 );
             }
@@ -171,7 +171,7 @@ fn main() {
 
 /// Put the pristine `.sgdb-orig` back.
 ///
-/// ⚠️ Restoring also needs Steam stopped — after a relaunch Steam holds the modified shortcuts
+/// Restoring also needs Steam stopped — after a relaunch Steam holds the modified shortcuts
 /// in memory and would overwrite the restored file on exit. `[VERIFIED-BOX 2026-07-27]`
 fn restore(path: &std::path::Path, install: Option<&locate::SteamInstall>) {
     let mut name = path.file_name().unwrap_or_default().to_os_string();

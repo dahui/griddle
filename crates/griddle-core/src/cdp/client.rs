@@ -112,11 +112,6 @@ impl Connection {
         })
     }
 
-    pub fn with_timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = timeout;
-        self
-    }
-
     /// Evaluate an expression and deserialise its value.
     ///
     /// `awaitPromise` is set, so an expression returning a promise resolves before we read it —
@@ -230,7 +225,6 @@ fn summarise_exception(details: &serde_json::Value) -> String {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, reason = "test assertions are allowed to panic")]
 mod tests {
     use super::*;
 

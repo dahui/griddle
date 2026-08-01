@@ -6,7 +6,10 @@
 [![CI](https://github.com/dahui/griddle/actions/workflows/ci.yml/badge.svg)](https://github.com/dahui/griddle/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-<!-- Screenshot goes here once captured from the release build; see docs/src/assets/. -->
+<!-- A raw URL rather than a relative path: this also renders on the GitHub releases page and in
+     anything that mirrors the README, where a repo-relative path resolves to nothing.
+     Recaptured by scripts\screenshots.ps1 as part of a release. -->
+![Griddle showing a Steam library as a grid of game capsules](https://raw.githubusercontent.com/dahui/griddle/main/docs/src/assets/library.png)
 
 Griddle browses [SteamGridDB](https://www.steamgriddb.com/) and applies artwork to your Steam
 library. Unlike every other Windows tool for this, **the artwork appears immediately** — Griddle

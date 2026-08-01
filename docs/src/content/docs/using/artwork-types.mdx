@@ -5,6 +5,9 @@ sidebar:
   order: 2
 ---
 
+import { Image } from 'astro:assets';
+import current from '../../../assets/current.png';
+
 Steam shows a game through five separate images. Griddle gives each one a tab.
 
 | Tab | Where you see it | Shape |
@@ -16,6 +19,11 @@ Steam shows a game through five separate images. Griddle gives each one a tab.
 | **Icon** | Small icon in lists, the taskbar, and desktop shortcuts | Square |
 
 A game can have any combination of them. Changing one never affects the others.
+
+The **Current** tab shows all of them at once, with anything you have not customised labelled
+*Steam default*.
+
+<Image src={current} alt="The Current tab, showing every artwork slot for one game" />
 
 ## Capsule and Wide Capsule come from the same place
 

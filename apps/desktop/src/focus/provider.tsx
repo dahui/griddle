@@ -1,7 +1,7 @@
 /**
  * The focus provider: the registry, the cursor, the scope stack, and the two input listeners.
  *
- * 🔴 **Two contexts, not one, and the split is load-bearing.**
+ * **Two contexts, not one, and the split is load-bearing.**
  *
  * `FocusCtx` carries the registration API and never changes identity. `FocusedIdCtx` carries the
  * cursor and changes on every move. They were one context, with `focusedId` inside it — which
@@ -130,7 +130,7 @@ export function FocusProvider({ children }: { children: ReactNode }) {
   /**
    * Give a freshly opened overlay a selection immediately.
    *
-   * 🔴 Without this the first directional press inside an overlay is spent *entering* it and
+   * Without this the first directional press inside an overlay is spent *entering* it and
    * appears to do nothing — and the appearance is what makes it a bug rather than a quirk:
    * `autoFocus` has already drawn a `:focus-visible` ring on a button, so the user sees a
    * selection, presses right, and watches the ring stay exactly where it was.
@@ -275,7 +275,7 @@ export function FocusProvider({ children }: { children: ReactNode }) {
   /**
    * Controller actions, read natively in Rust and delivered as a Tauri event.
    *
-   * 🔴 Not `navigator.getGamepads()`. WebView2 has two open bugs there, and
+   * Not `navigator.getGamepads()`. WebView2 has two open bugs there, and
    * [#5507](https://github.com/MicrosoftEdge/WebView2Feedback/issues/5507) is the one that
    * matters here: gamepad input dies in WebView2 whenever the Steam Overlay is attached, which is
    * always true of Griddle launched from Big Picture.
@@ -289,14 +289,14 @@ export function FocusProvider({ children }: { children: ReactNode }) {
       );
     };
 
-    // 🔴 Both failure shapes are handled, and neither is boilerplate.
+    // Both failure shapes are handled, and neither is boilerplate.
     //
     // `listen` is a **core plugin command**, so Tauri v2's capability system can refuse it — and
     // it did: with no capability file at all, every subscription failed with *"event.listen not
     // allowed"*. The promise was never awaited, so the rejection surfaced nowhere and the symptom
     // was a controller that did nothing with no error anywhere. See `capabilities/default.json`.
     //
-    // 🔴 And `listen` can throw **synchronously**, which `.catch()` cannot help with: it reads
+    // And `listen` can throw **synchronously**, which `.catch()` cannot help with: it reads
     // `window.__TAURI_INTERNALS__` before its first await, so outside a Tauri webview it throws
     // rather than rejecting, and the throw escapes the effect and takes the React tree with it.
     // Always true in the shipped app, never true under test — which is how this was found.
@@ -324,7 +324,7 @@ export function FocusProvider({ children }: { children: ReactNode }) {
         // own way out. Before the scope stack existed, two independent window-level Escape
         // handlers meant one press dismissed the preview *and* the context menu.
         //
-        // 🔴 Prevented only when something actually handled it. Escape used to be swallowed on
+        // Prevented only when something actually handled it. Escape used to be swallowed on
         // every screen including the library root, where nothing answers — which silently took
         // the key away from the browser and from anything else that might want it.
         if (dispatch('back')) e.preventDefault();

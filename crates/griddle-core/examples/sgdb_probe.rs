@@ -16,7 +16,7 @@
 //! and an inferred one that is wrong turns a whole artwork tab into an error the moment a user
 //! opens it.
 //!
-//! 🔑 The key is read from the environment and **never** from a file in this repo.
+//! The key is read from the environment and **never** from a file in this repo.
 
 use griddle_core::appid::AppId;
 use griddle_core::grid::names::AssetType;
@@ -193,7 +193,7 @@ async fn main() {
                     println!(
                         "  {}",
                         if same {
-                            "🔴 page 1 == page 0 — the `page` parameter is NOT honoured"
+                            "FAIL: page 1 == page 0 — the `page` parameter is NOT honoured"
                         } else {
                             "✅ page 1 differs from page 0 — pagination works"
                         }
@@ -237,7 +237,7 @@ async fn main() {
     if failures == 0 {
         println!("all probes passed");
     } else {
-        println!("🔴 {failures} probe(s) failed — see above");
+        println!("FAIL: {failures} probe(s) failed — see above");
         std::process::exit(1);
     }
 }

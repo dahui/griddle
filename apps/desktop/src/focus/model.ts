@@ -31,7 +31,7 @@ export interface ScreenActions {
 /**
  * Which screen answers a button when several are mounted at once.
  *
- * 🔴 An explicit number rather than "whichever registered last". React runs **child effects before
+ * An explicit number rather than "whichever registered last". React runs **child effects before
  * parent effects**, so registration order is inside-out — taking the most recent entry would hand
  * every button to the outermost screen, which is exactly backwards. Depth says what is meant.
  */

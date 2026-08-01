@@ -4,7 +4,7 @@
 //! applies anything. It is what lets the library list show real capsules instead of a grid of
 //! "no artwork" placeholders.
 //!
-//! # 🔴 READ-ONLY, and structurally so
+//! # READ-ONLY, and structurally so
 //!
 //! Steam owns this directory and re-downloads over anything placed into it, so this module
 //! contains **no filesystem mutation of any kind**. That is why it needs no `boundary-ok:`
@@ -129,13 +129,6 @@ impl<'a> LibraryCache<'a> {
         }
     }
 
-    /// Prefer a different language's artwork where an app has one.
-    #[must_use]
-    pub fn with_language(mut self, language: impl Into<String>) -> Self {
-        self.language = language.into();
-        self
-    }
-
     /// This app's directory. It may not exist — most appids have no cache entry.
     pub fn app_dir(&self, app: AppId) -> PathBuf {
         self.root.join(app.get().to_string())
@@ -239,7 +232,6 @@ fn has_subdirectory(dir: &Path) -> bool {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, reason = "test assertions are allowed to panic")]
 mod tests {
     use super::*;
 

@@ -67,7 +67,7 @@ export function FilterPanel({
 
   // Column assignment, in the order `.filter-body`'s flex-wrap lays the groups out.
   //
-  // 🔴 Computed rather than hardcoded, because Style and Size **disappear entirely** on some
+  // Computed rather than hardcoded, because Style and Size **disappear entirely** on some
   // tabs — logos and icons take no dimension filter at all. Fixed column numbers would leave a
   // gap the pad has to cross with nothing in it, and `closestCol` would then land somewhere
   // arbitrary when entering the panel from above.

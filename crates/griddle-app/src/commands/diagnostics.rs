@@ -9,7 +9,7 @@ use tauri::State;
 
 /// The result of the live-apply self-test.
 ///
-/// 🔴 This replaced a module-map scan that reported ✓/✕ against eleven structural finders and
+/// This replaced a module-map scan that reported ✓/✕ against eleven structural finders and
 /// three named features. All three features belonged to the Big Picture deliverable, which is
 /// cut — so the panel was reporting on capabilities the app does not have and cannot lose.
 ///

@@ -56,16 +56,6 @@ impl PinnedPosition {
         let i = Self::ALL.iter().position(|&p| p == self).unwrap_or(0);
         Self::ALL[(i + 1) % Self::ALL.len()]
     }
-
-    /// True for anchors that grow in both directions horizontally.
-    pub fn is_horizontally_centered(self) -> bool {
-        matches!(
-            self,
-            PinnedPosition::UpperCenter
-                | PinnedPosition::CenterCenter
-                | PinnedPosition::BottomCenter
-        )
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -149,7 +139,6 @@ impl Default for LogoPosition {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, reason = "test assertions are allowed to panic")]
 mod tests {
     use super::*;
 

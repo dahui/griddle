@@ -75,7 +75,7 @@ describe('filter vocabulary matches the shared fixture', () => {
 
 describe('animated previews', () => {
   test('a .webm thumbnail is a video, not an image', () => {
-    // 🔴 SteamGridDB serves animated artwork with a `.webm` *thumbnail*. Rendering that in an
+    // SteamGridDB serves animated artwork with a `.webm` *thumbnail*. Rendering that in an
     // <img> produces a broken-image icon, which is indistinguishable from missing artwork —
     // 12% of Cyberpunk 2077's capsules looked broken because of exactly this.
     expect(isVideoPreview('https://cdn2.steamgriddb.com/thumb/51f993d2.webm')).toBe(true);
@@ -98,7 +98,7 @@ describe('animated previews', () => {
   });
 
   test('webp is NOT the signal — an APNG is animated too', () => {
-    // 🔴 The check that looks obviously right and is wrong. Of the 23 webm-thumbed capsules
+    // The check that looks obviously right and is wrong. Of the 23 webm-thumbed capsules
     // measured on Cyberpunk, 7 report `mime: image/png` because they are APNGs. Keying off the
     // mime would leave a third of them rendering as broken images.
     const apng = { mime: 'image/png', thumb: 'https://cdn2.steamgriddb.com/thumb/x.webm' };
@@ -118,7 +118,7 @@ describe('steam CDN artwork', () => {
   });
 
   test('the capsule uses the CDN name, never the on-disk name', () => {
-    // 🔴 The trap this table exists to prevent. 1030300 stores its capsule on disk as
+    // The trap this table exists to prevent. 1030300 stores its capsule on disk as
     // `<sha1>/library_capsule.jpg`, but the CDN serves it as `library_600x900.jpg` — and
     // `library_capsule.jpg` is a measured 404 on that host for every app.
     expect(STEAM_CDN_BASENAME.grid_p).toBe('library_600x900.jpg');

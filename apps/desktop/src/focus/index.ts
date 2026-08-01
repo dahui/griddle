@@ -12,7 +12,7 @@
  *    keep working natively and assistive technology follows along — this layer only decides
  *    *which* element is focused, never what activating it does.
  *
- * 🔴 **Enter and Space are deliberately not intercepted.** Because focus is real, the browser
+ * **Enter and Space are deliberately not intercepted.** Because focus is real, the browser
  * already fires `click` on a focused `<button>` for both. Handling them here too would fire every
  * action twice, and that bug looks like "the app applied the artwork, then applied it again".
  *
