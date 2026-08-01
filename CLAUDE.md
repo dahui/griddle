@@ -639,6 +639,7 @@ flash, the wart this project exists to remove.
 | `steam::localconfig` | The `apps` map in `localconfig.vdf` — the offline "all games" source, and where playtimes come from. Read-only; reuses `vdf::text`. |
 | `vdf::appinfo` | `appcache/appinfo.vdf` reader. **Not the same format as `vdf::binary`** — v29 keys are u32 string-table indices. Extracts only `common/{type,name,clienticon}`. |
 | `steam::apptype` | `common/type` → "does this belong in the library list". Every unknown resolves toward **showing** the app. |
+| `focusgrid` (TS, `@griddle/shared`) | Spatial `(section, row, col)` navigation maths, DOM-free so it is exhaustively unit-tested. Modelled on z13gui's `internal/focusgrid`. See below. |
 | `sgdb::key` | `ApiKey`. Custom `Debug` prints a fingerprint; **no `Display`, no `Serialize`** — leaking it is a compile error. |
 | `sgdb::model` | Response types, every field read off a real response. Only `id` and `url` are required. |
 | `sgdb::query` | Endpoint + filter selection. `Dimensions` is a closed set, every value probed. |
@@ -900,6 +901,60 @@ both the desktop library and Big Picture, because Chromium sniffs content.
 **Live apply needs no finders at all** — it calls `SteamClient.Apps.SetCustomArtworkForApp`,
 which the CEF host binds and Valve cannot rename without breaking their own client. The most
 valuable feature is the least exposed to a Steam update. Worth keeping true.
+
+### 🟢 Controller navigation — the focus model
+
+Three layers, split so the model is testable without a controller and the input source can change
+without touching it: `packages/shared/src/focusgrid.ts` (pure maths) → `apps/desktop/src/focus.tsx`
+(DOM: measurement, real focus, overlay stack) → the views, which register their controls.
+
+**Sections stack vertically and are ordered by document position**, not by a hand-maintained index.
+Within a section, items sit at explicit row/column indices — except wrapping grids, which register
+by *index* and have their row/column derived from a **measured** column count.
+
+🔴 **The column count cannot come from React state.** `repeat(auto-fill, minmax(9.5rem, 1fr))`
+resolves against the window, so `.library`, `.assets` and `.slots` are all measured by grouping
+children on `offsetTop`. `.assets` is the trap: it changes its `minmax` **per asset tab**
+(9.5rem capsules → 22rem heroes) *without the container resizing*, so a `ResizeObserver` alone
+silently keeps the previous tab's count. `useFocusGrid` watches child mutations as well.
+
+**Enter and Space are deliberately not intercepted.** Focus is real DOM focus, so the browser
+already fires `click` on a focused `<button>` for both; handling them too would apply every piece
+of artwork twice.
+
+#### The three bugs this found in existing code
+
+**🔴 The first directional press inside an overlay was silently swallowed — and it *looked* like
+the model was broken.** Opening a scope cleared the selection so the first press would land inside
+the overlay rather than resuming behind it. But `autoFocus` had already drawn a `:focus-visible`
+ring on Cancel, so the user saw a selection, pressed right, and watched the ring stay put. Found by
+driving the reset dialog from the keyboard and comparing two screenshots that should have differed
+and did not. A scope now takes a selection immediately, preferring whatever it chose to `autoFocus`
+— those choices are deliberate (`GameSearchModal` wants the caret in its search box, `ConfirmReset`
+wants Cancel, so the destructive button is never the default).
+
+**🔴 `disabled` on every tile during an apply is invisible with a mouse and fatal to a pad.**
+`AssetBrowser` disabled all ~50 tiles whenever any apply was in flight. A disabled button cannot
+hold focus, so the grid emptied out mid-action and focus was flung elsewhere. Only the tile being
+applied is disabled now, with `aria-busy` on the container carrying the meaning — **and the
+re-entry guard had to be made explicit**, because it had been an accidental side effect of the
+tiles being unclickable.
+
+**🔴 Two uncoordinated `window` Escape listeners, and two overlays with none.** `ContextMenu` and
+`ArtPreview` each hand-rolled one, both unconditional, so one press dismissed both when they
+overlapped; `ConfirmReset` and `GameSearchModal` could not be dismissed by keyboard at all. All
+four now go through the scope stack, which also restores focus to whatever opened them — there was
+**no focus restoration anywhere in the app** before this.
+
+⚠️ **`styles.css` had zero `:focus` rules across 998 lines.** With a controller the ring *is* the
+cursor, so it ships as `outline` with an offset — not a border, which would resize the element and
+reflow the grid, and not an inset ring, which `overflow: hidden` on `.asset-button`/`.slot-art`
+would clip.
+
+⚠️ **Automated keyboard testing does not work here.** `SendKeys` reaches the Tauri window but the
+WebView2 child does not take keyboard focus from `SetForegroundWindow` or `AppActivate`, so the
+page never sees the keydown. Screenshot-driven runs are reliable *only* immediately after
+`Start-Process`, while the window still holds genuine focus. The keyboard pass is a manual step.
 
 #### Twenty-one bugs worth remembering
 

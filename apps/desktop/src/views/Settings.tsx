@@ -8,7 +8,15 @@ import {
   type Status,
   type UiError,
 } from '../api';
-import { ErrorNote, ExternalLink, Spinner, useErrorToast, useToast } from '../components';
+import {
+  ErrorNote,
+  ExternalLink,
+  FocusButton,
+  Spinner,
+  useErrorToast,
+  useToast,
+} from '../components';
+import { FocusScope, useFocusItem } from '../focus';
 
 const KEY_PAGE = 'https://www.steamgriddb.com/profile/preferences/api';
 
@@ -92,9 +100,9 @@ function ResetAllPanel() {
       <p>Removes all custom artwork, reverting all games back to Steam&rsquo;s default.</p>
 
       <div className="row">
-        <button type="button" className="danger" disabled={busy} onClick={() => void check()}>
+        <FocusButton section="reset" row={0} col={0} className="danger" disabled={busy} onClick={() => void check()}>
           {busy ? 'Working…' : 'Reset all artwork…'}
-        </button>
+        </FocusButton>
       </div>
 
       {plan && (
@@ -130,7 +138,10 @@ function ConfirmReset({
   const games = `${plan.games} ${plan.games === 1 ? 'game' : 'games'}`;
   const files = `${plan.files} ${plan.files === 1 ? 'file' : 'files'}`;
 
+  // Escape cancels. It did not before — this dialog had no keyboard dismissal at all, which for
+  // the app's one destructive action is the worst place to leave that gap.
   return (
+    <FocusScope name="confirm-reset" onBack={() => !busy && onCancel()}>
     <div
       className="modal-backdrop"
       role="presentation"
@@ -157,15 +168,33 @@ function ConfirmReset({
         </p>
 
         <div className="row modal-actions">
-          <button type="button" className="ghost" autoFocus disabled={busy} onClick={onCancel}>
+          {/* Cancel is first *and* focused first, so the dangerous button is never what a
+              reflexive Enter or A-button press lands on. */}
+          <FocusButton
+            section="actions"
+            row={0}
+            col={0}
+            className="ghost"
+            autoFocus
+            disabled={busy}
+            onClick={onCancel}
+          >
             Cancel
-          </button>
-          <button type="button" className="danger" disabled={busy} onClick={onConfirm}>
+          </FocusButton>
+          <FocusButton
+            section="actions"
+            row={0}
+            col={1}
+            className="danger"
+            disabled={busy}
+            onClick={onConfirm}
+          >
             {busy ? 'Removing…' : `Remove ${files}`}
-          </button>
+          </FocusButton>
         </div>
       </div>
     </div>
+    </FocusScope>
   );
 }
 
@@ -220,25 +249,28 @@ export function ApiKeyPanel({
       {status.has_api_key ? (
         <div className="row">
           <span className="ok">Key saved.</span>
-          <button type="button" className="ghost" onClick={() => void clear()}>
+          <FocusButton section="key" row={1} col={0} className="ghost" onClick={() => void clear()}>
             Remove it
-          </button>
+          </FocusButton>
         </div>
       ) : (
         <div className="row">
-          <input
-            type="password"
-            className="search"
-            placeholder="Paste your API key"
+          <KeyInput
             value={key}
-            onChange={(e) => setKey(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && key.trim() && !busy) void save();
+            onChange={setKey}
+            onSubmit={() => {
+              if (key.trim() && !busy) void save();
             }}
           />
-          <button type="button" disabled={busy || !key.trim()} onClick={() => void save()}>
+          <FocusButton
+            section="key"
+            row={1}
+            col={1}
+            disabled={busy || !key.trim()}
+            onClick={() => void save()}
+          >
             {busy ? 'Checking…' : 'Save'}
-          </button>
+          </FocusButton>
         </div>
       )}
       {error && <ErrorNote error={error} />}
@@ -307,9 +339,16 @@ function DiagnosticsPanel({ status }: { status: Status }) {
       </dl>
 
       <div className="row" style={{ marginTop: '1rem' }}>
-        <button type="button" className="ghost" disabled={busy} onClick={() => void scan()}>
+        <FocusButton
+          section="diagnostics"
+          row={0}
+          col={0}
+          className="ghost"
+          disabled={busy}
+          onClick={() => void scan()}
+        >
           {busy ? 'Testing…' : 'Test live apply'}
-        </button>
+        </FocusButton>
       </div>
 
       {busy && <Spinner label="Connecting to Steam…" />}
@@ -335,5 +374,37 @@ function DiagnosticsPanel({ status }: { status: Status }) {
         </ul>
       )}
     </section>
+  );
+}
+
+/**
+ * The API-key field.
+ *
+ * Enter submits, and that handler survives the focus model untouched: arrow keys navigate, but
+ * left/right are surrendered whenever a text field holds focus, so the caret still moves through
+ * a pasted key normally.
+ */
+function KeyInput({
+  value,
+  onChange,
+  onSubmit,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onSubmit: () => void;
+}) {
+  const { ref, focused } = useFocusItem<HTMLInputElement>('key', 1, 0);
+  return (
+    <input
+      ref={ref}
+      type="password"
+      className={`search${focused ? ' focused' : ''}`}
+      placeholder="Paste your API key"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') onSubmit();
+      }}
+    />
   );
 }

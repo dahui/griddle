@@ -11,6 +11,7 @@ import {
   type SyntheticEvent,
 } from 'react';
 import { api, asUiError, type UiError } from './api';
+import { FocusScope, useFocusItem } from './focus';
 
 // -- toasts ---------------------------------------------------------------------------------
 
@@ -164,12 +165,22 @@ export function ArtImage({
  * useful than what went wrong.
  */
 export function ErrorNote({ error, onRetry }: { error: UiError; onRetry?: () => void }) {
+  // 🔴 Registered in its own section, and that is not a detail. An `ErrorNote` with a retry
+  // button *replaces the entire view* in Library, AssetBrowser and CurrentAssets — so if it were
+  // not reachable, hitting an error would leave a controller with nothing to press and no way
+  // back. z13gui learned the same thing about its error bar's dismiss button.
+  const { ref, focused } = useFocusItem<HTMLButtonElement>('error', 0, 0);
   return (
     <div className={`note ${error.kind === 'no_api_key' ? 'note-info' : 'note-bad'}`}>
       <p className="note-message">{error.message}</p>
       {error.action && <p className="note-action">{error.action}</p>}
       {onRetry && (
-        <button type="button" className="ghost" onClick={onRetry}>
+        <button
+          ref={ref}
+          type="button"
+          className={`ghost${focused ? ' focused' : ''}`}
+          onClick={onRetry}
+        >
           Try again
         </button>
       )}
@@ -191,14 +202,23 @@ export function ExternalLink({
   href,
   children,
   onError,
+  section = 'key',
+  row = 0,
+  col = 0,
 }: {
   href: string;
   children: ReactNode;
   onError?: (e: UiError) => void;
+  section?: string;
+  row?: number;
+  col?: number;
 }) {
+  const { ref, focused } = useFocusItem<HTMLAnchorElement>(section, row, col);
   return (
     <a
+      ref={ref}
       href={href}
+      className={focused ? 'focused' : undefined}
       onClick={(e) => {
         e.preventDefault();
         void api.openUrl(href).catch((err: unknown) => onError?.(asUiError(err)));
@@ -295,25 +315,29 @@ export function ContextMenu({
       if (e.target instanceof Node && menu.current?.contains(e.target)) return;
       onClose();
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
     // Scrolling moves what the menu points at, so it always dismisses — no inside/outside test.
+    //
+    // 🔴 `capture: true` is why this cannot simply be left alone once a controller can scroll:
+    // moving focus calls `scrollIntoView`, which fires this and closes the menu the user is
+    // navigating. Keyboard focus movement inside the menu does not scroll the page, so this is
+    // correct today; opening the menu *from* the pad is what will need the anchor rework.
     const onScroll = () => onClose();
     // `capture` so the menu still closes when something below stops propagation.
     window.addEventListener('click', closeOutside, true);
     window.addEventListener('contextmenu', closeOutside, true);
     window.addEventListener('scroll', onScroll, true);
-    window.addEventListener('keydown', onKey);
     return () => {
       window.removeEventListener('click', closeOutside, true);
       window.removeEventListener('contextmenu', closeOutside, true);
       window.removeEventListener('scroll', onScroll, true);
-      window.removeEventListener('keydown', onKey);
     };
   }, [onClose]);
 
+  // Escape now comes from the focus scope rather than a window listener of its own. Two such
+  // listeners existed — here and in `ArtPreview` — both unconditional, so with a menu open over a
+  // preview a single press closed both at once.
   return (
+    <FocusScope name="menu" onBack={onClose}>
     <div
       ref={menu}
       className="context-menu"
@@ -326,6 +350,79 @@ export function ContextMenu({
     >
       {children}
     </div>
+    </FocusScope>
+  );
+}
+
+/**
+ * A plain button that registers itself in the focus grid.
+ *
+ * Most controls need nothing more than this. The bespoke wrappers elsewhere exist only where the
+ * button also carries view-specific classes or state (`.tab.active`, the asset tiles); anything
+ * that is just a button at a known spot should use this.
+ */
+export function FocusButton({
+  section,
+  row,
+  col,
+  className,
+  disabled,
+  autoFocus,
+  onClick,
+  children,
+}: {
+  section: string;
+  row: number;
+  col: number;
+  className?: string;
+  disabled?: boolean;
+  autoFocus?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  const { ref, focused } = useFocusItem<HTMLButtonElement>(section, row, col);
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className={[className, focused ? 'focused' : null].filter(Boolean).join(' ') || undefined}
+      disabled={disabled}
+      autoFocus={autoFocus}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * One item in a context menu, reachable by keyboard.
+ *
+ * 🔴 The activation must originate from a node **inside** the menu, or the capture-phase dismiss
+ * listener above unmounts the item before its own `onClick` runs. Real DOM focus is what keeps
+ * that true for the keyboard: pressing Enter dispatches a click from the item itself, exactly as
+ * a mouse would.
+ */
+export function MenuItem({
+  row,
+  onSelect,
+  children,
+}: {
+  row: number;
+  onSelect: () => void;
+  children: ReactNode;
+}) {
+  const { ref, focused } = useFocusItem<HTMLButtonElement>('menu', row, 0);
+  return (
+    <button
+      ref={ref}
+      type="button"
+      role="menuitem"
+      className={`menu-item${focused ? ' focused' : ''}`}
+      onClick={onSelect}
+    >
+      {children}
+    </button>
   );
 }
 

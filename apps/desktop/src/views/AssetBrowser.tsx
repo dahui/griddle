@@ -29,6 +29,7 @@ import {
   useErrorToast,
   useToast,
 } from '../components';
+import { useFocusGrid, useFocusGridItem, useFocusItem } from '../focus';
 import { CurrentAssets } from './CurrentAssets';
 import { FilterPanel } from './FilterPanel';
 import { GameSearchModal } from './GameSearchModal';
@@ -61,6 +62,9 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<UiError | null>(null);
   const [applying, setApplying] = useState<number | null>(null);
+  // Mirrors `applying` for the re-entry check in `apply`, which has to read the *current* value
+  // rather than the one captured when the handler was created.
+  const applyingRef = useRef<number | null>(null);
   const toast = useToast();
   const toastError = useErrorToast();
   // One filter set for every tab. `null` until the stored value arrives — which is also the
@@ -76,6 +80,10 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
   const [reloadKey, setReloadKey] = useState(0);
 
   const sentinel = useRef<HTMLDivElement | null>(null);
+  // 🔴 The one grid whose column count changes without the container resizing: `.assets` swaps
+  // its `minmax` per asset tab (9.5rem capsules, 22rem heroes). `useFocusGrid` watches child
+  // mutations as well as size for exactly this reason.
+  const assetGrid = useFocusGrid<HTMLDivElement>('assets');
 
   // Read once. A tab change needs no round trip, so there is no window in which the filters in
   // hand belong to something other than what is about to be queried.
@@ -253,6 +261,12 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
   }
 
   async function apply(asset: Asset) {
+    // 🔴 An explicit guard, because the implicit one is gone. Every tile used to carry
+    // `disabled={applying !== null}`, which prevented a second apply as a side effect of being
+    // unclickable — and also made all of them unfocusable, which a controller cannot survive.
+    // Now only the tile in flight is disabled, so the re-entry check has to be stated.
+    if (applyingRef.current !== null) return;
+    applyingRef.current = asset.id;
     setApplying(asset.id);
     try {
       const result = await api.applyAsset(entry.app_id, assetType, asset.url);
@@ -269,6 +283,7 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
       // with an error box, or sat below one that was about something else entirely.
       toastError(e);
     } finally {
+      applyingRef.current = null;
       setApplying(null);
     }
   }
@@ -279,9 +294,7 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
           way above you. The game name and count come along for free, which is what makes the
           pinned bar read as a header rather than a stray button. */}
       <StickyBar className="toolbar">
-        <button type="button" className="ghost" onClick={onBack}>
-          ← Library
-        </button>
+        <BackButton onClick={onBack} />
         <strong className="browsing">{entry.name}</strong>
         {/* Loaded *and* total, not just total. A count that only ever showed the total is what
             let "the browser is quietly showing 12 of 400" go unnoticed. The tab above already
@@ -294,24 +307,19 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
       {/* The asset slots belong to a single game, which is why this bar lives here and not in
           the app-level nav — on the library list it was a control with nothing to control. */}
       <nav className="tab-group asset-tabs">
-        {ASSET_TYPES.map((t) => (
-          <button
-            type="button"
-            key={t}
-            className={tab === t ? 'tab active' : 'tab'}
-            onClick={() => setTab(t)}
-          >
+        {ASSET_TYPES.map((t, i) => (
+          <AssetTab key={t} col={i} active={tab === t} onClick={() => setTab(t)}>
             {ASSET_LABEL[t]}
-          </button>
+          </AssetTab>
         ))}
         {/* Last, so the first tab is still the one every game opens on. */}
-        <button
-          type="button"
-          className={tab === 'current' ? 'tab active' : 'tab'}
+        <AssetTab
+          col={ASSET_TYPES.length}
+          active={tab === 'current'}
           onClick={() => setTab('current')}
         >
           Current
-        </button>
+        </AssetTab>
       </nav>
 
       {!browsing && <CurrentAssets entry={entry} />}
@@ -348,32 +356,19 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
       )}
 
       {browsing && (
-      <div className={`assets assets-${assetType}`}>
-        {assets.map((asset) => (
-          <figure key={asset.id} className="asset">
-            <button
-              type="button"
-              className="asset-button"
-              disabled={applying !== null}
-              onClick={() => void apply(asset)}
-              title={`Apply this ${ASSET_LABEL[assetType].toLowerCase()}`}
-            >
-              <AssetPreview asset={asset} />
-              {applying === asset.id && <span className="applying">Applying…</span>}
-            </button>
-            <figcaption>
-              <span className="author">{asset.author.name || 'unknown'}</span>
-              {/* 0x0 is legal for icons, so only show real dimensions. */}
-              {asset.width > 0 && asset.height > 0 && (
-                <span className="dims">
-                  {asset.width}×{asset.height}
-                </span>
-              )}
-              <Flags asset={asset} />
-            </figcaption>
-          </figure>
-        ))}
-      </div>
+        <div className={`assets assets-${assetType}`} ref={assetGrid} aria-busy={applying !== null}>
+          {assets.map((asset, index) => (
+            <AssetTile
+              key={asset.id}
+              index={index}
+              asset={asset}
+              label={ASSET_LABEL[assetType].toLowerCase()}
+              applying={applying === asset.id}
+              anyApplying={applying !== null}
+              onApply={() => void apply(asset)}
+            />
+          ))}
+        </div>
       )}
 
       {/* `!ready` matters: nothing is fetched until the stored filters arrive, so without it
@@ -389,9 +384,7 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
           remaining artwork is simply unreachable. Shown only when there is genuinely more. */}
       {browsing && !loading && hasMore && !error && assets.length > 0 && (
         <div className="load-more">
-          <button type="button" className="ghost" onClick={() => void loadPage(page + 1)}>
-            Load more
-          </button>
+          <LoadMore onClick={() => void loadPage(page + 1)} />
         </div>
       )}
 
@@ -428,5 +421,111 @@ function AssetPreview({ asset }: { asset: Asset }) {
     );
   }
   return <img src={src} alt="" loading="lazy" />;
+}
+
+/** The way out. Its own section, above the tabs, and the first thing the pad reaches going up. */
+function BackButton({ onClick }: { onClick: () => void }) {
+  const { ref, focused } = useFocusItem<HTMLButtonElement>('back', 0, 0);
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className={`ghost${focused ? ' focused' : ''}`}
+      onClick={onClick}
+    >
+      ← Library
+    </button>
+  );
+}
+
+function AssetTab({
+  col,
+  active,
+  onClick,
+  children,
+}: {
+  col: number;
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  const { ref, focused } = useFocusItem<HTMLButtonElement>('asset-tabs', 0, col);
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className={`tab${active ? ' active' : ''}${focused ? ' focused' : ''}`}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
+function LoadMore({ onClick }: { onClick: () => void }) {
+  const { ref, focused } = useFocusItem<HTMLButtonElement>('load-more', 0, 0);
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className={`ghost${focused ? ' focused' : ''}`}
+      onClick={onClick}
+    >
+      Load more
+    </button>
+  );
+}
+
+/**
+ * One piece of candidate artwork.
+ *
+ * 🔴 `disabled` is now only on the tile actually being applied. It used to be on **every** tile
+ * whenever any apply was in flight, which is invisible with a mouse but destroys keyboard and pad
+ * navigation outright: a disabled button cannot hold focus, so the grid would empty out
+ * mid-action and focus would be flung elsewhere. `aria-busy` on the container carries the "work
+ * in progress" meaning instead, and a second click is guarded by the apply path itself.
+ */
+function AssetTile({
+  index,
+  asset,
+  label,
+  applying,
+  anyApplying,
+  onApply,
+}: {
+  index: number;
+  asset: Asset;
+  label: string;
+  applying: boolean;
+  anyApplying: boolean;
+  onApply: () => void;
+}) {
+  const { ref, focused } = useFocusGridItem<HTMLButtonElement>('assets', index);
+  return (
+    <figure className="asset">
+      <button
+        ref={ref}
+        type="button"
+        className={`asset-button${focused ? ' focused' : ''}`}
+        disabled={applying}
+        aria-disabled={anyApplying}
+        onClick={onApply}
+        title={`Apply this ${label}`}
+      >
+        <AssetPreview asset={asset} />
+        {applying && <span className="applying">Applying…</span>}
+      </button>
+      <figcaption>
+        <span className="author">{asset.author.name || 'unknown'}</span>
+        {/* 0x0 is legal for icons, so only show real dimensions. */}
+        {asset.width > 0 && asset.height > 0 && (
+          <span className="dims">
+            {asset.width}×{asset.height}
+          </span>
+        )}
+        <Flags asset={asset} />
+      </figcaption>
+    </figure>
+  );
 }
 

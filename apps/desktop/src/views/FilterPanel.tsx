@@ -21,6 +21,7 @@ import {
   type AssetType,
   type Filters,
 } from '@griddle/shared';
+import { useFocusItem } from '../focus';
 
 const MIME_LABEL: Record<string, string> = {
   'image/png': 'PNG',
@@ -64,6 +65,19 @@ export function FilterPanel({
   const toggleIn = (list: string[], value: string) =>
     list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 
+  // Column assignment, in the order `.filter-body`'s flex-wrap lays the groups out.
+  //
+  // 🔴 Computed rather than hardcoded, because Style and Size **disappear entirely** on some
+  // tabs — logos and icons take no dimension filter at all. Fixed column numbers would leave a
+  // gap the pad has to cross with nothing in it, and `closestCol` would then land somewhere
+  // arbitrary when entering the panel from above.
+  let column = 0;
+  const styleCol = styles.length > 0 ? column++ : -1;
+  const sizeCol = dimensions.length > 0 ? column++ : -1;
+  const formatCol = column++;
+  const contentCol = column++;
+  const actionsCol = column++;
+
   return (
     <details
       className="filters"
@@ -72,14 +86,16 @@ export function FilterPanel({
     >
       {/* No "modified" badge: the "Reset filters" button below already appears only when
           something has been changed, so the badge said the same thing twice. */}
-      <summary>Filters</summary>
+      <FilterSummary />
 
       <div className="filter-body">
         {styles.length > 0 && (
           <Group label="Style">
-            {styles.map((s) => (
+            {styles.map((s, i) => (
               <Check
                 key={s}
+                col={styleCol}
+                row={i}
                 label={STYLE_LABEL[s] ?? s}
                 checked={filters.styles.includes(s)}
                 onChange={() => onChange({ ...filters, styles: toggleIn(filters.styles, s) })}
@@ -93,9 +109,11 @@ export function FilterPanel({
             group is hidden rather than rendered empty. */}
         {dimensions.length > 0 && (
           <Group label="Size">
-            {dimensions.map((d) => (
+            {dimensions.map((d, i) => (
               <Check
                 key={d}
+                col={sizeCol}
+                row={i}
                 label={d}
                 checked={filters.dimensions.includes(d)}
                 onChange={() =>
@@ -111,20 +129,26 @@ export function FilterPanel({
         )}
 
         <Group label="Format">
-          {mimes.map((m) => (
+          {mimes.map((m, i) => (
             <Check
               key={m}
+              col={formatCol}
+              row={i}
               label={MIME_LABEL[m] ?? m}
               checked={filters.mimes.includes(m)}
               onChange={() => onChange({ ...filters, mimes: toggleIn(filters.mimes, m) })}
             />
           ))}
           <Check
+            col={formatCol}
+            row={mimes.length}
             label="Animated"
             checked={filters.animated}
             onChange={() => onChange({ ...filters, animated: !filters.animated })}
           />
           <Check
+            col={formatCol}
+            row={mimes.length + 1}
             label="Static"
             checked={filters.static}
             onChange={() => onChange({ ...filters, static: !filters.static })}
@@ -143,21 +167,29 @@ export function FilterPanel({
 
         <Group label="Content">
           <Check
+            col={contentCol}
+            row={0}
             label="Untagged"
             checked={filters.untagged}
             onChange={() => onChange({ ...filters, untagged: !filters.untagged })}
           />
           <Check
+            col={contentCol}
+            row={1}
             label="Adult"
             checked={filters.adult}
             onChange={() => onChange({ ...filters, adult: !filters.adult })}
           />
           <Check
+            col={contentCol}
+            row={2}
             label="Humor"
             checked={filters.humor}
             onChange={() => onChange({ ...filters, humor: !filters.humor })}
           />
           <Check
+            col={contentCol}
+            row={3}
             label="Epilepsy"
             checked={filters.epilepsy}
             onChange={() => onChange({ ...filters, epilepsy: !filters.epilepsy })}
@@ -172,18 +204,21 @@ export function FilterPanel({
         </Group>
 
         <div className="filter-actions">
-          <button
-            type="button"
-            className="ghost"
+          <ActionButton
+            row={0}
+            col={actionsCol}
             onClick={onPickGame}
             title="Change which SteamGridDB game this artwork comes from"
           >
             {gameLabel ? `Game: ${gameLabel}` : 'Wrong game?'}
-          </button>
+          </ActionButton>
+          {/* Appears only once something has been changed, and vanishes the instant it is used —
+              taking the focus with it. `nearest` is what puts focus back on "Wrong game?" above
+              rather than at the top of the page. */}
           {modified && (
-            <button type="button" className="ghost" onClick={onReset}>
+            <ActionButton row={1} col={actionsCol} onClick={onReset}>
               Reset filters
-            </button>
+            </ActionButton>
           )}
         </div>
       </div>
@@ -211,15 +246,57 @@ function Check({
   label,
   checked,
   onChange,
+  col,
+  row,
 }: {
   label: string;
   checked: boolean;
   onChange: () => void;
+  col: number;
+  row: number;
 }) {
+  const { ref, focused } = useFocusItem<HTMLInputElement>('filters', row, col);
   return (
-    <label className="toggle">
-      <input type="checkbox" checked={checked} onChange={onChange} />
+    <label className={`toggle${focused ? ' focused' : ''}`}>
+      <input ref={ref} type="checkbox" checked={checked} onChange={onChange} />
       {label}
     </label>
+  );
+}
+
+/** The panel's disclosure triangle — its own section, so the panel can be opened from the pad. */
+function FilterSummary() {
+  const { ref, focused } = useFocusItem<HTMLElement>('filters-summary', 0, 0);
+  return (
+    <summary ref={ref} className={focused ? 'focused' : undefined}>
+      Filters
+    </summary>
+  );
+}
+
+function ActionButton({
+  row,
+  col,
+  onClick,
+  title,
+  children,
+}: {
+  row: number;
+  col: number;
+  onClick: () => void;
+  title?: string;
+  children: React.ReactNode;
+}) {
+  const { ref, focused } = useFocusItem<HTMLButtonElement>('filters', row, col);
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className={`ghost${focused ? ' focused' : ''}`}
+      onClick={onClick}
+      title={title}
+    >
+      {children}
+    </button>
   );
 }

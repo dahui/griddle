@@ -22,6 +22,7 @@ import {
   type UiError,
 } from '../api';
 import { ArtImage, Empty, ErrorNote, Spinner } from '../components';
+import { useFocusGrid, useFocusGridItem, useFocusItem } from '../focus';
 
 const LIST_ASSET: AssetType = 'grid_p';
 
@@ -40,6 +41,9 @@ export function Library({ onPick }: { onPick: (entry: LibraryEntry) => void }) {
   // wrong scope and then reload, which reads as a flicker on every launch.
   const [scope, setScope] = useState<LibraryScope | null>(null);
   const [sort, setSort] = useState<LibrarySort>('name');
+  // Unconditional, above the early returns below: `useFocusGrid` is a hook, and the list has two
+  // states (error, loading) that return before the grid renders.
+  const grid = useFocusGrid<HTMLUListElement>('library');
 
   useEffect(() => {
     api
@@ -94,41 +98,21 @@ export function Library({ onPick }: { onPick: (entry: LibraryEntry) => void }) {
     <>
       <div className="toolbar">
         <div className="tab-group">
-          <button
-            type="button"
-            className={scope === 'installed' ? 'tab active' : 'tab'}
-            onClick={() => view('installed', sort)}
-          >
+          <ScopeTab col={0} active={scope === 'installed'} onClick={() => view('installed', sort)}>
             Installed
-          </button>
-          <button
-            type="button"
-            className={scope === 'all' ? 'tab active' : 'tab'}
+          </ScopeTab>
+          <ScopeTab
+            col={1}
+            active={scope === 'all'}
             onClick={() => view('all', sort)}
             title="Everything Steam has a record of on this PC — not everything you own."
           >
             All games
-          </button>
+          </ScopeTab>
         </div>
 
-        <input
-          type="search"
-          className="search"
-          placeholder="Filter games…"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        />
-
-        <label className="sort">
-          Sort
-          <select value={sort} onChange={(e) => view(scope, e.target.value as LibrarySort)}>
-            {(Object.keys(SORT_LABEL) as LibrarySort[]).map((s) => (
-              <option key={s} value={s}>
-                {SORT_LABEL[s]}
-              </option>
-            ))}
-          </select>
-        </label>
+        <FilterBox value={filter} onChange={setFilter} />
+        <SortSelect value={sort} onChange={(s) => view(scope, s)} />
 
         <span className="count">
           {shown.length === entries.length
@@ -142,25 +126,129 @@ export function Library({ onPick }: { onPick: (entry: LibraryEntry) => void }) {
           {entries.length === 0 ? 'No games found.' : `Nothing matches “${filter}”.`}
         </Empty>
       ) : (
-        <ul className="library">
-          {shown.map((entry) => (
-            <li key={`${entry.kind}-${entry.app_id}`}>
-              <button type="button" className="game" onClick={() => onPick(entry)}>
-                <span className="art">
-                  <ArtImage
-                    sources={artSources(entry)}
-                    alt=""
-                    fallback={<span className="art-none">No artwork</span>}
-                  />
-                </span>
-                <span className="game-name">{entry.name}</span>
-                <span className="game-meta">{meta(entry)}</span>
-              </button>
-            </li>
+        <ul className="library" ref={grid}>
+          {shown.map((entry, index) => (
+            <GameTile
+              key={`${entry.kind}-${entry.app_id}`}
+              index={index}
+              entry={entry}
+              onPick={() => onPick(entry)}
+            />
           ))}
         </ul>
       )}
     </>
+  );
+}
+
+/**
+ * The library toolbar is one focus row: two scope tabs, the filter box, then the sort control.
+ * Columns are assigned here rather than derived, because the row mixes control types and their
+ * DOM order is the only thing that makes it a row at all.
+ */
+function ScopeTab({
+  col,
+  active,
+  onClick,
+  title,
+  children,
+}: {
+  col: number;
+  active: boolean;
+  onClick: () => void;
+  title?: string;
+  children: React.ReactNode;
+}) {
+  const { ref, focused } = useFocusItem<HTMLButtonElement>('toolbar', 0, col);
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className={`tab${active ? ' active' : ''}${focused ? ' focused' : ''}`}
+      onClick={onClick}
+      title={title}
+    >
+      {children}
+    </button>
+  );
+}
+
+function FilterBox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { ref, focused } = useFocusItem<HTMLInputElement>('toolbar', 0, 2);
+  return (
+    <input
+      ref={ref}
+      type="search"
+      className={`search${focused ? ' focused' : ''}`}
+      placeholder="Filter games…"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
+}
+
+/**
+ * ⚠️ Still a native `<select>`, which a controller cannot drive — its popup is an OS widget that
+ * receives no synthesised input. Reachable and usable by keyboard, so it is not a hole in this
+ * phase; replacing it with a listbox built from ordinary buttons is Phase D.
+ */
+function SortSelect({
+  value,
+  onChange,
+}: {
+  value: LibrarySort;
+  onChange: (s: LibrarySort) => void;
+}) {
+  const { ref, focused } = useFocusItem<HTMLSelectElement>('toolbar', 0, 3);
+  return (
+    <label className="sort">
+      Sort
+      <select
+        ref={ref}
+        className={focused ? 'focused' : undefined}
+        value={value}
+        onChange={(e) => onChange(e.target.value as LibrarySort)}
+      >
+        {(Object.keys(SORT_LABEL) as LibrarySort[]).map((s) => (
+          <option key={s} value={s}>
+            {SORT_LABEL[s]}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/** One game. Split out so it can register itself; a hook cannot live in the parent's `map`. */
+function GameTile({
+  index,
+  entry,
+  onPick,
+}: {
+  index: number;
+  entry: LibraryEntry;
+  onPick: () => void;
+}) {
+  const { ref, focused } = useFocusGridItem<HTMLButtonElement>('library', index);
+  return (
+    <li>
+      <button
+        ref={ref}
+        type="button"
+        className={`game${focused ? ' focused' : ''}`}
+        onClick={onPick}
+      >
+        <span className="art">
+          <ArtImage
+            sources={artSources(entry)}
+            alt=""
+            fallback={<span className="art-none">No artwork</span>}
+          />
+        </span>
+        <span className="game-name">{entry.name}</span>
+        <span className="game-meta">{meta(entry)}</span>
+      </button>
+    </li>
   );
 }
 

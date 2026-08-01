@@ -17,6 +17,55 @@
   box-sizing: border-box;
 }
 
+/*
+ * The focus ring — read from a sofa, not from eighteen inches away.
+ *
+ * There was none at all before this: not one `:focus` rule in the file, so focus was whatever
+ * Chromium's default outline happened to be. That is unusable with a controller, where the ring
+ * *is* the cursor — nothing else says where a button press will land.
+ *
+ * `outline` with an offset rather than a border, because `.asset-button` and `.slot-art` both use
+ * `overflow: hidden` and would clip an inset ring, and because a border would resize the element
+ * and reflow the grid as focus moved through it.
+ *
+ * Two selectors, one appearance: `.focused` is the model's own state, driven by the arrow keys
+ * and (later) the pad; `:focus-visible` covers plain Tab and keeps native behaviour honest.
+ */
+.focused,
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Tiles carry their own radius, so the ring should follow it rather than square off a corner. */
+.game.focused,
+.asset-button.focused,
+.slot-art.focused,
+.match.focused {
+  outline-offset: 3px;
+  border-radius: inherit;
+}
+
+/*
+ * Keep a focused control clear of the sticky toolbar.
+ *
+ * `scrollIntoView({block:'nearest'})` stops as soon as the element is inside the viewport, and
+ * the bar sits *over* the viewport rather than in the flow — so without this the top row of every
+ * grid scrolls to exactly where the bar covers it.
+ *
+ * 🔴 This belongs on the focusable element itself, not its `<li>`/`<figure>` wrapper: the scroll
+ * is requested on the element the focus model registered, which is the button inside.
+ */
+button,
+input,
+select,
+summary,
+a {
+  scroll-margin-top: 3.5rem;
+  scroll-margin-bottom: 1.5rem;
+}
+
 body {
   margin: 0;
   background: var(--bg);

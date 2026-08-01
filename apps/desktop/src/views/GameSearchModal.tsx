@@ -10,6 +10,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, asUiError, type GameMatch, type UiError } from '../api';
 import { ErrorNote, Spinner } from '../components';
+import { FocusScope, useFocusItem } from '../focus';
 
 export function GameSearchModal({
   appId,
@@ -71,66 +72,120 @@ export function GameSearchModal({
     }
   }
 
+  // Escape closes this now. It had none before — only the backdrop click and the Close button,
+  // so the one key every dialog on the platform responds to did nothing here.
   return (
-    <div
-      className="modal-backdrop"
-      role="presentation"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className="modal" role="dialog" aria-modal="true" aria-label="Choose a SteamGridDB game">
-        <div className="modal-head">
-          <h2>Which game on SteamGridDB?</h2>
-          <button type="button" className="ghost" onClick={onClose}>
-            Close
-          </button>
-        </div>
+    <FocusScope name="game-search" onBack={onClose}>
+      <div
+        className="modal-backdrop"
+        role="presentation"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
+        <div
+          className="modal"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Choose a SteamGridDB game"
+        >
+          <div className="modal-head">
+            <h2>Which game on SteamGridDB?</h2>
+            <CloseButton onClick={onClose} />
+          </div>
 
-        <p className="hint">
-          {current
-            ? `Currently using “${current.name}”.`
-            : 'SteamGridDB has no match for this game.'}
-        </p>
+          <p className="hint">
+            {current
+              ? `Currently using “${current.name}”.`
+              : 'SteamGridDB has no match for this game.'}
+          </p>
 
-        <input
-          type="search"
-          className="search"
-          placeholder="Search SteamGridDB…"
-          value={term}
-          autoFocus
-          onChange={(e) => setTerm(e.target.value)}
-        />
+          <SearchBox value={term} onChange={setTerm} />
 
-        {error && <ErrorNote error={error} />}
-        {busy && <Spinner label="Searching…" />}
+          {error && <ErrorNote error={error} />}
+          {busy && <Spinner label="Searching…" />}
 
-        <ul className="matches">
-          {/* Always offered, so an override is never a one-way door. */}
-          <li>
-            <button type="button" className="match" onClick={() => void choose(null)}>
+          <ul className="matches">
+            {/* Always offered, so an override is never a one-way door. */}
+            <Match row={0} onSelect={() => void choose(null)}>
               <span className="match-name">Match automatically</span>
               <span className="match-meta">By Steam ID {appId}</span>
-            </button>
-          </li>
-          {results?.map((game) => (
-            <li key={game.id}>
-              <button type="button" className="match" onClick={() => void choose(game)}>
+            </Match>
+            {results?.map((game, i) => (
+              <Match key={game.id} row={i + 1} onSelect={() => void choose(game)}>
                 <span className="match-name">{game.name}</span>
                 <span className="match-meta">
                   #{game.id}
                   {game.verified && ' · verified'}
                   {game.types.length > 0 && ` · ${game.types.join(', ')}`}
                 </span>
-              </button>
-            </li>
-          ))}
-        </ul>
+              </Match>
+            ))}
+          </ul>
 
-        {results !== null && results.length === 0 && !busy && (
-          <p className="hint">Nothing found for “{term.trim()}”.</p>
-        )}
+          {results !== null && results.length === 0 && !busy && (
+            <p className="hint">Nothing found for “{term.trim()}”.</p>
+          )}
+        </div>
       </div>
-    </div>
+    </FocusScope>
+  );
+}
+
+function CloseButton({ onClick }: { onClick: () => void }) {
+  const { ref, focused } = useFocusItem<HTMLButtonElement>('head', 0, 0);
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className={`ghost${focused ? ' focused' : ''}`}
+      onClick={onClick}
+    >
+      Close
+    </button>
+  );
+}
+
+function SearchBox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { ref, focused } = useFocusItem<HTMLInputElement>('search', 0, 0);
+  return (
+    <input
+      ref={ref}
+      type="search"
+      className={`search${focused ? ' focused' : ''}`}
+      placeholder="Search SteamGridDB…"
+      value={value}
+      autoFocus
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
+}
+
+/**
+ * One candidate game. The list lives inside `.modal`, which is the app's only inner scroller
+ * (`max-height: 80vh; overflow-y: auto`) — `scrollIntoView({block:'nearest'})` scrolls that
+ * rather than the page, which is what makes a long result list navigable.
+ */
+function Match({
+  row,
+  onSelect,
+  children,
+}: {
+  row: number;
+  onSelect: () => void;
+  children: React.ReactNode;
+}) {
+  const { ref, focused } = useFocusItem<HTMLButtonElement>('matches', row, 0);
+  return (
+    <li>
+      <button
+        ref={ref}
+        type="button"
+        className={`match${focused ? ' focused' : ''}`}
+        onClick={onSelect}
+      >
+        {children}
+      </button>
+    </li>
   );
 }

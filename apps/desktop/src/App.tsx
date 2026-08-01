@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, asUiError, type LibraryEntry, type Status, type UiError } from './api';
 import { ErrorNote, Spinner, ToastProvider } from './components';
+import { FocusProvider, useFocusItem } from './focus';
 import { Library } from './views/Library';
 import { AssetBrowser } from './views/AssetBrowser';
 import { ApiKeyPanel, Settings } from './views/Settings';
@@ -59,20 +60,12 @@ export function App() {
     <Shell>
       <nav className="tabs">
         <div className="tab-group">
-          <button
-            type="button"
-            className={tab === 'library' ? 'tab active' : 'tab'}
-            onClick={() => setTab('library')}
-          >
+          <NavTab col={0} active={tab === 'library'} onClick={() => setTab('library')}>
             Library
-          </button>
-          <button
-            type="button"
-            className={tab === 'settings' ? 'tab active' : 'tab'}
-            onClick={() => setTab('settings')}
-          >
+          </NavTab>
+          <NavTab col={1} active={tab === 'settings'} onClick={() => setTab('settings')}>
             Settings
-          </button>
+          </NavTab>
         </div>
       </nav>
 
@@ -94,22 +87,51 @@ export function App() {
   );
 }
 
+/** The Library/Settings switch — the app's top navigation section, so `row 0` of `nav`. */
+function NavTab({
+  col,
+  active,
+  onClick,
+  children,
+}: {
+  col: number;
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  const { ref, focused } = useFocusItem<HTMLButtonElement>('nav', 0, col);
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className={`tab${active ? ' active' : ''}${focused ? ' focused' : ''}`}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
 /**
  * The frame every screen sits in.
  *
  * The toast host lives here rather than around one view, so a confirmation raised just before a
- * navigation is not unmounted along with the thing that raised it.
+ * navigation is not unmounted along with the thing that raised it. `FocusProvider` wraps it in
+ * turn, because the focus model has to outlive any single screen: an overlay opened on the last
+ * one still needs somewhere to hand focus back to.
  */
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <ToastProvider>
-      <main>
-        <header>
-          <h1>Griddle</h1>
-          <p className="sub">Artwork for your Steam library.</p>
-        </header>
-        {children}
-      </main>
-    </ToastProvider>
+    <FocusProvider>
+      <ToastProvider>
+        <main>
+          <header>
+            <h1>Griddle</h1>
+            <p className="sub">Artwork for your Steam library.</p>
+          </header>
+          {children}
+        </main>
+      </ToastProvider>
+    </FocusProvider>
   );
 }

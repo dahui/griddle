@@ -16,10 +16,12 @@ import {
   ArtImage,
   ContextMenu,
   ErrorNote,
+  MenuItem,
   Spinner,
   useErrorToast,
   useToast,
 } from '../components';
+import { FocusScope, useFocusGrid, useFocusGridItem, useFocusItem } from '../focus';
 
 type Menu = { x: number; y: number; slot: AssetSlot };
 
@@ -36,6 +38,9 @@ export function CurrentAssets({ entry }: { entry: LibraryEntry }) {
   // the old ones here would leave the preview showing artwork that is no longer there.
   const [preview, setPreview] = useState<AssetType | null>(null);
   const [busy, setBusy] = useState<AssetType | null>(null);
+  // `.slots` wraps at `repeat(auto-fill, minmax(13rem, 1fr))`, so how many slots sit on a row is
+  // a function of the window width and has to be measured.
+  const slotGrid = useFocusGrid<HTMLUListElement>('slots');
 
   const load = useCallback(() => {
     let cancelled = false;
@@ -89,43 +94,18 @@ export function CurrentAssets({ entry }: { entry: LibraryEntry }) {
     <>
       <p className="hint">Click any artwork to see it larger, or right-click to reset it.</p>
 
-      <ul className="slots">
-        {slots.map((slot) => {
-          const sources = sourcesFor(entry, slot);
-          return (
-            <li key={slot.asset_type} className="slot">
-              {/* A button again. It stopped being one when left-clicking jumped to that browsing
-                  tab — the view navigating away by itself when all you did was look at something.
-                  Enlarging in place is not that, and a button is what gets this to the keyboard. */}
-              <button
-                type="button"
-                className={`slot-art slot-art-${slot.asset_type}${
-                  sources.length === 0 ? ' slot-art-flat' : ''
-                }`}
-                // Nothing to enlarge when every rung of the ladder is empty. Left as a no-op
-                // rather than `disabled`, because a disabled button fires no mouse events at all
-                // in Chromium — which would take the right-click menu with it.
-                onClick={() => sources.length > 0 && setPreview(slot.asset_type)}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setMenu({ x: e.clientX, y: e.clientY, slot });
-                }}
-                title={slot.label}
-              >
-                <ArtImage
-                  sources={sources}
-                  alt=""
-                  fallback={<span className="art-none">No artwork</span>}
-                />
-                {busy === slot.asset_type && <span className="applying">Resetting…</span>}
-              </button>
-              <span className="slot-name">{slot.label}</span>
-              <span className={`slot-state ${slot.custom_art ? 'slot-custom' : ''}`}>
-                {state(slot)}
-              </span>
-            </li>
-          );
-        })}
+      <ul className="slots" ref={slotGrid}>
+        {slots.map((slot, index) => (
+          <SlotTile
+            key={slot.asset_type}
+            index={index}
+            slot={slot}
+            sources={sourcesFor(entry, slot)}
+            busy={busy === slot.asset_type}
+            onOpen={() => setPreview(slot.asset_type)}
+            onMenu={(x, y) => setMenu({ x, y, slot })}
+          />
+        ))}
       </ul>
 
       {previewSlot && (
@@ -140,12 +120,12 @@ export function CurrentAssets({ entry }: { entry: LibraryEntry }) {
         <ContextMenu x={menu.x} y={menu.y} onClose={() => setMenu(null)}>
           <div className="menu-title">{menu.slot.label}</div>
           {menu.slot.removes.length > 0 ? (
-            <button type="button" className="menu-item" onClick={() => void reset(menu.slot)}>
+            <MenuItem row={0} onSelect={() => void reset(menu.slot)}>
               Reset to Steam&rsquo;s artwork
               {/* Naming the files is the point: nothing is deleted from the user's Steam
                   directory without the UI saying which files first. */}
               <span className="menu-note">Deletes {menu.slot.removes.join(', ')}</span>
-            </button>
+            </MenuItem>
           ) : (
             <div className="menu-item menu-disabled">
               Nothing to reset
@@ -155,6 +135,59 @@ export function CurrentAssets({ entry }: { entry: LibraryEntry }) {
         </ContextMenu>
       )}
     </>
+  );
+}
+
+/**
+ * One artwork slot.
+ *
+ * Split out of the list so it can hold a focus registration of its own — a hook cannot be called
+ * inside a `map` callback in the parent.
+ */
+function SlotTile({
+  index,
+  slot,
+  sources,
+  busy,
+  onOpen,
+  onMenu,
+}: {
+  index: number;
+  slot: AssetSlot;
+  sources: string[];
+  busy: boolean;
+  onOpen: () => void;
+  onMenu: (x: number, y: number) => void;
+}) {
+  const { ref, focused } = useFocusGridItem<HTMLButtonElement>('slots', index);
+  return (
+    <li className="slot">
+      {/* A button again. It stopped being one when left-clicking jumped to that browsing tab —
+          the view navigating away by itself when all you did was look at something. Enlarging in
+          place is not that, and a button is what gets this to the keyboard. */}
+      <button
+        ref={ref}
+        type="button"
+        className={`slot-art slot-art-${slot.asset_type}${
+          sources.length === 0 ? ' slot-art-flat' : ''
+        }${focused ? ' focused' : ''}`}
+        // Nothing to enlarge when every rung of the ladder is empty. Left as a no-op rather than
+        // `disabled`, because a disabled button fires no mouse events at all in Chromium — which
+        // would take the right-click menu with it, and now would also drop it out of the focus
+        // grid, leaving a hole a controller would skip over.
+        onClick={() => sources.length > 0 && onOpen()}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onMenu(e.clientX, e.clientY);
+        }}
+        title={slot.label}
+      >
+        <ArtImage sources={sources} alt="" fallback={<span className="art-none">No artwork</span>} />
+        {busy && <span className="applying">Resetting…</span>}
+      </button>
+      <span className="slot-name">{slot.label}</span>
+      <span className={`slot-state ${slot.custom_art ? 'slot-custom' : ''}`}>{state(slot)}</span>
+    </li>
   );
 }
 
@@ -182,16 +215,12 @@ function ArtPreview({
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   const ladder = sources.join('|');
   useEffect(() => setSize(null), [ladder]);
+  const close = useFocusItem<HTMLButtonElement>('preview', 0, 0);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
+  // Escape is the scope's job now. This used to be a `window` keydown listener here and another
+  // in `ContextMenu`, both unconditional, so one press closed both when they overlapped.
   return (
+    <FocusScope name="preview" onBack={onClose}>
     <div
       className="modal-backdrop"
       role="presentation"
@@ -223,12 +252,18 @@ function ArtPreview({
           <span className={`slot-state ${slot.custom_art ? 'slot-custom' : ''}`}>
             {state(slot)}
           </span>
-          <button type="button" className="ghost" onClick={onClose}>
+          <button
+            ref={close.ref}
+            type="button"
+            className={`ghost${close.focused ? ' focused' : ''}`}
+            onClick={onClose}
+          >
             Close
           </button>
         </div>
       </div>
     </div>
+    </FocusScope>
   );
 }
 
