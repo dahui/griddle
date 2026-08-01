@@ -53,11 +53,26 @@ if (-not (Test-Path $target)) {
 # committed and a CRLF round-trip would otherwise show up as a spurious CI failure later.
 $a = [System.IO.File]::ReadAllBytes($target)
 $b = [System.IO.File]::ReadAllBytes($out)
+# Lines are read here, before the temp file goes, so the failure branch below can diff.
+$generatedLines = [System.IO.File]::ReadAllLines($out)
 Remove-Item $out -ErrorAction SilentlyContinue
 
 if ($a.Length -ne $b.Length -or [System.Convert]::ToBase64String($a) -ne [System.Convert]::ToBase64String($b)) {
     Write-Host "THIRD-PARTY-NOTICES.txt is out of date." -ForegroundColor Red
-    Write-Host "Run scripts\notices.ps1 and commit the result."
+    Write-Host "  committed: $($a.Length) bytes"
+    Write-Host "  generated: $($b.Length) bytes"
+
+    # Say *what* differs, not just that something does. A bare "out of date" is unactionable
+    # when the check runs somewhere the maintainer cannot reproduce -- which is how this failed
+    # for a whole afternoon. Section headings alone are usually enough to name the crate.
+    $committed = [System.IO.File]::ReadAllLines($target)
+    $delta = Compare-Object $committed $generatedLines | Select-Object -First 40
+    if ($delta) {
+        Write-Host "`nfirst differing lines ('<=' committed only, '=>' generated only):"
+        $delta | ForEach-Object { Write-Host ("  {0} {1}" -f $_.SideIndicator, $_.InputObject) }
+    }
+
+    Write-Host "`nRun scripts\notices.ps1 and commit the result."
     exit 1
 }
 

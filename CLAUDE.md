@@ -618,6 +618,31 @@ order, and exists so the obvious command is the correct one. Same reasoning as p
 # dist older than src -> the exe has a stale UI
 ```
 
+#### 🔴 Even *linting* `griddle-app` needs a built frontend
+
+`tauri::generate_context!` reads `frontendDist` at **compile time** and panics if the directory
+is missing, so `cargo clippy -p griddle-app` fails on a tree that has never built the UI — which
+is every fresh clone, and was CI's Windows leg for its whole life. The panic reads
+*"the `frontendDist` configuration is set to `"../../apps/desktop/dist"` but this path doesn't
+exist"*, which sounds like a wrong path in `tauri.conf.json` rather than a missing build step.
+
+The sibling of the trap above, from the other direction: `cargo build` will happily embed a
+**stale** dist, and `cargo clippy` will not run at all without **some** dist. CI now builds the
+frontend before either.
+
+#### 🟡 The third-party notices check runs on Windows, and that is not arbitrary
+
+`cargo about generate` produced a different file on an ubuntu runner than on this machine —
+same `cargo-about` 0.9.1, same `Cargo.lock`, same `targets = ["x86_64-pc-windows-msvc"]` pin in
+`about.toml`, and byte-stable across repeated local runs. The cause was not chased down; the
+check was moved to `windows-latest` instead, because a guard whose expected value no maintainer
+can reproduce is unfixable by whoever it fails on. `THIRD-PARTY-NOTICES.txt` describes what is
+linked into a Windows binary and is regenerated on Windows, so that is where it is verified.
+
+`scripts/notices.ps1 -Check` now prints the differing lines rather than only "out of date", and
+the CI pin is `cargo-about@0.9.1` — an upstream reformat would otherwise fail looking exactly
+like an unattributed dependency.
+
 #### 🔴 Three separate traps produced the same "connection refused" page
 
 All three make the webview point at `http://localhost:1420` when nothing is serving it.

@@ -24,6 +24,13 @@
 ///
 /// It read `sgdb-core:api-key:v1` before the product had a name. Changing it cost one re-entry
 /// of the key and nothing else, because nothing had shipped — the only moment that is ever free.
+///
+/// Its only reader is `imp`, which is Windows-only, so off Windows it is dead by construction.
+/// Kept rather than `cfg`-gated so the module documentation above can still link to it.
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "read only by the Windows-only `imp` module")
+)]
 const ENTROPY: &[u8] = b"griddle:api-key:v1";
 
 #[derive(Debug, thiserror::Error)]

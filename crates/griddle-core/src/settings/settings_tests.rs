@@ -2,6 +2,8 @@
 
 use super::*;
 
+// Every test that uses this is `cfg(windows)`, because storing a key needs DPAPI.
+#[cfg(windows)]
 const FAKE_KEY: &str = "0123456789abcdef0123456789abcdef";
 
 #[test]
