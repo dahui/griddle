@@ -34,8 +34,14 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 /// What the UI is asked to do. One vocabulary, shared with the keyboard.
+///
+/// 🔴 **`camelCase`, not `lowercase`.** These strings are matched literally by `NavAction` in
+/// `apps/desktop/src/focus.tsx`, and `rename_all = "lowercase"` flattens `TabPrev` to `"tabprev"`
+/// — which no one notices while every variant is a single word, because then the two renames are
+/// identical. The first two-word action silently stopped arriving while all the others kept
+/// working. The test at the bottom of this module pins every string for that reason.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "camelCase")]
 pub enum Action {
     Up,
     Down,
@@ -43,10 +49,14 @@ pub enum Action {
     Right,
     /// Activate the focused control. A/cross.
     Accept,
-    /// Close the topmost overlay, or go back. B/circle.
+    /// Dismiss the topmost dialog, or leave the current screen. B/circle.
     Back,
     /// Open the focused control's context menu. Y/triangle.
     Menu,
+    /// Previous tab within whatever the current screen calls a tab. LB.
+    TabPrev,
+    /// Next tab. RB.
+    TabNext,
 }
 
 impl From<Direction> for Action {
@@ -56,6 +66,42 @@ impl From<Direction> for Action {
             Direction::Down => Action::Down,
             Direction::Left => Action::Left,
             Direction::Right => Action::Right,
+        }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, reason = "test assertions are allowed to panic")]
+mod wire_tests {
+    use super::Action;
+
+    /// The frontend matches these strings literally, and nothing on the TypeScript side can check
+    /// them — a mismatch is not a type error anywhere, it is an action that silently never fires.
+    ///
+    /// 🔴 This exists because that happened: under `rename_all = "lowercase"`, `TabPrev` went out
+    /// as `"tabprev"` while `NavAction` expected `"tabPrev"`, and LB/RB did nothing at all. Every
+    /// other action was a single word, so the rename was a no-op for them and the fault was
+    /// invisible until the vocabulary grew a two-word entry.
+    ///
+    /// **Keep this list in step with `NavAction` in `apps/desktop/src/focus.tsx`.**
+    #[test]
+    fn actions_serialise_to_the_strings_the_frontend_matches_on() {
+        for (action, expected) in [
+            (Action::Up, "up"),
+            (Action::Down, "down"),
+            (Action::Left, "left"),
+            (Action::Right, "right"),
+            (Action::Accept, "accept"),
+            (Action::Back, "back"),
+            (Action::Menu, "menu"),
+            (Action::TabPrev, "tabPrev"),
+            (Action::TabNext, "tabNext"),
+        ] {
+            assert_eq!(
+                serde_json::to_string(&action).unwrap(),
+                format!("\"{expected}\""),
+                "{action:?} must reach the frontend as {expected:?}"
+            );
         }
     }
 }
@@ -104,6 +150,52 @@ pub fn connected() -> Vec<String> {
     Vec::new()
 }
 
+/// How each button this app uses resolves on the attached pads, without pressing anything.
+///
+/// Built while chasing LB and RB doing nothing when A, B and Y worked. It **exonerated** the
+/// mapping — every button resolved identically, `mapped` matching `native` — which is what
+/// redirected the search to the wire format, where the fault actually was. Kept because ruling a
+/// layer out cheaply is worth as much as convicting one, and this answers statically what would
+/// otherwise need a controller in hand.
+#[cfg(windows)]
+pub fn describe_buttons() -> Vec<String> {
+    use gilrs::Button;
+    const WANTED: &[(Button, &str)] = &[
+        (Button::South, "Accept (A)"),
+        (Button::East, "Back (B)"),
+        (Button::North, "Menu (Y)"),
+        (Button::LeftTrigger, "TabPrev (LB)"),
+        (Button::RightTrigger, "TabNext (RB)"),
+        (Button::LeftTrigger2, "— (LT)"),
+        (Button::RightTrigger2, "— (RT)"),
+    ];
+
+    let Ok(gilrs) = gilrs::Gilrs::new() else {
+        return vec!["gilrs would not start".to_owned()];
+    };
+    let mut out = Vec::new();
+    for (_, pad) in gilrs.gamepads().filter(|(_, p)| p.is_connected()) {
+        out.push(format!(
+            "{} — mapping source {:?}",
+            pad.name(),
+            pad.mapping_source()
+        ));
+        for (button, label) in WANTED {
+            out.push(format!(
+                "    {label:<14} mapped={:?} native={:?}",
+                pad.button_code(*button),
+                button.to_nec(),
+            ));
+        }
+    }
+    out
+}
+
+#[cfg(not(windows))]
+pub fn describe_buttons() -> Vec<String> {
+    Vec::new()
+}
+
 /// Start reading controllers on a background thread.
 ///
 /// Never fails the caller: a machine with no controller, or a gilrs backend that will not
@@ -130,14 +222,20 @@ where
 #[cfg(windows)]
 mod windows_impl {
     use super::{Action, Direction, FocusGate, Repeater, stick_direction};
-    use gilrs::{Axis, Button, GamepadId, Gilrs};
+    use gilrs::{Axis, Button, Gilrs};
     use std::time::{Duration, Instant};
 
     /// Buttons that fire once per press. Directions are held; these are not.
+    ///
+    /// 🔴 `LeftTrigger`/`RightTrigger` are the **bumpers** in gilrs' vocabulary — LB and RB. The
+    /// analog triggers are `LeftTrigger2`/`RightTrigger2`. Reading the names the other way round
+    /// is an easy mistake that produces tab switching on a control nobody presses deliberately.
     const EDGE_BUTTONS: &[(Button, Action)] = &[
         (Button::South, Action::Accept),
         (Button::East, Action::Back),
         (Button::North, Action::Menu),
+        (Button::LeftTrigger, Action::TabPrev),
+        (Button::RightTrigger, Action::TabNext),
     ];
 
     /// How often the pad is sampled. 8 ms is comfortably under the fastest repeat interval, so
@@ -156,21 +254,40 @@ mod windows_impl {
         };
 
         let mut repeater = Repeater::new();
-        let mut pressed: Vec<(GamepadId, Button)> = Vec::new();
         let started = Instant::now();
 
         loop {
-            // Drain the queue so gilrs' cached state is current. The events themselves are not
-            // used: a held direction is a *state* question, and edge buttons are found below.
-            while gilrs.next_event().is_some() {}
-
             let now_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
             let open = gate.is_open();
 
-            let mut held: Option<Direction> = None;
-            let mut down: Vec<(GamepadId, Button)> = Vec::new();
+            // 🔴 Edge buttons come from **events**, not from polling `is_pressed`.
+            //
+            // `is_pressed(Button::X)` consults the gamepad's SDL mapping first and only falls back
+            // to the button's native code, so a mapping that disagrees for one button leaves that
+            // button permanently unpressed while its neighbours work — which is exactly how LB and
+            // RB did nothing while A, B and Y were fine. Taking gilrs' own `ButtonPressed` uses
+            // whatever resolution gilrs itself arrived at, and is edge-triggered by construction,
+            // so there is no press-tracking to keep in step either.
+            //
+            // Every event is logged: "what does the pad actually report for this button" is
+            // otherwise unanswerable, and every wrong guess about it looks like a UI bug.
+            // `examples/pad_probe` turns these on.
+            while let Some(event) = gilrs.next_event() {
+                tracing::debug!(event = ?event.event, "gilrs");
+                let gilrs::EventType::ButtonPressed(button, _) = event.event else {
+                    continue;
+                };
+                if !open {
+                    continue;
+                }
+                if let Some((_, action)) = EDGE_BUTTONS.iter().find(|(b, _)| *b == button) {
+                    handler(*action);
+                }
+            }
 
-            for (id, pad) in gilrs.gamepads() {
+            let mut held: Option<Direction> = None;
+
+            for (_, pad) in gilrs.gamepads() {
                 if !pad.is_connected() {
                     continue;
                 }
@@ -190,37 +307,17 @@ mod windows_impl {
                 let stick =
                     stick_direction(pad.value(Axis::LeftStickX), pad.value(Axis::LeftStickY));
                 held = held.or(dpad).or(stick);
-
-                for (button, _) in EDGE_BUTTONS {
-                    if pad.is_pressed(*button) {
-                        down.push((id, *button));
-                    }
-                }
             }
 
             if open {
                 if let Some(direction) = repeater.advance(held, now_ms) {
                     handler(direction.into());
                 }
-                // Edge-triggered: only a button that was not down last poll counts as a press,
-                // so holding A does not re-activate the focused control eight times a second.
-                for (id, button) in &down {
-                    if pressed.contains(&(*id, *button)) {
-                        continue;
-                    }
-                    if let Some((_, action)) = EDGE_BUTTONS.iter().find(|(b, _)| b == button) {
-                        handler(*action);
-                    }
-                }
             } else {
                 // Keep the repeater fed while the gate is shut, so a direction held across an
                 // alt-tab does not fire a stale step the instant focus returns.
                 let _ = repeater.advance(None, now_ms);
             }
-
-            // Updated regardless of the gate: a button held while the window was in the
-            // background must not count as a fresh press when it comes back.
-            pressed = down;
 
             std::thread::sleep(POLL);
         }

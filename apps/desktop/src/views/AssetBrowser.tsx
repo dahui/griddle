@@ -29,7 +29,7 @@ import {
   useErrorToast,
   useToast,
 } from '../components';
-import { useFocusGrid, useFocusGridItem, useFocusItem } from '../focus';
+import { SCREEN_DEPTH, useFocusGrid, useFocusGridItem, useFocusItem, useScreenActions } from '../focus';
 import { CurrentAssets } from './CurrentAssets';
 import { FilterPanel } from './FilterPanel';
 import { GameSearchModal } from './GameSearchModal';
@@ -45,6 +45,9 @@ const DEFAULT_TAB: AssetType = 'grid_p';
 
 /** The five browsing tabs, plus the overview of what is currently applied. */
 type BrowserTab = AssetType | 'current';
+
+/** In render order, so the bumpers cycle through them the way the tab bar reads. */
+const BROWSER_TABS: BrowserTab[] = [...ASSET_TYPES, 'current'];
 
 export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: () => void }) {
   // Held here, not in `App`, so it resets to the Capsule tab for every game. This component is
@@ -84,6 +87,24 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
   // its `minmax` per asset tab (9.5rem capsules, 22rem heroes). `useFocusGrid` watches child
   // mutations as well as size for exactly this reason.
   const assetGrid = useFocusGrid<HTMLDivElement>('assets');
+
+  // The innermost screen: B leaves the game, and the bumpers own the six asset tabs. `BROWSER_TABS`
+  // is `ASSET_TYPES` plus 'current', in the order the bar renders them, so cycling matches what the
+  // eye follows rather than some internal ordering.
+  const cycleTab = useCallback(
+    (step: 1 | -1) =>
+      setTab(
+        (t) =>
+          BROWSER_TABS[(BROWSER_TABS.indexOf(t) + step + BROWSER_TABS.length) % BROWSER_TABS.length] ??
+          DEFAULT_TAB,
+      ),
+    [],
+  );
+  useScreenActions(SCREEN_DEPTH.game, {
+    onBack,
+    onTabPrev: () => cycleTab(-1),
+    onTabNext: () => cycleTab(1),
+  });
 
   // Read once. A tab change needs no round trip, so there is no window in which the filters in
   // hand belong to something other than what is about to be queried.

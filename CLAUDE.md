@@ -950,6 +950,31 @@ invisible in a `windows_subsystem = "windows"` binary with no console, so the qu
 answerable on demand. `cargo run -p griddle-core --example pad_probe` prints the pad list first,
 then every action live.
 
+#### 🔴 `rename_all = "lowercase"` is a trap that springs on the *second* word
+
+`[VERIFIED-BOX 2026-08-01]` LB and RB did nothing while A, B, Y and every direction worked.
+`Action` carried `#[serde(rename_all = "lowercase")]`, so `TabPrev` crossed the boundary as
+**`"tabprev"`** while `NavAction` in `focus.tsx` matched `'tabPrev'`. Every previous action was a
+single word, for which `lowercase` and `camelCase` are identical — so the attribute had been
+harmless for its whole life and became wrong the moment the vocabulary grew a two-word entry.
+
+Nothing catches this. There is no type shared across the boundary, no runtime error, and the event
+is delivered successfully — it simply matches no branch. `input::wire_tests` now pins every string,
+and was confirmed to fail by reintroducing `lowercase` before being trusted.
+
+**Two wrong diagnoses came first, both from reading instead of measuring:**
+
+1. *"gilrs' SDL mapping must disagree for the bumpers."* `describe_buttons()` was written to check
+   and **exonerated the mapping** — LB resolved to `EvCode(18)` mapped *and* native, exactly like
+   A's `EvCode(12)`. That negative result is what redirected the search.
+2. *"then `is_pressed` must be the problem"* — the edge buttons were rewritten to read gilrs'
+   `ButtonPressed` events instead. Better code, kept, **and not the bug.**
+
+What settled it was `examples/pad_probe` logging raw gilrs events beside the actions derived from
+them: `ButtonPressed(RightTrigger, EvCode(19))` → `TabNext`, emitted perfectly. Once the Rust side
+was visibly correct, the only place left was the wire. **Two rounds of plausible reasoning lost to
+one round of looking**, which is the same lesson as the CRC32 folklore and the CDN-burst theory.
+
 #### 🔴 The controller did nothing, and nothing anywhere said why
 
 `[VERIFIED-BOX 2026-08-01]` Everything on the Rust side was correct — the window label resolved,

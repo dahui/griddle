@@ -18,6 +18,16 @@ use griddle_core::input::{self, FocusGate};
 use std::sync::mpsc;
 
 fn main() {
+    // Raw gilrs events at debug level, so a button that reports *nothing* is distinguishable from
+    // one that reports something we then map wrongly. Override with `RUST_LOG=griddle_core=info`.
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "griddle_core=debug".into()),
+        )
+        .without_time()
+        .init();
+
     println!("== controller probe ==");
 
     // Asked first, and printed whether or not anything is found: an empty list is the single most
@@ -33,7 +43,16 @@ fn main() {
         }
     }
 
-    println!("\nPush the stick or d-pad; A / B / Y are Accept / Back / Menu.");
+    // Printed before anything is pressed: how each button *resolves* is answerable statically,
+    // and a button whose mapping differs from its neighbours' is the whole explanation for one
+    // working and another not.
+    for line in input::describe_buttons() {
+        println!("{line}");
+    }
+
+    println!("\nPush the stick or d-pad; A / B / Y are Accept / Back / Menu;");
+    println!("LB / RB are TabPrev / TabNext.");
+    println!("`gilrs` lines are what the driver reports; indented lines are what we made of it.");
     println!("Ctrl-C to stop.\n");
 
     let (tx, rx) = mpsc::channel();

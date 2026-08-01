@@ -22,7 +22,7 @@ import {
   type UiError,
 } from '../api';
 import { ArtImage, Empty, ErrorNote, Spinner } from '../components';
-import { useFocusGrid, useFocusGridItem, useFocusItem } from '../focus';
+import { SCREEN_DEPTH, useFocusGrid, useFocusGridItem, useFocusItem, useScreenActions } from '../focus';
 
 const LIST_ASSET: AssetType = 'grid_p';
 
@@ -83,6 +83,14 @@ export function Library({ onPick }: { onPick: (entry: LibraryEntry) => void }) {
     // *persist* a view preference should not surface as a library error.
     void api.setLibraryView(nextScope, nextSort).catch(() => undefined);
   }
+
+  // The library's own "tabs" are the two scopes, so the bumpers toggle them here rather than
+  // falling through to the Library/Settings switch. No `onBack`: the list is the root screen and
+  // there is nowhere further back to go.
+  useScreenActions(SCREEN_DEPTH.library, {
+    onTabPrev: () => scope && view(scope === 'all' ? 'installed' : 'all', sort),
+    onTabNext: () => scope && view(scope === 'installed' ? 'all' : 'installed', sort),
+  });
 
   const shown = useMemo(() => {
     if (!entries) return [];

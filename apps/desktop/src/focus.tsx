@@ -44,7 +44,36 @@ import {
  * Kept identical to `griddle_core::input::Action`'s serde representation — Rust emits these exact
  * strings. Adding a variant means adding it in both places.
  */
-export type NavAction = Direction | 'accept' | 'back' | 'menu';
+export type NavAction = Direction | 'accept' | 'back' | 'menu' | 'tabPrev' | 'tabNext';
+
+/**
+ * What a screen can do with the buttons that are not about moving a cursor.
+ *
+ * Every field is optional: a screen with no tabs simply does not answer for the bumpers, and the
+ * next screen out gets them instead.
+ */
+export interface ScreenActions {
+  /** B, once every dialog is dismissed. Leaving the screen, or cancelling what it is doing. */
+  onBack?: () => void;
+  onTabPrev?: () => void;
+  onTabNext?: () => void;
+}
+
+/**
+ * Which screen answers a button when several are mounted at once.
+ *
+ * 🔴 An explicit number rather than "whichever registered last". React runs **child effects before
+ * parent effects**, so registration order is inside-out — taking the most recent entry would hand
+ * every button to the outermost screen, which is exactly backwards. Depth says what is meant.
+ */
+export const SCREEN_DEPTH = {
+  /** The Library/Settings switch. Answers only when nothing more specific does. */
+  app: 0,
+  /** The library list: Installed / All games. */
+  library: 1,
+  /** One game's asset tabs — the innermost screen there is. */
+  game: 2,
+} as const;
 
 /**
  * Open a control's context menu from the keyboard or pad, which have no cursor.
@@ -86,6 +115,12 @@ interface Scope {
   restore: string | null;
 }
 
+interface Screen {
+  token: string;
+  depth: number;
+  actions: { current: ScreenActions };
+}
+
 interface FocusApi {
   focusedId: string | null;
   register: (entry: Entry) => void;
@@ -93,6 +128,8 @@ interface FocusApi {
   setColumns: (section: string, columns: number) => void;
   pushScope: (token: string, name: string, back: () => void) => void;
   popScope: (token: string) => void;
+  registerScreen: (screen: Screen) => void;
+  unregisterScreen: (token: string) => void;
   /** Activate the focused control. Unused by the keyboard, which activates natively. */
   activate: () => void;
 }
@@ -298,13 +335,29 @@ export function FocusProvider({ children }: { children: ReactNode }) {
     entries.current.get(focusedIdRef.current)?.el.click();
   }, []);
 
-  // Mirrors of the two pieces of state `dispatch` reads. They exist so `dispatch` can be a
-  // *stable* callback: it is handed to a Tauri event subscription, and a new identity on every
-  // focus change would tear that subscription down and rebuild it several times a second.
+  // Mirrors of the state `dispatch` reads. They exist so `dispatch` can be a *stable* callback:
+  // it is handed to a Tauri event subscription, and a new identity on every focus change would
+  // tear that subscription down and rebuild it several times a second.
   const scopesRef = useRef<Scope[]>([]);
   scopesRef.current = scopes;
   const layoutRef = useRef<Layout>(layout);
   layoutRef.current = layout;
+
+  // Screens live in a ref rather than state: nothing renders differently because one registered,
+  // and a re-render per mounted screen would be pure waste.
+  const screensRef = useRef<Screen[]>([]);
+  const deepestScreen = useCallback(
+    () => screensRef.current.reduce<Screen | null>((best, s) => (!best || s.depth > best.depth ? s : best), null),
+    [],
+  );
+
+  const registerScreen = useCallback((screen: Screen) => {
+    screensRef.current = [...screensRef.current.filter((s) => s.token !== screen.token), screen];
+  }, []);
+
+  const unregisterScreen = useCallback((token: string) => {
+    screensRef.current = screensRef.current.filter((s) => s.token !== token);
+  }, []);
 
   // Keep the model in step when focus arrives by mouse or Tab, so a directional press afterwards
   // continues from where the user actually is.
@@ -332,8 +385,27 @@ export function FocusProvider({ children }: { children: ReactNode }) {
   const dispatch = useCallback(
     (action: NavAction) => {
       if (action === 'back') {
+        // Dialogs first, innermost outwards, then the screen itself. B is one button and means
+        // "undo the last thing that took me somewhere", whatever that was.
         const top = scopesRef.current[scopesRef.current.length - 1];
-        if (top) top.back();
+        if (top) {
+          top.back();
+          return;
+        }
+        deepestScreen()?.actions.current.onBack?.();
+        return;
+      }
+      if (action === 'tabPrev' || action === 'tabNext') {
+        // Answered by the deepest screen that *has* tabs, so the bumpers switch asset tabs inside
+        // a game and the library scope on the list, without either having to know about the other.
+        for (const screen of screensRef.current.slice().sort((a, b) => b.depth - a.depth)) {
+          const handler =
+            action === 'tabPrev' ? screen.actions.current.onTabPrev : screen.actions.current.onTabNext;
+          if (handler) {
+            handler();
+            return;
+          }
+        }
         return;
       }
       if (action === 'accept') {
@@ -387,12 +459,11 @@ export function FocusProvider({ children }: { children: ReactNode }) {
       if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
 
       if (e.key === 'Escape') {
-        // Only the topmost overlay closes. Before this existed, two independent window-level
-        // Escape handlers meant one press dismissed the preview *and* the context menu.
-        if (scopes.length > 0) {
-          e.preventDefault();
-          dispatch('back');
-        }
+        // Same path as the pad's B: the topmost overlay if there is one, otherwise the screen's
+        // own way out. Before the scope stack existed, two independent window-level Escape
+        // handlers meant one press dismissed the preview *and* the context menu.
+        e.preventDefault();
+        dispatch('back');
         return;
       }
 
@@ -423,8 +494,28 @@ export function FocusProvider({ children }: { children: ReactNode }) {
   }, [tabOrder, focusedId, scopes.length, focusTo, dispatch]);
 
   const api = useMemo<FocusApi>(
-    () => ({ focusedId, register, unregister, setColumns, pushScope, popScope, activate }),
-    [focusedId, register, unregister, setColumns, pushScope, popScope, activate],
+    () => ({
+      focusedId,
+      register,
+      unregister,
+      setColumns,
+      pushScope,
+      popScope,
+      registerScreen,
+      unregisterScreen,
+      activate,
+    }),
+    [
+      focusedId,
+      register,
+      unregister,
+      setColumns,
+      pushScope,
+      popScope,
+      registerScreen,
+      unregisterScreen,
+      activate,
+    ],
   );
 
   return <FocusCtx.Provider value={api}>{children}</FocusCtx.Provider>;
@@ -545,4 +636,26 @@ export function FocusScope({
 /** Activate the focused control programmatically. For the gamepad's Accept; the keyboard does not need it. */
 export function useActivate() {
   return useContext(FocusCtx)?.activate ?? (() => {});
+}
+
+/**
+ * Claim the buttons that belong to a screen rather than to a control: B, and the bumpers.
+ *
+ * `depth` decides who answers when several screens are mounted — see [`SCREEN_DEPTH`]. Omit a
+ * handler and the next screen out gets that button, which is what lets the bumpers fall through
+ * to the Library/Settings switch on a screen that has no tabs of its own.
+ */
+export function useScreenActions(depth: number, actions: ScreenActions) {
+  const token = useId();
+  const ctx = useContext(FocusCtx);
+  // Held in a ref and refreshed every render, so callers can pass inline closures over current
+  // state without re-registering — and so a handler never fires against a stale snapshot.
+  const latest = useRef(actions);
+  latest.current = actions;
+
+  useEffect(() => {
+    if (!ctx) return undefined;
+    ctx.registerScreen({ token, depth, actions: latest });
+    return () => ctx.unregisterScreen(token);
+  }, [ctx, token, depth]);
 }

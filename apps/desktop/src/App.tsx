@@ -11,7 +11,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, asUiError, type LibraryEntry, type Status, type UiError } from './api';
 import { ErrorNote, Spinner, ToastProvider } from './components';
-import { FocusProvider, useFocusItem } from './focus';
+import { SCREEN_DEPTH, useFocusItem, useScreenActions } from './focus';
+
+const TABS: Tab[] = ['library', 'settings'];
 import { Library } from './views/Library';
 import { AssetBrowser } from './views/AssetBrowser';
 import { ApiKeyPanel, Settings } from './views/Settings';
@@ -35,6 +37,21 @@ export function App() {
   }, []);
 
   useEffect(refresh, [refresh]);
+
+  // The outermost screen, so it answers the bumpers only when nothing more specific does — and B
+  // only once every dialog and every inner screen has had its turn.
+  const cycle = useCallback(
+    (step: 1 | -1) =>
+      setTab((t) => TABS[(TABS.indexOf(t) + step + TABS.length) % TABS.length] ?? 'library'),
+    [],
+  );
+  useScreenActions(SCREEN_DEPTH.app, {
+    // Settings is a detour from the library, so B leaves it the way the eye expects. On the
+    // library itself there is nowhere further back, and B deliberately does nothing.
+    onBack: tab === 'settings' ? () => setTab('library') : undefined,
+    onTabPrev: () => cycle(-1),
+    onTabNext: () => cycle(1),
+  });
 
   if (error) return <Shell><ErrorNote error={error} onRetry={refresh} /></Shell>;
   if (!status) return <Shell><Spinner label="Starting up…" /></Shell>;
@@ -122,16 +139,14 @@ function NavTab({
  */
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <FocusProvider>
-      <ToastProvider>
-        <main>
-          <header>
-            <h1>Griddle</h1>
-            <p className="sub">Artwork for your Steam library.</p>
-          </header>
-          {children}
-        </main>
-      </ToastProvider>
-    </FocusProvider>
+    <ToastProvider>
+      <main>
+        <header>
+          <h1>Griddle</h1>
+          <p className="sub">Artwork for your Steam library.</p>
+        </header>
+        {children}
+      </main>
+    </ToastProvider>
   );
 }

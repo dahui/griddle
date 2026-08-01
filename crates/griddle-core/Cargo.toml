@@ -65,6 +65,10 @@ windows-sys = { version = "0.61", features = [
 
 [dev-dependencies]
 tempfile = "3"
+# So the examples can show this crate's own logging. Without it every `tracing::warn!` in a
+# harness goes nowhere, which is how `pad_probe` — a tool whose entire job is diagnosis — managed
+# to swallow the one line explaining why it saw no controller.
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # The SGDB client is tested against a local mock rather than the live API: 429/backoff, the
 # HTML-404 case and "no auth header on the CDN" are all impractical to provoke for real.
 wiremock = "0.6"
