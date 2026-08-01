@@ -135,9 +135,6 @@ pub struct Settings {
     #[serde(default, deserialize_with = "overrides_compat")]
     pub game_overrides: BTreeMap<u32, GameOverride>,
 
-    /// Resolved Steam module map, keyed by the build it was resolved against.
-    pub module_map: Option<ModuleMap>,
-
     /// Whether the library list shows only installed games, or everything Steam knows about.
     pub library_scope: LibraryScope,
 
@@ -183,7 +180,6 @@ impl Default for Settings {
             zoom: PerAssetType::new(),
             filters: None,
             game_overrides: BTreeMap::new(),
-            module_map: None,
             library_scope: LibraryScope::default(),
             library_sort: LibrarySort::default(),
         }
@@ -292,37 +288,6 @@ pub struct FilterState {
     /// Rust keyword, so the field name and the JSON key cannot match.
     #[serde(rename = "static")]
     pub statik: bool,
-}
-
-/// A cached resolution of Steam's webpack modules, valid only for one client build.
-///
-/// The point of storing `clstamp` alongside is the diff: when Steam updates, re-run every
-/// finder and compare against this, so a break becomes *"9 of 11 components re-found;
-/// AppContextMenu not found — use the F8 hotkey"* rather than a silent failure.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ModuleMap {
-    /// Steam's build stamp, readable from both `steamui/changelist.txt` and the live page.
-    pub clstamp: String,
-    /// Finder name → where it resolved.
-    pub entries: BTreeMap<String, ModuleRef>,
-    /// Finders that found nothing on this build.
-    #[serde(default)]
-    pub failed: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ModuleRef {
-    pub module_id: String,
-    /// The mangled export key, e.g. `HR`. Absent when the module itself is the value.
-    #[serde(default)]
-    pub export_key: Option<String>,
-}
-
-impl ModuleMap {
-    /// Whether this cache applies to the build now running.
-    pub fn matches(&self, clstamp: &str) -> bool {
-        self.clstamp == clstamp
-    }
 }
 
 impl Settings {
@@ -538,17 +503,6 @@ mod tests {
             ..Default::default()
         });
         s.tabs.order = vec!["Hero".into(), "Capsule".into()];
-        s.module_map = Some(ModuleMap {
-            clstamp: "10840511".into(),
-            entries: BTreeMap::from([(
-                "Focusable".into(),
-                ModuleRef {
-                    module_id: "28869".into(),
-                    export_key: Some("HR".into()),
-                },
-            )]),
-            failed: vec!["SliderField".into()],
-        });
 
         store.save(&s).unwrap();
         assert_eq!(store.load().unwrap(), s);
@@ -720,17 +674,6 @@ mod tests {
             b"{ this is not json",
             "and kept verbatim — it may be the only copy of the user's key"
         );
-    }
-
-    #[test]
-    fn the_module_map_only_matches_its_own_build() {
-        let m = ModuleMap {
-            clstamp: "10840511".into(),
-            entries: BTreeMap::new(),
-            failed: Vec::new(),
-        };
-        assert!(m.matches("10840511"));
-        assert!(!m.matches("10850000"), "a new Steam build invalidates it");
     }
 
     // -- key handling. DPAPI is Windows-only, so these are too. -------------------------

@@ -169,12 +169,18 @@ export interface ResetAll {
   failed: string[];
 }
 
-export interface ModuleReport {
-  clstamp: string;
-  total_modules: number;
-  resolved: number;
-  outcomes: [string, string][];
-  features: [string, boolean, string][];
+/**
+ * The live-apply self-test.
+ *
+ * Two fields on purpose. This replaced a module-map report that graded eleven structural finders
+ * against Steam's bundle — machinery the Big Picture deliverable needed and nothing else did.
+ * `SetCustomArtworkForApp` is bound by the CEF host rather than shipped in Steam's JS, so a
+ * `typeof` check is the entire compatibility surface that remains.
+ */
+export interface LiveApplyCheck {
+  /** Steam's build stamp. Shown so a bug report can name the build; never acted on. */
+  clstamp: string | null;
+  can_apply: boolean;
 }
 
 export interface Prefs {
@@ -248,5 +254,6 @@ export const api = {
     invoke<Prefs>('set_game_override', { appId, sgdbId, name }),
   searchGames: (term: string) => invoke<GameMatch[]>('search_games', { term }),
   currentGameMatch: (appId: number) => invoke<GameMatch | null>('current_game_match', { appId }),
-  resolveModules: () => invoke<ModuleReport>('resolve_modules'),
+  /** Connects to Steam and reports whether artwork applies without a restart. */
+  liveApplyCheck: () => invoke<LiveApplyCheck>('live_apply_check'),
 };

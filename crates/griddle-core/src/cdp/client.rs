@@ -170,24 +170,6 @@ impl Connection {
         })
     }
 
-    /// Register a script to run on every future document load in this target.
-    ///
-    /// Survives `SharedJSContext` reloading itself, which it does on some Steam navigations.
-    /// Paired with one immediate `evaluate` for the current document.
-    pub async fn add_script_on_new_document(&mut self, source: &str) -> Result<String, Error> {
-        let result = self
-            .send(
-                "Page.addScriptToEvaluateOnNewDocument",
-                serde_json::json!({ "source": source }),
-            )
-            .await?;
-        Ok(result
-            .get("identifier")
-            .and_then(|v| v.as_str())
-            .unwrap_or_default()
-            .to_owned())
-    }
-
     /// Send one command and wait for the response with the matching id.
     async fn send(
         &mut self,

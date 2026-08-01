@@ -11,17 +11,6 @@ mod state;
 
 use tauri::Manager as _;
 
-/// The Big Picture injection bundle, staged by `build.rs`.
-///
-/// Not used yet — M6. Referenced here so a missing or malformed bundle is a build-time failure
-/// rather than a runtime surprise during injection.
-const BPM_BUNDLE: &str = include_str!(concat!(env!("OUT_DIR"), "/bpm.js"));
-
-#[tauri::command]
-fn bpm_bundle_len() -> usize {
-    BPM_BUNDLE.len()
-}
-
 fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -76,10 +65,10 @@ fn main() {
             // one CSS Loader and Decky rely on. Behind an opt-in checkbox, the product shipped
             // switched off for anyone who never found it.
             //
-            // 🔑 It is disclosed rather than silent: the first-run screen says what the file is
-            // and that deleting it undoes everything. Creating it opens Steam's CEF debugging
-            // port on loopback at Steam's next start, which is a real (if modest) widening and
-            // belongs in that copy.
+            // 🔑 Created silently, explained on request: Settings → Diagnostics reports the
+            // sentinel's state through `Status::sentinel_explanation`. Creating it opens Steam's
+            // CEF debugging port on loopback at Steam's next start — a real, if modest, widening,
+            // and the same one CSS Loader and Decky have always carried.
             //
             // Re-run on every launch on purpose — `enable()` is idempotent and never truncates,
             // so this also repairs the file if something removed it. Millennium is known to.
@@ -99,7 +88,6 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            bpm_bundle_len,
             commands::status,
             commands::set_api_key,
             commands::clear_api_key,
@@ -118,7 +106,7 @@ fn main() {
             commands::clear_asset,
             commands::reset_all_plan,
             commands::reset_all_art,
-            commands::resolve_modules,
+            commands::live_apply_check,
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| {

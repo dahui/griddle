@@ -43,11 +43,10 @@ migration code. It is now defined **once**, in `settings`; `cache` re-exports it
 be separate constants kept in step by a hand-written comment, and a mismatch would have split the
 settings and the cache across two directories with nothing to report it.
 
-A Windows-native replacement for the **SteamGridDB Decky Loader plugin**. Two deliverables:
+A Windows-native replacement for the **SteamGridDB Decky Loader plugin**. **One deliverable:**
 
 - **A — desktop GUI.** Lists the Steam library, browses/applies SteamGridDB artwork. 1:1 with
-  the Decky plugin's feature set.
-- **B — in-Big-Picture UI.** Gamepad-navigable, injected into Steam's own React tree.
+  the Decky plugin's feature set, plus controller navigation.
 
 **The insight the whole design rests on:** the Decky plugin doesn't write files. It calls
 `SteamClient.Apps.SetCustomArtworkForApp` from inside Steam's JS realm, which is why art applies
@@ -56,8 +55,38 @@ Steam restart. That realm — `SharedJSContext` — is reachable from a native a
 CEF remote-debugging port. So we get Decky's behaviour from a normal Windows app, with no DLL
 injection and no Millennium.
 
+### 🔵 Deliverable B — the in-Big-Picture UI — was cut, 2026-07-31
+
+This document argued for it at length and the argument is kept below, because a document that
+quietly drops its own reasoning is worse than one that changes its mind out loud. What changed:
+
+**Every mechanism that makes a Decky plugin break on a Steam update was exclusive to B.** Live
+apply calls a native CEF binding Valve cannot rename without breaking their own client; the
+file-write floor needs no Steam internals at all. Injection needed mangled exports, structural
+finders, React context providers and focus trees — the entire fragile surface, in one deliverable
+that was **never built**: `apps/bpm` was 99 lines that rendered nothing.
+
+🔴 **The thing that turned "defer" into "delete"** was that Settings → Diagnostics shipped a
+*"Check Steam compatibility"* button reporting ✓/✕ on three features — Big Picture UI,
+Context-menu entry, Zoom slider — **none of which existed**. A green tick against a capability the
+app does not have is worse than no panel. Deferring would have kept shipping it.
+
+The S2 research below is deliberately **not** deleted: the mount recipe, the module ids, the five
+wrong turns and the focus-tree proof all stand, and M6 is recoverable from them plus git history.
+What is gone is code, not knowledge.
+
+The couch use case B existed for is being served instead by **controller navigation in the desktop
+app** — see the plan file. Griddle is added to Steam as a non-Steam shortcut and launched from Big
+Picture. 🔴 The pad is read **natively in Rust**, never through the webview's Gamepad API:
+[WebView2Feedback #5507](https://github.com/MicrosoftEdge/WebView2Feedback/issues/5507) is an open
+bug where **gamepad input dies in WebView2 apps whenever the Steam Overlay is attached**, which is
+exactly the launched-from-BPM case, and #3025 is a second open bug where the API only delivers
+events while DevTools holds focus. Steam Overlay hooks XInput/DirectInput/RawInput/WGI and injects
+an emulated Xbox pad into them, so a native read sees Steam Input's mapping by design — the same
+hooking that breaks WebView2's plumbing is what makes the native path work. `[VERIFIED-SOURCE]`
+
 - **Crates:** `griddle-core` (all logic) · `griddle-app` (thin Tauri shell)
-- **Packages:** `@griddle/shared` (logic shared desktop ↔ BPM) · `apps/desktop` · `apps/bpm`
+- **Packages:** `@griddle/shared` (logic shared with the UI) · `apps/desktop`
 - **License:** GPL-3.0-or-later — load-bearing, not cosmetic. It makes `decky-steamgriddb`,
   `@decky/ui`, and Steam Art Manager (all GPL) legally *adaptable* rather than merely readable.
 
@@ -505,7 +534,8 @@ architecture.
 | **M2** | **Offline layer done**, including the `shortcuts.vdf` writer. Verified against the real install with `cargo run -p griddle-core --example scan`. |
 | **M3** | 🟢 **The app runs.** Library list with current art, five asset tabs, SteamGridDB browsing with infinite scroll, apply with the live→file ladder, first-run key flow, and a diagnostics screen. |
 | **M4** | 🟢 **Default art, library scope, and filter parity.** Steam's own artwork behind the custom art (local cache → CDN → placeholder); an Installed / All games toggle with sorting; the full SteamGridDB filter set wired through; and the "wrong game?" picker. The asset tabs now render only inside a game. |
-| **Next** | The rest of M4 — details modal, zoom slider, logo positioner, non-Steam icon flow — then M5/M6. |
+| **M6** | 🔵 **Cut.** The Big Picture UI is not being built — see the header. `apps/bpm`, `cdp::modules` and the eleven finders are deleted; the research stays. |
+| **Next** | Controller navigation (spatial focus grid + native gamepad read), then the rest of M4 — details modal, zoom slider, logo positioner, non-Steam icon flow. |
 
 **The M4 changes worth remembering**, all detailed above: `librarycache` is indexed by
 `appinfo.vdf`, not by filename; the CDN has its own name table that is *not* the disk name;
@@ -622,7 +652,7 @@ flash, the wart this project exists to remove.
 | `cdp::target` | Finds `SharedJSContext` and **refuses anything that is not Steam** — port 8080 is a very common dev-server port. |
 | `cdp::client` | Minimal CDP: `Runtime.evaluate` + `addScriptToEvaluateOnNewDocument`. A JS throw is a distinct error, not silent success. |
 | `cdp::SteamJs` | `probe` / `apply_artwork` / `clear_artwork` / `clstamp` / `app_name`. The live-apply path. |
-| `cdp::modules` | The structural finders, the CLSTAMP diff, and per-feature degradation. **The reliability idea.** |
+| ~~`cdp::modules`~~ | 🔵 **Deleted with deliverable B.** Held the eleven structural finders, the CLSTAMP diff and per-feature degradation. All eleven targeted React components only an injected UI needed; see the reliability section for why removing the fragile subsystem beat monitoring it. |
 
 ### `griddle-app` — the desktop shell
 
@@ -1251,6 +1281,11 @@ tree that owns the focus contexts. `[INFERRED — VERIFY]`
 
 ### 🟢 S2 PASSES — the Big Picture deliverable is viable
 
+🔵 **Kept after the deliverable was cut.** This proved injection *possible*, and the finding stands
+— it just is not being used. It is preserved in full, wrong turns included, so that reviving M6
+later means re-reading rather than re-deriving. The code is in git history; only this survives in
+the tree.
+
 `[VERIFIED-BOX @ CLSTAMP 10840511, 2026-07-27 — probes 13-18]`
 
 Our `Focusable`, mounted through Steam's own `ModalManager`, joins Steam's gamepad focus
@@ -1621,21 +1656,35 @@ if a future build moves this.
 
 ---
 
-## The reliability idea worth protecting
+## 🔵 The reliability idea — solved by subtraction instead
 
-Steam's export names are mangled per build, so module discovery is structural and inherently
-fragile. That's why Decky plugins feel unreliable after a Steam update — they break silently.
-
-But `CLSTAMP` is readable from *both* `changelist.txt` on disk and the live page. So: cache the
-resolved module map keyed by build stamp; on a stamp change, re-run every finder and **diff
-against the cached map**. A silent break becomes:
+**The original argument, kept because it was a good one and the resolution is the interesting
+part.** Steam's export names are mangled per build, so module discovery is structural and
+inherently fragile — which is why Decky plugins feel unreliable after a Steam update: they break
+silently. But `CLSTAMP` is readable from *both* `changelist.txt` on disk and the live page. So:
+cache the resolved module map keyed by build stamp; on a stamp change, re-run every finder and
+**diff against the cached map**, turning a silent break into
 
 > *"Steam updated to build 10850000. 9 of 11 components re-found; `AppContextMenu` and
 > `SliderField` not found — the context-menu entry is unavailable, use the F8 hotkey."*
 
-~100 lines. Nothing in Decky or Millennium does this, and it is the main reason to build this
-rather than keep fighting the plugin. Each finder is independently nullable and each feature
-declares which it needs, so losing `SliderField` costs the zoom slider, not the app.
+~100 lines, nothing in Decky or Millennium does it, and it was called *the main reason to build
+this rather than keep fighting the plugin*.
+
+🔴 **It was built, it worked, and it has been deleted — because the problem it solved was created
+entirely by deliverable B.** Every one of the eleven finders and all three features it graded were
+injection targets. With B cut, the diff had nothing left to report: the desktop app discovers no
+Steam modules at all. `SetCustomArtworkForApp` is bound by the CEF host, not shipped in Steam's
+bundle, so **there is nothing a Steam update can silently take away.**
+
+The lesson worth keeping is the shape of the trade. A monitoring system that reports on a fragile
+subsystem is a real improvement over one that fails silently — but **removing the fragile
+subsystem beats monitoring it**, and it is easy to get attached to the clever instrumentation and
+forget to ask whether the thing being instrumented needs to exist. `Readiness` is now two fields
+and one `typeof` check.
+
+What survives of the idea: `cdp::mod` still reads `CLSTAMP` and Diagnostics still shows it, so a
+bug report can name the build it was seen on. It gates nothing.
 
 ---
 
@@ -1644,12 +1693,13 @@ declares which it needs, so losing `SliderField` costs the zoom slider, not the 
 | Divergence | Why |
 |---|---|
 | **User supplies their own SGDB API key** | Decky's is hardcoded with an explicit *"attempting to use this in your own projects will cause you to be automatically banned and blacklisted"*. Non-negotiable. `[VERIFIED-SOURCE]` |
-| **BPM UI is a modal, not a route** | Decky registers a route because it *has* `routerHook`. We'd have to patch Steam's minified router. `showModal` is a smaller, more stable target with the same UX. |
+| **No in-Big-Picture UI at all** | 🔵 Cut 2026-07-31 — see the header. Decky gets one for free from `routerHook`; we would have had to inject into Steam's React tree, which is the entire source of the fragility this product exists to avoid. The couch case is served by controller-navigating the desktop window instead, launched from BPM as a non-Steam shortcut. |
 | **Installed games, or everything `localconfig.vdf` knows (518 here)** | Fully offline; no Steam Web API. 🔴 **Neither is an ownership list** — `licensecache` is encrypted — so "All games" is labelled as such and never as "owned". |
 | **One filter set for all five tabs**, not `filters_<type>` | Decky keys filters per asset type. Re-picking "no adult content" on five tabs is busywork, not a feature. Per-endpoint vocabularies (sizes, styles) are handled by **clamping at query time**, so a selection another tab cannot show is kept rather than discarded. |
 | **No MOTD, donation modal, or tutorial video** | Decky-store furniture. The first-run API-key flow replaces the tutorial. |
-| **Library style tweaks ship behind "Experimental"** | Square Capsules / Matching Recents / Capsule Glow patch Steam's own library rendering *globally* — the most fragile surface in the product. Same features, honest labelling, individually disableable. |
-| **Plus, not in Decky: a diagnostics screen and the build-stamped module map** | The reliability gap is the actual reason to build this. |
+| **Library style tweaks ship behind "Experimental"** | Square Capsules / Matching Recents / Capsule Glow patch Steam's own library rendering *globally* — the most fragile surface in the product. Same features, honest labelling, individually disableable. ⚠️ **Open question after the B cut:** these need the same structural module discovery that was just deleted, so shipping them means bringing that machinery back for them alone. Not yet decided. |
+| **Plus, not in Decky: a diagnostics screen** | It reports the environment — Steam root, account, whether live apply is available — because almost every failure here is environmental. The build-stamped module map that used to sit beside it is gone; see the reliability section above. |
+| **Plus, not in Decky: controller navigation on the desktop window** | Decky is already gamepad-native inside Steam's shell. We get there by making our own window drivable by a pad, which costs one spatial focus model and no Steam internals whatsoever. |
 
 Matching Decky's restraint, explicitly **not** added: favorites, download history,
 upload-to-SGDB, bulk apply, HeroBlur editing. Bulk apply in particular is the fastest route to

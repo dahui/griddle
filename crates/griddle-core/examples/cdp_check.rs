@@ -86,11 +86,10 @@ async fn main() {
     };
     println!("  CLSTAMP (live) : {:?}", readiness.clstamp);
     println!("  apply API      : {}", readiness.apply_api);
-    println!("  webpack hook   : {}", readiness.webpack);
     println!("  can apply live : {}", readiness.can_apply());
-    println!("  can inject UI  : {}", readiness.can_inject_ui());
 
-    // The cross-check the module map depends on.
+    // Not load-bearing any more — nothing in this product varies by build — but a mismatch would
+    // mean we are talking to a different client than the one installed, which is worth seeing.
     println!("\n== build stamp: page vs disk ==");
     let disk = install.clstamp_from_disk();
     match (&readiness.clstamp, &disk) {
@@ -122,51 +121,20 @@ async fn main() {
         Ok(v) => println!("  🔴 a throw was NOT reported; got {v:?}"),
     }
 
-    // The first real exercise of the build-stamped module map: the spike measured these
-    // against CLSTAMP 10840511, and Steam has since updated.
-    println!("\n== module finders ==");
-    match steam.resolve_modules().await {
-        Ok(resolution) => {
-            println!(
-                "  build {} — {} modules, {} unreadable",
-                resolution.clstamp, resolution.total_modules, resolution.unreadable
-            );
-            println!(
-                "  {}/{} finders resolved",
-                resolution.usable(),
-                resolution.outcomes.len()
-            );
-            for (name, outcome) in &resolution.outcomes {
-                let detail = match outcome {
-                    griddle_core::cdp::modules::Outcome::Found { ids } => {
-                        format!("ok      {}", ids.join(", "))
-                    }
-                    griddle_core::cdp::modules::Outcome::Ambiguous { ids } => {
-                        format!("AMBIG   {} (predicate too loose)", ids.join(", "))
-                    }
-                    griddle_core::cdp::modules::Outcome::NotFound => "NOT FOUND".to_string(),
-                };
-                println!("    {name:<20} {detail}");
-            }
-
-            println!("\n== features ==");
-            for feature in griddle_core::cdp::modules::FEATURES {
-                if feature.available(&resolution) {
-                    println!("    {:<22} available", feature.name);
-                } else {
-                    println!(
-                        "    {:<22} UNAVAILABLE — {}",
-                        feature.name, feature.fallback
-                    );
-                }
-            }
-            println!(
-                "    {:<22} available (needs no modules at all)",
-                "Live apply"
-            );
+    // There used to be a module-finder sweep here, resolving eleven of Steam's own React
+    // components by structural search. It went with the Big Picture deliverable, and its absence
+    // is the point: `SetCustomArtworkForApp` is bound by the CEF host rather than by Steam's
+    // bundle, so a build bump has nothing left in this product to break.
+    println!("\n== what a Steam update can take away ==");
+    println!(
+        "    {:<22} {}",
+        "Live apply",
+        if readiness.can_apply() {
+            "available — a native CEF binding, not a discovered module"
+        } else {
+            "UNAVAILABLE — artwork will be written to disk and need a Steam restart"
         }
-        Err(e) => println!("  {e}"),
-    }
+    );
 
     println!("\nread-only: nothing was applied or written");
 }

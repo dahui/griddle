@@ -289,11 +289,11 @@ impl Client {
 
     /// Fetch asset bytes from the CDN.
     ///
-    /// **Sends no `Authorization` header.** Also the reason this exists in Rust at all: the
-    /// injected BPM bundle cannot do it. A plain `fetch` from `SharedJSContext` to
-    /// `cdn2.steamgriddb.com` fails CORS, and `mode:'no-cors'` yields an opaque response whose
-    /// body cannot be read `[VERIFIED-BOX 2026-07-27]`. So Rust downloads and hands over
-    /// base64.
+    /// **Sends no `Authorization` header.** Also the reason the download lives in Rust at all:
+    /// applying artwork live means handing base64 to Steam's own realm, and JS in that realm
+    /// cannot fetch the bytes itself — a plain `fetch` to `cdn2.steamgriddb.com` fails CORS, and
+    /// `mode:'no-cors'` yields an opaque response whose body cannot be read
+    /// `[VERIFIED-BOX 2026-07-27]`. So Rust downloads and hands over base64.
     pub async fn download(&self, url: &str) -> Result<Vec<u8>, Error> {
         let parsed = Url::parse(url).map_err(|e| Error::BadUrl(e.to_string()))?;
         let permit = self

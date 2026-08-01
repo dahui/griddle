@@ -16,15 +16,15 @@
 //!
 //! # Ordering, and why it is not negotiable
 //!
-//! 1. The sentinel must exist **and Steam must have started after it was created**. Creating
-//!    it is always an explicit user action; we never create it silently.
+//! 1. The sentinel must exist **and Steam must have started after it was created**. It is
+//!    created at startup rather than offered as a choice, because live apply is the point of
+//!    the app; Settings → Diagnostics explains it to anyone who looks.
 //! 2. The listener on the port must identify as Steam before anything is evaluated.
 //! 3. `SteamClient.Apps.SetCustomArtworkForApp` must be feature-detected with `typeof` before
 //!    use. All four artwork functions report `.length === 0` because they are native bindings,
 //!    so **arity is not a usable signal** — checking `fn.length` would reject working builds.
 
 pub mod client;
-pub mod modules;
 pub mod sentinel;
 pub mod target;
 
@@ -58,33 +58,29 @@ pub enum Error {
 
     #[error("refusing to apply empty image data")]
     EmptyImage,
-
-    /// The module scan could not even start. Distinct from "nothing matched", which would
-    /// otherwise look like Steam had removed every component at once.
-    #[error("could not scan Steam's modules: {0}")]
-    ModuleScan(String),
 }
 
 /// What the readiness probe found.
+///
+/// Deliberately two fields. An earlier version also reported whether `webpackChunksteamui` was
+/// present, because the Big Picture deliverable needed to discover Steam's own React components
+/// by structural search. That deliverable is cut, and with it the only thing in this product that
+/// depended on Steam's internals: `SetCustomArtworkForApp` is a native CEF binding Valve cannot
+/// rename without breaking their own client. **There is nothing left here that a Steam update can
+/// silently take away.**
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
 pub struct Readiness {
-    /// Steam's build stamp, e.g. `10840511`. The cache key for the module map.
+    /// Steam's build stamp, e.g. `10840511`. Reported in diagnostics so a bug report can name
+    /// the build it was seen on.
     pub clstamp: Option<String>,
     /// `typeof SteamClient.Apps.SetCustomArtworkForApp === 'function'`.
     pub apply_api: bool,
-    /// `Array.isArray(window.webpackChunksteamui)` — the module-discovery hook.
-    pub webpack: bool,
 }
 
 impl Readiness {
     /// Whether live apply can be used at all.
     pub fn can_apply(&self) -> bool {
         self.apply_api
-    }
-
-    /// Whether the Big Picture UI can be injected.
-    pub fn can_inject_ui(&self) -> bool {
-        self.apply_api && self.webpack
     }
 }
 
@@ -113,15 +109,14 @@ impl SteamJs {
     /// Feature-detect, rather than assume.
     ///
     /// `SharedJSContext` exists long before it is useful — it appears within a second of Steam
-    /// starting, while `SteamClient` is populated later. So this is also the readiness gate,
-    /// and it doubles as the check that decides whether to degrade to file-writing *before*
-    /// anything is injected.
+    /// starting, while `SteamClient` is populated later. So this is also the readiness gate: it
+    /// is what decides whether to apply live or degrade to writing files, *before* any artwork
+    /// is sent.
     pub async fn probe(&mut self) -> Result<Readiness, Error> {
         let expr = r#"
             (() => ({
                 clstamp: (typeof CLSTAMP !== 'undefined') ? String(CLSTAMP) : null,
                 apply_api: typeof window.SteamClient?.Apps?.SetCustomArtworkForApp === 'function',
-                webpack: Array.isArray(window.webpackChunksteamui),
             }))()
         "#;
         Ok(self.connection.evaluate::<Readiness>(expr).await?)
@@ -129,8 +124,7 @@ impl SteamJs {
 
     /// Steam's build stamp, which is also readable from `steamui/changelist.txt` on disk.
     ///
-    /// Being able to read it from both is what makes the build-stamped module map work: cache
-    /// the resolved modules against a stamp, and on a change re-run every finder and diff.
+    /// Reported in diagnostics rather than acted on. Nothing in this product now varies by build.
     pub async fn clstamp(&mut self) -> Result<Option<String>, Error> {
         Ok(self
             .connection
@@ -179,24 +173,6 @@ impl SteamJs {
             asset as u32
         );
         Ok(self.connection.evaluate_unit(&expr).await?)
-    }
-
-    /// Run every module finder against the live bundle.
-    ///
-    /// One round trip: the script captures the registry, reads every module's source **without
-    /// executing it**, and returns the matches. See [`modules`] for why the finders are
-    /// structural.
-    pub async fn resolve_modules(&mut self) -> Result<modules::Resolution, Error> {
-        let clstamp = self.clstamp().await?.unwrap_or_default();
-        let script = modules::resolve_script(modules::FINDERS);
-        let scan: modules::RawScan = self.connection.evaluate(&script).await?;
-
-        // A capture failure must not be reported as "every component is missing" — that would
-        // send someone hunting for a Steam change that never happened.
-        if let Some(err) = scan.error {
-            return Err(Error::ModuleScan(err));
-        }
-        Ok(modules::interpret(&clstamp, &scan, modules::FINDERS))
     }
 
     /// Whether Steam knows this appid, and what it calls it. Useful for confirming a shortcut
@@ -313,43 +289,44 @@ mod tests {
     }
 
     #[test]
-    fn readiness_distinguishes_apply_from_ui_injection() {
-        // Losing webpack costs the Big Picture UI but not live apply, and the two degrade
-        // independently.
+    fn apply_readiness_turns_only_on_the_api_being_present() {
+        // The one signal that decides live apply versus the file-write floor. A missing build
+        // stamp is not a reason to degrade — it is cosmetic, and an older client that reports no
+        // CLSTAMP can still apply artwork perfectly well.
         let full = Readiness {
-            clstamp: Some("10840511".into()),
+            clstamp: Some("10856968".into()),
             apply_api: true,
-            webpack: true,
         };
-        assert!(full.can_apply() && full.can_inject_ui());
+        assert!(full.can_apply());
 
-        let no_webpack = Readiness {
-            webpack: false,
+        let no_stamp = Readiness {
+            clstamp: None,
             ..full.clone()
         };
-        assert!(no_webpack.can_apply(), "apply does not need webpack");
-        assert!(!no_webpack.can_inject_ui());
+        assert!(
+            no_stamp.can_apply(),
+            "the build stamp is reported, not gating"
+        );
 
         let nothing = Readiness {
             clstamp: None,
             apply_api: false,
-            webpack: false,
         };
-        assert!(!nothing.can_apply() && !nothing.can_inject_ui());
+        assert!(!nothing.can_apply());
     }
 
     #[test]
     fn readiness_parses_the_probe_shape() {
         let r: Readiness = serde_json::from_value(serde_json::json!({
-            "clstamp": "10840511", "apply_api": true, "webpack": true
+            "clstamp": "10856968", "apply_api": true
         }))
         .unwrap();
-        assert_eq!(r.clstamp.as_deref(), Some("10840511"));
-        assert!(r.can_inject_ui());
+        assert_eq!(r.clstamp.as_deref(), Some("10856968"));
+        assert!(r.can_apply());
 
         // Steam still starting: the realm exists but SteamClient is not populated yet.
         let early: Readiness = serde_json::from_value(serde_json::json!({
-            "clstamp": null, "apply_api": false, "webpack": false
+            "clstamp": null, "apply_api": false
         }))
         .unwrap();
         assert!(!early.can_apply());

@@ -1,5 +1,5 @@
 {
-  "name": "sgdb-artwork-manager",
+  "name": "griddle",
   "private": true,
   "version": "0.0.0",
   "license": "GPL-3.0-or-later",
@@ -7,8 +7,7 @@
   "scripts": {
     "dev": "bun run --cwd apps/desktop dev",
     "build:desktop": "bun run --cwd apps/desktop build",
-    "build:bpm": "bun run --cwd apps/bpm build",
-    "build": "bun run build:shared && bun run build:desktop && bun run build:bpm",
+    "build": "bun run build:shared && bun run build:desktop",
     "build:shared": "bun run --cwd packages/shared build",
     "typecheck": "tsc --build --force",
     "test": "bun test",

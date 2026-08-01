@@ -19,7 +19,7 @@
 use crate::error::{Kind, UiError};
 use crate::state::AppState;
 use griddle_core::appid::AppId;
-use griddle_core::cdp::{self, Endpoint, Sentinel, SteamJs};
+use griddle_core::cdp::{Endpoint, Sentinel, SteamJs};
 use griddle_core::grid::names::AssetType;
 use griddle_core::grid::store::GridDir;
 use griddle_core::settings::{LibraryScope, LibrarySort};
@@ -1105,58 +1105,36 @@ pub async fn reset_all_art(state: State<'_, AppState>) -> Res<ResetAll> {
 
 // -- diagnostics ----------------------------------------------------------------------------
 
+/// The result of the live-apply self-test.
+///
+/// 🔴 This replaced a module-map scan that reported ✓/✕ against eleven structural finders and
+/// three named features. All three features belonged to the Big Picture deliverable, which is
+/// cut — so the panel was reporting on capabilities the app does not have and cannot lose.
+///
+/// What remains is the only thing the desktop app actually depends on from Steam's realm, and it
+/// is deliberately a single `typeof` check: `SetCustomArtworkForApp` is bound by the CEF host,
+/// not by Steam's bundle, so there is no build-specific discovery left to do.
 #[derive(Debug, Serialize)]
-pub struct ModuleReport {
-    pub clstamp: String,
-    pub total_modules: usize,
-    pub resolved: usize,
-    pub outcomes: Vec<(String, String)>,
-    pub features: Vec<(String, bool, String)>,
+pub struct LiveApplyCheck {
+    /// Steam's build stamp. Reported so a bug report can name the build, never acted on.
+    pub clstamp: Option<String>,
+    pub can_apply: bool,
 }
 
-/// Re-resolve Steam's module map and report per-feature availability.
+/// Connect to Steam's realm and confirm artwork can be applied without a restart.
 ///
 /// The diagnostics screen is a shipped feature because most failures in this product are
-/// environmental. This is also the manual test harness.
+/// environmental — Steam not running, a port taken, the sentinel removed. This is the one check
+/// that distinguishes "live apply works" from "artwork will be written to disk and need a
+/// restart", which is the only difference the user can actually feel.
 #[tauri::command]
-pub async fn resolve_modules(state: State<'_, AppState>) -> Res<ModuleReport> {
-    let (mut steam, _) = SteamJs::connect(&state.http, &Endpoint::default())
+pub async fn live_apply_check(state: State<'_, AppState>) -> Res<LiveApplyCheck> {
+    let (_, readiness) = SteamJs::connect(&state.http, &Endpoint::default())
         .await
         .map_err(UiError::from)?;
-    let resolution = steam.resolve_modules().await.map_err(UiError::from)?;
-
-    let outcomes = resolution
-        .outcomes
-        .iter()
-        .map(|(name, outcome)| {
-            let text = match outcome {
-                cdp::modules::Outcome::Found { ids } => ids.join(", "),
-                cdp::modules::Outcome::Ambiguous { ids } => {
-                    format!("ambiguous: {}", ids.join(", "))
-                }
-                cdp::modules::Outcome::NotFound => "not found".to_owned(),
-            };
-            (name.clone(), text)
-        })
-        .collect();
-
-    let features = cdp::modules::FEATURES
-        .iter()
-        .map(|f| {
-            (
-                f.name.to_owned(),
-                f.available(&resolution),
-                f.fallback.to_owned(),
-            )
-        })
-        .collect();
-
-    Ok(ModuleReport {
-        clstamp: resolution.clstamp.clone(),
-        total_modules: resolution.total_modules,
-        resolved: resolution.usable(),
-        outcomes,
-        features,
+    Ok(LiveApplyCheck {
+        clstamp: readiness.clstamp.clone(),
+        can_apply: readiness.can_apply(),
     })
 }
 

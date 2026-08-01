@@ -1,10 +1,8 @@
 //! M1 spike harness — talks to a live Steam client over the CEF debugger.
 //!
 //! ```powershell
-//! cargo run -p griddle-core --example cdp_probe            # env: realm, apply API, CSP, webpack
+//! cargo run -p griddle-core --example cdp_probe             # env: realm, apply API, CSP
 //! cargo run -p griddle-core --example cdp_probe -- --status  # no connection, just report state
-//! cargo run -p griddle-core --example cdp_probe -- --modules # module map + Steam's own call sites
-//! cargo run -p griddle-core --example cdp_probe -- --bpm     # mount into the focus tree (BPM open)
 //! cargo run -p griddle-core --example cdp_probe -- --apply   # S3 live apply — WRITES, see below
 //! ```
 //!
@@ -164,16 +162,14 @@ fn run_probe(ws_url: &str) -> Result<serde_json::Value, String> {
     let args: Vec<String> = std::env::args().collect();
     let selected = |name: &str| args.iter().any(|a| a == name);
 
-    // Four probes survive the M1 spike; the dead ends were removed once their findings were
-    // recorded in CLAUDE.md. Each of these is still worth re-running after a Steam update.
-    let probe_js = if selected("--modules") {
-        include_str!("modules.js") // module map, Steam's own artwork call sites, ModalManager
-    } else if selected("--apply") {
+    // The probes that survive; the dead ends were removed once their findings were recorded in
+    // CLAUDE.md. Each of these is still worth re-running after a Steam update.
+    //
+    // `--modules`, `--bpm` and `--menu` went with the Big Picture deliverable: they resolved
+    // Steam's own React components by structural search, which nothing in this product now does.
+    // Their findings, and the five wrong turns that produced them, remain in CLAUDE.md.
+    let probe_js = if selected("--apply") {
         include_str!("apply.js") // S3: live artwork apply (WRITES — back up grid/ first)
-    } else if selected("--bpm") {
-        include_str!("bpm_mount.js") // S2: mount into Steam's focus tree (needs BPM open)
-    } else if selected("--menu") {
-        include_str!("context_menu.js") // S5: library context-menu entry point
     } else if selected("--animated") {
         include_str!("animated.js") // S4: animated WebP/APNG labelled "png" (WRITES)
     } else if selected("--enum") {

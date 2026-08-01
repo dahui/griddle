@@ -3,7 +3,7 @@ import { useState } from 'react';
 import {
   api,
   asUiError,
-  type ModuleReport,
+  type LiveApplyCheck,
   type ResetPlan,
   type Status,
   type UiError,
@@ -249,21 +249,30 @@ export function ApiKeyPanel({
 /**
  * Diagnostics is a shipped feature, not a developer tool.
  *
- * Almost every failure in this product is environmental — Steam not running, a port taken, a
- * client update moving things. This screen is the difference between an actionable bug report
- * and "it stopped working".
+ * Almost every failure in this product is environmental — Steam not running, a port taken, the
+ * sentinel removed. This screen is the difference between an actionable bug report and "it
+ * stopped working".
+ *
+ * 🔴 The check used to be **"Check Steam compatibility"**, grading eleven structural module
+ * finders and reporting ✓/✕ against three named features: *Big Picture UI*, *Context-menu entry*
+ * and *Zoom slider*. All three belonged to the Big Picture deliverable, which was never built and
+ * is now cut — so the panel was reporting availability for capabilities the app does not have.
+ * A green tick against a feature that does not exist is worse than no panel at all.
+ *
+ * What replaces it is the one thing the user can actually feel: whether artwork applies without
+ * restarting Steam, or whether it gets written to disk and needs one.
  */
 function DiagnosticsPanel({ status }: { status: Status }) {
-  const [report, setReport] = useState<ModuleReport | null>(null);
+  const [check, setCheck] = useState<LiveApplyCheck | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<UiError | null>(null);
 
   async function scan() {
     setBusy(true);
     setError(null);
-    setReport(null);
+    setCheck(null);
     try {
-      setReport(await api.resolveModules());
+      setCheck(await api.liveApplyCheck());
     } catch (e: unknown) {
       setError(asUiError(e));
     } finally {
@@ -299,45 +308,31 @@ function DiagnosticsPanel({ status }: { status: Status }) {
 
       <div className="row" style={{ marginTop: '1rem' }}>
         <button type="button" className="ghost" disabled={busy} onClick={() => void scan()}>
-          {busy ? 'Scanning…' : 'Check Steam compatibility'}
+          {busy ? 'Testing…' : 'Test live apply'}
         </button>
       </div>
 
-      {busy && <Spinner label="Checking Steam…" />}
+      {busy && <Spinner label="Connecting to Steam…" />}
+      {/* A failed connection is the *expected* outcome when Steam is closed or has not restarted
+          since the sentinel appeared, so it is reported here as information rather than as a
+          fault. The apply path still works either way — it writes files instead. */}
       {error && <ErrorNote error={error} />}
 
-      {report && (
-        <>
-          <p className="hint">
-            Steam build {report.clstamp} — {report.resolved} of {report.outcomes.length}{' '}
-            components found in {report.total_modules} modules.
-          </p>
-          <ul className="features">
-            {report.features.map(([name, ok, fallback]) => (
-              <li key={name}>
-                <span className={ok ? 'ok' : 'bad'}>{ok ? '✓' : '✕'}</span> {name}
-                {!ok && <span className="hint"> — {fallback}</span>}
-              </li>
-            ))}
-            <li>
-              <span className="ok">✓</span> Live apply
-              <span className="hint"> — built into Steam, so updates don&rsquo;t break it</span>
-            </li>
-          </ul>
-          <details>
-            <summary>Component detail</summary>
-            <dl className="modules">
-              {report.outcomes.map(([name, detail]) => (
-                <div key={name}>
-                  <dt>{name}</dt>
-                  <dd>
-                    <code>{detail}</code>
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </details>
-        </>
+      {check && (
+        <ul className="features">
+          <li>
+            <span className={check.can_apply ? 'ok' : 'bad'}>{check.can_apply ? '✓' : '✕'}</span>{' '}
+            Live apply
+            <span className="hint">
+              {check.can_apply
+                ? ' — artwork changes immediately, with no Steam restart'
+                : " — Steam's artwork API isn't available; artwork will be written to disk and needs a Steam restart to show"}
+            </span>
+          </li>
+          {/* Not a capability, and deliberately not a ✓/✕ row: it is the build number to quote in
+              a bug report. Nothing in this app varies by it. */}
+          {check.clstamp && <li className="hint">Steam build {check.clstamp}</li>}
+        </ul>
       )}
     </section>
   );

@@ -5,9 +5,8 @@
 //! - [`query`] — which endpoint to ask and with what filters.
 //! - [`client`] — the HTTP client. **The only place the key is used.**
 //!
-//! The key never leaves Rust. Both frontends search over RPC instead of holding it: the
-//! injected BPM bundle shares a JS realm with Valve's own code and CSS Loader's, and rate
-//! limiting only works as a guarantee if it lives in exactly one place.
+//! The key never leaves Rust. The frontend searches over `invoke` rather than holding it, and
+//! rate limiting only works as a guarantee if it lives in exactly one place.
 
 pub mod client;
 pub mod key;
