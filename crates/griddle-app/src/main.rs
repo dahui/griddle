@@ -9,7 +9,7 @@ mod commands;
 mod error;
 mod state;
 
-use tauri::Manager as _;
+use tauri::{Emitter as _, Manager as _};
 
 fn main() {
     tracing_subscriber::fmt()
@@ -82,6 +82,49 @@ fn main() {
                         tracing::warn!(error = %e, "could not enable live apply; artwork will be written to disk instead");
                     }
                 }
+            }
+
+            // Controller navigation.
+            //
+            // 🔴 Read natively rather than through the webview's Gamepad API, which two open
+            // WebView2 bugs rule out — #5507 kills gamepad input in WebView2 apps whenever the
+            // Steam Overlay is attached, and launching Griddle from Big Picture always attaches
+            // it. See `griddle_core::input`.
+            //
+            // Gated on window focus, because this reads the pad *globally*: without the gate,
+            // playing a game with a controller would also be driving Griddle in the background.
+            let gate = griddle_core::input::FocusGate::new(true);
+
+            // 🔴 Taken from the window list rather than looked up by the label `"main"`. The
+            // label is not set in `tauri.conf.json`, so it is only `"main"` by Tauri's default —
+            // and an `if let Some(...)` on a wrong guess starts no input thread **and says
+            // nothing**, which surfaces as "my controller does nothing" with no way to tell that
+            // from a driver problem. There is exactly one window; take it and complain if not.
+            match app.webview_windows().values().next().cloned() {
+                Some(window) => {
+                    tracing::info!(
+                        label = window.label(),
+                        pads = ?griddle_core::input::connected(),
+                        "controller navigation starting"
+                    );
+
+                    let for_events = gate.clone();
+                    window.on_window_event(move |event| {
+                        if let tauri::WindowEvent::Focused(focused) = event {
+                            for_events.set(*focused);
+                        }
+                    });
+
+                    // The handle is dropped, which detaches the thread deliberately: it should
+                    // live for the whole process, and there is no shutdown to join it at.
+                    let emitter = window.clone();
+                    drop(griddle_core::input::spawn(gate, move |action| {
+                        if let Err(e) = emitter.emit("nav", action) {
+                            tracing::debug!(error = %e, "could not deliver a controller action");
+                        }
+                    }));
+                }
+                None => tracing::warn!("no webview window; controller navigation is unavailable"),
             }
 
             app.manage(state);

@@ -27,6 +27,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import {
   firstFocusable,
   flowPosition,
@@ -36,6 +37,35 @@ import {
   type GridItem,
   type Layout,
 } from '@griddle/shared';
+
+/**
+ * The one navigation vocabulary, shared by the keyboard and the controller.
+ *
+ * Kept identical to `griddle_core::input::Action`'s serde representation — Rust emits these exact
+ * strings. Adding a variant means adding it in both places.
+ */
+export type NavAction = Direction | 'accept' | 'back' | 'menu';
+
+/**
+ * Open a control's context menu from the keyboard or pad, which have no cursor.
+ *
+ * The menu positions itself from `clientX`/`clientY`, so the anchor is synthesised from the
+ * element's own box — bottom-left of it, where a menu opened by clicking there would appear. A
+ * plain `new MouseEvent('contextmenu')` carries 0,0 and would pin every menu to the top-left
+ * corner of the window.
+ */
+function openContextMenu(el: HTMLElement | undefined) {
+  if (!el) return;
+  const box = el.getBoundingClientRect();
+  el.dispatchEvent(
+    new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: Math.round(box.left + 8),
+      clientY: Math.round(box.bottom - 8),
+    }),
+  );
+}
 
 /** Where an item sits: fixed for bars and stacks, flow for a wrapping grid. */
 type Placement = { kind: 'fixed'; row: number; col: number } | { kind: 'flow'; index: number };
@@ -268,6 +298,14 @@ export function FocusProvider({ children }: { children: ReactNode }) {
     entries.current.get(focusedIdRef.current)?.el.click();
   }, []);
 
+  // Mirrors of the two pieces of state `dispatch` reads. They exist so `dispatch` can be a
+  // *stable* callback: it is handed to a Tauri event subscription, and a new identity on every
+  // focus change would tear that subscription down and rebuild it several times a second.
+  const scopesRef = useRef<Scope[]>([]);
+  scopesRef.current = scopes;
+  const layoutRef = useRef<Layout>(layout);
+  layoutRef.current = layout;
+
   // Keep the model in step when focus arrives by mouse or Tab, so a directional press afterwards
   // continues from where the user actually is.
   useEffect(() => {
@@ -285,17 +323,75 @@ export function FocusProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('focusin', onFocusIn);
   }, [activeScope]);
 
+  /**
+   * One place both input sources arrive at.
+   *
+   * The keyboard handler below and the controller listener further down both funnel into this,
+   * so a pad is a second *source* for navigation rather than a second implementation of it.
+   */
+  const dispatch = useCallback(
+    (action: NavAction) => {
+      if (action === 'back') {
+        const top = scopesRef.current[scopesRef.current.length - 1];
+        if (top) top.back();
+        return;
+      }
+      if (action === 'accept') {
+        // A real click from the element itself. That matters for the context menu, whose
+        // capture-phase dismiss listener unmounts any item whose activation came from outside it.
+        if (focusedIdRef.current !== null) {
+          entries.current.get(focusedIdRef.current)?.el.click();
+        }
+        return;
+      }
+      if (action === 'menu') {
+        openContextMenu(entries.current.get(focusedIdRef.current ?? '')?.el);
+        return;
+      }
+      const next = move(layoutRef.current, focusedIdRef.current, action);
+      if (next) focusTo(next, true);
+    },
+    [focusTo],
+  );
+
+  /**
+   * Controller actions, read natively in Rust and delivered as a Tauri event.
+   *
+   * 🔴 Not `navigator.getGamepads()`. WebView2 has two open bugs there, and
+   * [#5507](https://github.com/MicrosoftEdge/WebView2Feedback/issues/5507) is the one that
+   * matters here: gamepad input dies in WebView2 whenever the Steam Overlay is attached, which is
+   * always true of Griddle launched from Big Picture.
+   */
+  useEffect(() => {
+    const pending = listen<NavAction>('nav', (e) => dispatch(e.payload));
+    // 🔴 The rejection is handled, and that is not boilerplate. `listen` is a **core plugin
+    // command**, so Tauri v2's capability system can refuse it — and it did: with no capability
+    // file at all, every subscription failed with *"event.listen not allowed"*. The promise was
+    // simply never awaited, so the rejection was an unhandled one that nothing surfaced, and the
+    // symptom was a controller that did nothing at all with no error anywhere. See
+    // `capabilities/default.json`; it exists solely to grant this.
+    pending.catch((err: unknown) => {
+      console.error(
+        'controller navigation is unavailable: the "nav" subscription was refused.',
+        'Check crates/griddle-app/capabilities/default.json grants core:event:allow-listen.',
+        err,
+      );
+    });
+    return () => {
+      void pending.then((unlisten) => unlisten()).catch(() => undefined);
+    };
+  }, [dispatch]);
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
 
       if (e.key === 'Escape') {
-        const top = scopes[scopes.length - 1];
         // Only the topmost overlay closes. Before this existed, two independent window-level
         // Escape handlers meant one press dismissed the preview *and* the context menu.
-        if (top) {
+        if (scopes.length > 0) {
           e.preventDefault();
-          top.back();
+          dispatch('back');
         }
         return;
       }
@@ -319,13 +415,12 @@ export function FocusProvider({ children }: { children: ReactNode }) {
       // Always prevented, even when there is nowhere to go: otherwise running into the edge of a
       // section scrolls the page instead, which reads as focus having been lost.
       e.preventDefault();
-      const next = move(layout, focusedId, direction);
-      if (next) focusTo(next, true);
+      dispatch(direction);
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [layout, tabOrder, focusedId, scopes, focusTo]);
+  }, [tabOrder, focusedId, scopes.length, focusTo, dispatch]);
 
   const api = useMemo<FocusApi>(
     () => ({ focusedId, register, unregister, setColumns, pushScope, popScope, activate }),

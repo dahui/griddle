@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Lets the frontend subscribe to the `nav` event that carries controller actions. Nothing else: this app's own `#[tauri::command]`s are not gated by capabilities, so they need no entry here, and granting the usual `core:default` bundle would hand the webview a pile of core plugin commands the UI never calls.",
+  "windows": ["main"],
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+}

@@ -28,6 +28,23 @@ tokio-tungstenite = { version = "0.28", default-features = false, features = ["c
 futures-util = { version = "0.3", default-features = false, features = ["sink"] }
 
 [target.'cfg(windows)'.dependencies]
+# Controller input, read natively rather than through the webview's Gamepad API — see `input`'s
+# module docs for the two open WebView2 bugs that rule the web API out. On Windows gilrs uses
+# Windows.Gaming.Input, one of the APIs the Steam Overlay injects its emulated pad into, so Steam
+# Input mappings arrive here for free.
+#
+# 🔴 Windows-only *for CI's sake*, not because the crate is. gilrs on Linux needs `libudev-dev`,
+# and the Ubuntu leg of CI builds this crate to catch cfg-gated mistakes — adding a system package
+# requirement there would trade a real check for a convenience. The app is Windows-only anyway;
+# `input::repeat` is deliberately left cross-platform so its tests run on both legs.
+#
+# 🔴 **`xinput` instead of the default `wgi` backend, and this was measured.** Windows.Gaming.Input
+# only delivers to a process with an in-focus window, so `examples/pad_probe` — a console program —
+# enumerated **zero** pads on a machine whose PnP tree clearly listed an "XINPUT compatible HID
+# device". A diagnostic harness that structurally cannot see a controller is worse than none.
+# XInput has no window requirement, and it is one of the APIs the Steam Overlay injects its
+# emulated Xbox pad into, which is the case this feature exists to serve.
+gilrs = { version = "0.11", default-features = false, features = ["xinput"] }
 winreg = "0.55"
 # Process enumeration for `steam::process`. The registry's ActiveProcess\pid is cleared early
 # in shutdown while steam.exe is still alive, so only the process list can answer "is it safe

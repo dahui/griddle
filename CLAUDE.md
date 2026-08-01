@@ -640,6 +640,7 @@ flash, the wart this project exists to remove.
 | `vdf::appinfo` | `appcache/appinfo.vdf` reader. **Not the same format as `vdf::binary`** — v29 keys are u32 string-table indices. Extracts only `common/{type,name,clienticon}`. |
 | `steam::apptype` | `common/type` → "does this belong in the library list". Every unknown resolves toward **showing** the app. |
 | `focusgrid` (TS, `@griddle/shared`) | Spatial `(section, row, col)` navigation maths, DOM-free so it is exhaustively unit-tested. Modelled on z13gui's `internal/focusgrid`. See below. |
+| `input` | Reads the controller natively via gilrs on **XInput**, gated on window focus, emitting semantic actions. `input::repeat` is clock-free and holds the tests; the gilrs loop is `cfg(windows)` so the Linux CI leg still builds. |
 | `sgdb::key` | `ApiKey`. Custom `Debug` prints a fingerprint; **no `Display`, no `Serialize`** — leaking it is a compile error. |
 | `sgdb::model` | Response types, every field read off a real response. Only `id` and `url` are required. |
 | `sgdb::query` | Endpoint + filter selection. `Dimensions` is a closed set, every value probed. |
@@ -921,6 +922,73 @@ silently keeps the previous tab's count. `useFocusGrid` watches child mutations 
 **Enter and Space are deliberately not intercepted.** Focus is real DOM focus, so the browser
 already fires `click` on a focused `<button>` for both; handling them too would apply every piece
 of artwork twice.
+
+#### 🟢 The controller is read natively, and the backend choice was measured
+
+`griddle_core::input` polls the pad on its own thread and emits **semantic actions** — the same
+`up/down/left/right/accept/back/menu` vocabulary the keyboard produces — over a Tauri `nav` event.
+So a pad is a second *source* for navigation, not a second implementation of it.
+
+🔴 **Not `navigator.getGamepads()`.** Two open WebView2 bugs rule the web API out, and
+[#5507](https://github.com/MicrosoftEdge/WebView2Feedback/issues/5507) is the one that matters:
+**gamepad input dies in WebView2 apps whenever the Steam Overlay is attached** — which is always
+true of Griddle launched from Big Picture, the entire point of the feature.
+[#3025](https://github.com/MicrosoftEdge/WebView2Feedback/issues/3025) is a second, independent
+one. Reading natively also works *with* Steam: the overlay hooks XInput/DirectInput/RawInput/WGI
+and injects an emulated Xbox pad, so Steam Input mappings arrive for free. `[VERIFIED-SOURCE]`
+
+🔴 **gilrs defaults to Windows.Gaming.Input, which needs an in-focus window — so `pad_probe`
+enumerated zero controllers on a machine whose PnP tree listed an "XINPUT compatible HID device".**
+`[VERIFIED-BOX 2026-07-31]` Switching to `default-features = false, features = ["xinput"]` found
+`Xbox Controller` immediately. The app *has* a window so WGI would have worked there, which is the
+trap: the backend would have looked fine in the product while the diagnostic harness built to
+debug it was structurally blind. XInput has no window requirement and is what Steam Input targets.
+
+🔴 **`connected()` returns a `Vec<String>` rather than logging.** "The pad is not being read" and
+"the UI is ignoring the pad" look identical from outside and share no causes — and a `warn!` is
+invisible in a `windows_subsystem = "windows"` binary with no console, so the question has to be
+answerable on demand. `cargo run -p griddle-core --example pad_probe` prints the pad list first,
+then every action live.
+
+#### 🔴 The controller did nothing, and nothing anywhere said why
+
+`[VERIFIED-BOX 2026-08-01]` Everything on the Rust side was correct — the window label resolved,
+`connected()` reported `["Xbox Controller"]`, `emit` returned `Ok(())` — and the pad still moved
+nothing. **`listen` is a core plugin command, so Tauri v2's capability system gates it**, and this
+app had *no capability file at all*: `gen/schemas/capabilities.json` was `{}`. Every subscription
+was refused with *"event.listen not allowed"*.
+
+It was invisible for a second, compounding reason: `listen()` returns a promise, the code kept it
+only to unsubscribe with, and **never attached a `catch`** — so the refusal was an unhandled
+rejection that surfaced nowhere. `Ok(())` from `emit` means Tauri accepted the event for delivery,
+not that anything received it.
+
+Why our own commands kept working throughout, which is what made this so confusing: **`#[tauri::command]`s
+defined by the app are not capability-gated.** Only plugin commands are, and `core:event` is a
+plugin. So the library loaded, settings saved and artwork applied while the one core-plugin call in
+the product was denied.
+
+`capabilities/default.json` now grants exactly `core:event:allow-listen` and
+`core:event:allow-unlisten` — not the `core:default` bundle, which would hand the webview a pile of
+commands the UI never calls.
+
+**How it was found, after two wrong diagnostics:** `document.title` was tried first and proved
+nothing, because a Tauri window's native title does not follow the document's. What worked was
+making the frontend *render* what it saw — a temporary fixed-position badge, screenshotted — which
+printed the refusal verbatim in one run. **When a signal crosses a process boundary, put the probe
+on the far side of it.**
+
+**`FocusGate` is load-bearing, not a nicety.** The thread reads the pad *globally*; nothing scopes
+it to our window. Without gating on window focus, playing a game with a controller would also be
+driving Griddle in the background. Same lesson as z13gui gating every event on visibility. The
+repeater is still fed `None` while the gate is shut, so a direction held across an alt-tab does not
+fire a stale step when focus returns.
+
+`input::repeat` is clock-free — `advance(held, now_ms)` — so the awkward parts are **nine unit
+tests** rather than things to discover with a controller in hand: a late poll must not bank up a
+burst, releasing must reset the ramp, changing direction mid-hold must take ownership immediately,
+and a perfect 45° diagonal must resolve to exactly one direction *deterministically* or a stick
+held on the diagonal emits right, up, right, up.
 
 #### The three bugs this found in existing code
 

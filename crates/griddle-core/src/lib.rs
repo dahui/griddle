@@ -15,6 +15,7 @@ pub mod browser;
 pub mod cache;
 pub mod cdp;
 pub mod grid;
+pub mod input;
 pub mod logo;
 pub mod settings;
 pub mod sgdb;
