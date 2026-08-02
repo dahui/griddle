@@ -64,6 +64,12 @@ pub enum Error {
     /// a position it cannot parse and quietly keep the old one.
     #[error("refusing to send a logo position that is not a finite percentage")]
     InvalidLogoPosition,
+
+    /// Escaping a value into a JS string literal failed. Not reachable for a plain `&str`, but
+    /// the alternative is splicing an unescaped Windows path into JavaScript, and that is not a
+    /// thing to do on the strength of "it cannot happen".
+    #[error("could not encode a value for Steam's JavaScript realm")]
+    Encoding,
 }
 
 /// What the readiness probe found.
@@ -176,6 +182,32 @@ impl SteamJs {
             "window.SteamClient.Apps.ClearCustomArtworkForApp({}, {})",
             app.get(),
             asset as u32
+        );
+        Ok(self.connection.evaluate_unit(&expr).await?)
+    }
+
+    /// Point a non-Steam shortcut at an icon file, without closing Steam.
+    ///
+    /// A shortcut's icon is a path in `shortcuts.vdf`, which Steam holds in memory and rewrites
+    /// on exit — so editing that file while Steam runs is silently discarded. This is the way
+    /// round it, and it is the same route the Decky plugin takes from inside Steam: hand the
+    /// change to Steam and let *it* persist the file.
+    ///
+    /// `[VERIFIED-BOX @ CLSTAMP 10856968, 2026-08-01]` `SteamClient.Apps` exposes
+    /// `SetShortcutIcon` among twelve `SetShortcut*` setters. Called as `(appid, path)` with a
+    /// shortcut's **existing** icon value — a no-op assignment — it returned without throwing,
+    /// which is what fixes the argument order; arity cannot be read off a native binding, whose
+    /// `.length` is always 0.
+    ///
+    /// The icon still does not appear until Steam restarts. That is true of every icon route,
+    /// including the plugin's, and is a thing to say rather than to design around.
+    pub async fn set_shortcut_icon(&mut self, app: AppId, path: &str) -> Result<(), Error> {
+        // Escaped as a JS string literal by `serde_json`, exactly like the logo payload: this is
+        // a Windows path full of backslashes, which is the worst possible thing to splice raw.
+        let literal = serde_json::to_string(path).map_err(|_| Error::Encoding)?;
+        let expr = format!(
+            "window.SteamClient.Apps.SetShortcutIcon({}, {literal})",
+            app.get()
         );
         Ok(self.connection.evaluate_unit(&expr).await?)
     }

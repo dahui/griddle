@@ -48,15 +48,16 @@ Nothing is applied until you press **Save**, so you can try anchors freely. **Re
 puts it back to bottom left at half size. If Steam is running the change appears immediately;
 otherwise Griddle writes the position to disk and tells you a restart is needed.
 
-## Icons are the exception
+## Icons always need a Steam restart
 
-Icons are the one slot Steam's live-apply cannot set, and Griddle is honest about it rather than
-offering a control that quietly does nothing:
+Icons are the one slot Steam cannot change while it is running — every other kind of artwork
+appears instantly, and an icon never does. That is not a limitation of Griddle; the same is true
+of the Decky plugin and every other tool.
 
-- **Non-Steam shortcuts** — icons work, but they require Steam to be closed. See
-  [Non-Steam shortcuts](/griddle/notes/non-steam-shortcuts/).
-- **Steam games** — the Icon tab shows the current icon but cannot change it. There is no route
-  Steam accepts.
+Apply an icon like any other artwork. Griddle writes it and tells you to restart Steam, and it is
+there when Steam comes back. Non-Steam shortcuts need one extra step behind the scenes, which
+Griddle handles without closing anything — see
+[Non-Steam shortcuts](/griddle/notes/non-steam-shortcuts/).
 
 ## Animated artwork
 

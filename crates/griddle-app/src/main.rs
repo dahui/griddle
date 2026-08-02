@@ -142,6 +142,8 @@ fn main() {
             commands::apply_asset,
             commands::asset_status,
             commands::clear_asset,
+            commands::icon_target,
+            commands::apply_shortcut_icon,
             commands::logo_placement,
             commands::set_logo_placement,
             commands::reset_all_plan,

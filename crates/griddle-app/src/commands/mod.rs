@@ -27,6 +27,7 @@
 mod apikey;
 mod apply;
 mod diagnostics;
+mod icon;
 mod library;
 mod logo;
 mod prefs;
@@ -44,6 +45,7 @@ mod status;
 pub use apikey::*;
 pub use apply::*;
 pub use diagnostics::*;
+pub use icon::*;
 pub use library::*;
 pub use logo::*;
 pub use prefs::*;

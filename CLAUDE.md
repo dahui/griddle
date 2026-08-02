@@ -1777,15 +1777,57 @@ it takes ~500 ms (vs ~30–50 ms for the working types) and returns normally. A 
 
 Consequences for the product:
 
-- **Non-Steam shortcuts** — icons need the file path: write `<appid>_icon.<ext>` into `grid/`
-  **and** set the `icon` field in `shortcuts.vdf` (Steam must be shut down; then restart).
-  That is what decky-steamgriddb does, and it is why its icon flow prompts for a restart.
-- **Real Steam apps** — decky writes `appcache/librarycache/<appid>_icon.jpg`, the **legacy
-  flat** layout, which does not exist here. *Reading* Steam's own icon is now solved
-  (`common/icon`, above), so the tab can show the current icon; **writing** one still has no
-  route, so it stays disabled for Steam apps with an explanation.
-  Ship the Icon tab **disabled for Steam apps** with an explanation, rather than a control that
-  silently does nothing.
+- **Non-Steam shortcuts** — write `<appid>_icon.<ext>` into `grid/` **and** repoint the
+  shortcut's `icon` field. 🟢 **That does not require closing Steam**, see below.
+- **Real Steam apps** — the ordinary file write into `grid/<appid>_icon.<ext>`, shown after a
+  Steam restart. No `shortcuts.vdf` step, because a Steam app has no entry in it.
+
+#### 🟢 `SteamClient.Apps.SetShortcutIcon` exists, and it removes the whole shutdown dance
+
+`[VERIFIED-BOX @ CLSTAMP 10856968, 2026-08-01]` `SteamClient.Apps` has **120** members, twelve of
+them `SetShortcut*` — including `SetShortcutIcon`, beside `SetShortcutExe`, `SetShortcutName` and
+`SetShortcutStartDir`.
+
+Called as `(appid, path)` with a shortcut's **existing** icon value — a no-op assignment, so
+nothing was changed to find out — it returned without throwing. That fixes the argument order;
+arity cannot be read off a native binding, whose `.length` is always 0.
+
+🔴 **This is why the Decky plugin never restarts Steam, and the earlier reasoning here missed
+it.** The problem was framed as "`shortcuts.vdf` cannot be written while Steam runs", which is
+true, and then solved by closing Steam — a shutdown/relaunch flow behind a confirmation dialog.
+The plugin runs *inside* Steam and simply asks Steam to make the change. So does this app now:
+`cdp::SteamJs::set_shortcut_icon` with Steam up, direct file edit with Steam down.
+
+The lesson is narrow and worth keeping: **the file was never the only interface.** Every other
+part of this product already prefers asking Steam over editing its files, and the icon path was
+built the other way round because S8's finding — that the *artwork* API cannot set icons — was
+generalised into "no API can". One `Object.keys` would have said otherwise.
+
+⚠️ The icon still does not appear until Steam restarts, whichever route applied it. That is not a
+defect to design around; say it in the toast, as the plugin does.
+
+#### 🔴 This section told the Icon tab to disable itself for Steam apps. That was wrong, and it shipped as a regression before being caught
+
+It read: *"writing one still has no route, so it stays disabled for Steam apps with an
+explanation… rather than a control that silently does nothing."* Acting on it replaced the
+working Icon tab with a paragraph explaining that Steam games cannot have custom icons.
+
+**They can.** The maintainer reported it plainly: the Decky plugin replaces icons for Steam
+games perfectly well, it just cannot do it without a restart — and **Griddle already did it too**,
+through the same file-write floor every other slot falls back to. Nothing was measured to support
+the claim; it was inferred from decky writing into `appcache/librarycache/`, and the inference
+does not follow. That decky uses one route is not evidence that no other route exists.
+
+Two lessons, and the second is the expensive one:
+
+1. **"No route" was never `[VERIFIED-BOX]`.** S8 measured that the *live API* is a no-op for
+   icons. It measured nothing about the file path, which is what actually applies them.
+2. 🔑 **A feature that already works is evidence.** Removing working behaviour on the strength of
+   a document — over the observable fact that the app was doing the thing — is backwards. When
+   this file and the running product disagree, the product wins and this file gets corrected.
+
+The needing-a-restart part is not a defect to design around; it is simply what an icon costs.
+Say so in the toast and move on.
 
 ⚠️ **One unexplained observation.** The first S8 run passed ordinal 4 against appid 1004640 and
 `1004640.png` (the *Header* file) appeared. The systematic sweep afterwards — 6 ordinals × 2 app

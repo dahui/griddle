@@ -144,6 +144,23 @@ export interface AssetSlot {
   removes: string[];
 }
 
+/** Whether an app's icon can be set at all, and how. */
+export interface IconTarget {
+  /** False for a real Steam app: Steam's API is a silent no-op and there is no file route. */
+  is_shortcut: boolean;
+  current_icon: string | null;
+  steam_running: boolean;
+}
+
+/** What applying a shortcut icon actually did. */
+export interface IconApplied {
+  path: string;
+  /** `live` when Steam took the change, `file` when shortcuts.vdf was edited with Steam closed. */
+  method: 'live' | 'file';
+  /** Always true: no icon route shows the change before Steam restarts. */
+  needs_restart: boolean;
+}
+
 /** Where a custom logo sits, and what a reset would restore. */
 export interface LogoPlacement {
   /** Null when this app has never had a position written. */
@@ -249,6 +266,16 @@ export const api = {
   applyAsset: (appId: number, assetType: AssetType, url: string) =>
     invoke<Applied>('apply_asset', { appId, assetType, url }),
   assetStatus: (appId: number) => invoke<AssetSlot[]>('asset_status', { appId }),
+  /** Whether this app's icon can be changed, read from shortcuts.vdf rather than guessed. */
+  iconTarget: (appId: number) => invoke<IconTarget>('icon_target', { appId }),
+  /**
+   * Apply an icon to a non-Steam shortcut, which needs its `shortcuts.vdf` entry repointed.
+   *
+   * Never closes Steam: with Steam up the change goes through `SetShortcutIcon`, with Steam down
+   * the file is edited directly.
+   */
+  applyShortcutIcon: (appId: number, url: string) =>
+    invoke<IconApplied>('apply_shortcut_icon', { appId, url }),
   /** Read from the file, not from Steam, so the positioner works with Steam closed. */
   logoPlacement: (appId: number) => invoke<LogoPlacement>('logo_placement', { appId }),
   /** Live if Steam is running, and the file is written either way. */

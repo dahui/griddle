@@ -19,7 +19,13 @@ import {
   type StoredFilters,
   type ZoomTarget,
 } from '@griddle/shared';
-import { api, type GameMatch, type LibraryEntry } from '../../api';
+import {
+  api,
+  type Asset,
+  type GameMatch,
+  type IconTarget,
+  type LibraryEntry,
+} from '../../api';
 import {
   Empty,
   ErrorNote,
@@ -82,6 +88,10 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
   // modal is resolved from the live list every render and can never outlive it — the same reason
   // the current-art preview holds a slot type rather than a slot.
   const [details, setDetails] = useState<number | null>(null);
+  // Whether this app is a non-Steam shortcut, which is the only thing that changes how an icon
+  // applies. Read from `shortcuts.vdf` rather than inferred from the appid range — the file is
+  // the authority, and this codebase does not guess at shortcut ids.
+  const [iconTarget, setIconTarget] = useState<IconTarget | null>(null);
 
   const { assets, page, total, hasMore, loading, error, sentinel, loadPage, ready } =
     useAssetSearch({ appId: entry.app_id, assetType, filters, browsing, reloadKey });
@@ -154,6 +164,26 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
     };
   }, []);
 
+  // Only the Icon tab needs this, and only to learn whether the app is a shortcut — which
+  // decides whether applying needs the extra `shortcuts.vdf` step.
+  useEffect(() => {
+    if (tab !== 'icon') return undefined;
+    let cancelled = false;
+    api
+      .iconTarget(entry.app_id)
+      .then((t) => {
+        if (!cancelled) setIconTarget(t);
+      })
+      // Without an answer the ordinary apply path runs, which is right for a Steam game and
+      // incomplete for a shortcut. Failing closed here would break the commoner case.
+      .catch(() => {
+        if (!cancelled) setIconTarget(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [entry.app_id, tab]);
+
   // Which SteamGridDB game we are pulling from, for the "Wrong game?" button's label.
   useEffect(() => {
     let cancelled = false;
@@ -202,6 +232,47 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
     if (next === tile) return;
     setZoom((z) => ({ ...z, [zoomTarget]: next }));
     void api.setZoom(zoomTarget, next).catch(() => undefined);
+  }
+
+  /**
+   * Apply an icon to a **non-Steam shortcut**, which needs one step more than every other slot.
+   *
+   * A shortcut's icon is a path in `shortcuts.vdf`, so writing `grid/<appid>_icon.png` alone
+   * changes nothing — Steam never looks there for a shortcut. This writes the file *and*
+   * repoints the shortcut, which means Steam has to be closed.
+   *
+   * Steam games do **not** come through here. Their icons are an ordinary file write that shows
+   * after a restart, which is what this app always did and what the plugin does too.
+   */
+  async function applyIcon(asset: Asset): Promise<boolean> {
+    if (applyingRef.current !== null) return false;
+    applyingRef.current = asset.id;
+    setApplying(asset.id);
+    try {
+      await api.applyShortcutIcon(entry.app_id, asset.url);
+      // The same thing the Decky plugin says, because it is the same truth: an icon is written
+      // and shows at next start. No route makes it appear sooner, so nothing pretends otherwise.
+      toast({ kind: 'info', message: 'Icon applied. Restart Steam to see it.' });
+      return true;
+    } catch (e: unknown) {
+      toastError(e);
+      return false;
+    } finally {
+      applyingRef.current = null;
+      setApplying(null);
+    }
+  }
+
+  /**
+   * The one entry point every apply goes through, so the icon fork cannot be forgotten by a
+   * caller. Returns whether anything was applied — a confirm being raised counts as "not yet".
+   */
+  async function requestApply(asset: Asset): Promise<boolean> {
+    // Only a *shortcut* icon needs the extra step of repointing `shortcuts.vdf`. A Steam game's
+    // icon is an ordinary file write, exactly as it was before this flow existed — it lands in
+    // `grid/` and shows after a Steam restart, which the toast says.
+    if (assetType !== 'icon' || !iconTarget?.is_shortcut) return apply(asset.id, asset.url);
+    return applyIcon(asset);
   }
 
   /** Returns whether it worked, which is what decides if the details modal closes. */
@@ -339,7 +410,7 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
               label={ASSET_LABEL[assetType].toLowerCase()}
               applying={applying === asset.id}
               anyApplying={applying !== null}
-              onApply={() => void apply(asset.id, asset.url)}
+              onApply={() => void requestApply(asset)}
               onDetails={() => setDetails(asset.id)}
             />
           ))}
@@ -355,7 +426,7 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
           // "View on SteamGridDB" link is the next thing anyone reaches for when an asset will
           // not apply.
           onApply={() => {
-            void apply(detailsAsset.id, detailsAsset.url).then((ok) => {
+            void requestApply(detailsAsset).then((ok) => {
               if (ok) setDetails(null);
             });
           }}

@@ -116,17 +116,56 @@ impl From<griddle_core::grid::store::Error> for UiError {
     }
 }
 
+/// What to tell the user about a Steam process that is in the way.
+///
+/// Shared with the `shortcuts::Error` conversion below, which wraps this same error: a shortcut
+/// write that is refused because Steam came back deserves the same wording as one refused before
+/// it started. `None` for the variants that are not about Steam being up.
+fn steam_running_action(e: &griddle_core::steam::process::Error) -> Option<&'static str> {
+    use griddle_core::steam::process::Error as E;
+    match e {
+        E::StillRunning { .. } | E::Restarted => Some("Close Steam, then retry."),
+        E::ShutdownTimedOut { .. } => {
+            Some("Steam may be waiting on a prompt. Close it by hand, then retry.")
+        }
+        _ => None,
+    }
+}
+
 impl From<griddle_core::steam::process::Error> for UiError {
     fn from(e: griddle_core::steam::process::Error) -> Self {
-        use griddle_core::steam::process::Error as E;
+        match steam_running_action(&e) {
+            Some(action) => UiError::new(Kind::SteamRunning, e.to_string()).with_action(action),
+            None => UiError::unexpected(e),
+        }
+    }
+}
+
+impl From<griddle_core::steam::shortcuts::Error> for UiError {
+    fn from(e: griddle_core::steam::shortcuts::Error) -> Self {
+        use griddle_core::steam::shortcuts::Error as E;
         match &e {
-            E::StillRunning { .. } | E::Restarted => {
-                UiError::new(Kind::SteamRunning, e.to_string())
-                    .with_action("Close Steam, then retry.")
+            // This arrives when `save` re-confirms its token and finds Steam back — the window
+            // between checking and writing that the token type alone cannot close. The action
+            // comes from the same helper the process conversion uses, so the two cannot drift.
+            E::SteamRunning(inner) => UiError::new(Kind::SteamRunning, e.to_string())
+                .with_action(steam_running_action(inner).unwrap_or("Close Steam, then retry.")),
+
+            E::NotFound(..) => UiError::new(Kind::Unexpected, e.to_string())
+                .with_action("Steam may have rewritten shortcuts.vdf. Reopen the game and retry."),
+
+            // The refusals, kept distinct because they mean the file was *not* touched and the
+            // user's shortcuts are intact — which is the first thing anyone wants to know.
+            E::RoundTripMismatch { .. } | E::SelfCheckFailed | E::NoShortcutsMap { .. } => {
+                UiError::new(Kind::Filesystem, e.to_string()).with_action(
+                    "Griddle refused to write rather than risk corrupting your shortcuts. \
+                     Nothing was changed.",
+                )
             }
-            E::ShutdownTimedOut { .. } => UiError::new(Kind::SteamRunning, e.to_string())
-                .with_action("Steam may be waiting on a prompt. Close it by hand, then retry."),
-            _ => UiError::unexpected(e),
+
+            E::Read { .. } | E::Write { .. } | E::Parse { .. } | E::VerifyFailed { .. } => {
+                UiError::new(Kind::Filesystem, e.to_string())
+            }
         }
     }
 }
