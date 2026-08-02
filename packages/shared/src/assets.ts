@@ -90,7 +90,19 @@ export const MIMES: Record<AssetType, string[]> = {
 };
 
 /**
- * How wide one tile is in the browsing grid, per asset type, in **rem**.
+ * Every grid of artwork whose tile size the user can adjust.
+ *
+ * The five browsing tabs, plus the library list and the Current-artwork overview — those two are
+ * not asset *types* but they are the same kind of thing to a user: a wrapping grid of pictures
+ * they scroll. Keying zoom by asset type alone would have meant the one grid people scroll most
+ * was the one that could not be resized.
+ */
+export type ZoomTarget = AssetType | 'library' | 'current';
+
+export const ZOOM_TARGETS: readonly ZoomTarget[] = [...ASSET_TYPES, 'library', 'current'];
+
+/**
+ * How wide one tile is in the browsing grid, per target, in **rem**.
  *
  * The grid is `repeat(auto-fill, minmax(<this>, 1fr))`, so this is a minimum width and the
  * column count falls out of the window: larger value, fewer and bigger tiles.
@@ -105,13 +117,15 @@ export const MIMES: Record<AssetType, string[]> = {
  * the stylesheet had always sized all five the same way — so it was two mechanisms where the
  * rendering only ever had one.
  */
-export const ZOOM: Record<AssetType, { min: number; max: number; default: number; step: number }> =
+export const ZOOM: Record<ZoomTarget, { min: number; max: number; default: number; step: number }> =
   {
     grid_p: { min: 6, max: 20, default: 9.5, step: 1 },
     grid_l: { min: 10, max: 32, default: 15, step: 1.5 },
     hero: { min: 14, max: 44, default: 22, step: 2 },
     logo: { min: 8, max: 28, default: 13, step: 1.5 },
     icon: { min: 6, max: 20, default: 9.5, step: 1 },
+    library: { min: 6, max: 20, default: 9.5, step: 1 },
+    current: { min: 9, max: 26, default: 13, step: 1.5 },
   };
 
 /**
@@ -122,9 +136,9 @@ export const ZOOM: Record<AssetType, { min: number; max: number; default: number
  * moved the bounds. A missing, non-numeric or non-finite entry falls back to the default, so a
  * hand-edited `settings.json` cannot produce a grid with no columns.
  */
-export function zoomFor(type: AssetType, stored: Partial<Record<AssetType, number>>): number {
-  const { min, max, default: fallback } = ZOOM[type];
-  const value = stored[type];
+export function zoomFor(target: ZoomTarget, stored: Partial<Record<ZoomTarget, number>>): number {
+  const { min, max, default: fallback } = ZOOM[target];
+  const value = stored[target];
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
   return Math.min(max, Math.max(min, value));
 }
@@ -135,8 +149,8 @@ export function zoomFor(type: AssetType, stored: Partial<Record<AssetType, numbe
  * Returns the same number at either end, which is what lets the caller grey out the button that
  * would do nothing instead of offering a press that silently does not move.
  */
-export function zoomStep(type: AssetType, current: number, direction: 1 | -1): number {
-  const { min, max, step } = ZOOM[type];
+export function zoomStep(target: ZoomTarget, current: number, direction: 1 | -1): number {
+  const { min, max, step } = ZOOM[target];
   const next = current + step * direction;
   // Rounded because repeated 1.5-rem steps off a 9.5 default accumulate binary float error, and
   // `zoomedIn`/`zoomedOut` compare for equality against the bounds.

@@ -5,7 +5,8 @@
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  /* `--tile` comes from the zoom control in the toolbar; see `.assets` for the full reasoning. */
+  grid-template-columns: repeat(auto-fill, minmax(var(--tile, 13rem), 1fr));
   gap: 1.1rem;
   align-items: start;
 }

@@ -9,7 +9,7 @@ import { invoke } from '@tauri-apps/api/core';
 // `StoredFilters` is the wire shape of Rust's `FilterState`. Imported rather than redeclared
 // here: a second copy of a nine-field struct is a drift waiting to happen, and the field that
 // would drift first is `static`, which is a rename on the Rust side.
-import type { AssetType, StoredFilters } from '@griddle/shared';
+import type { AssetType, StoredFilters, ZoomTarget } from '@griddle/shared';
 
 export type ErrorKind =
   | 'no_api_key'
@@ -193,7 +193,8 @@ export interface Prefs {
    * rather than by Rust, so the defaults have exactly one implementation.
    */
   filters: StoredFilters | null;
-  zoom: Partial<Record<AssetType, number>>;
+  /** Tile width per grid, in rem. Includes the library list and the Current overview. */
+  zoom: Partial<Record<ZoomTarget, number>>;
   /** Steam appid → the SteamGridDB game to pull from, for when the automatic match is wrong. */
   game_overrides: Record<number, { id: number; name: string | null }>;
 }
@@ -244,9 +245,14 @@ export const api = {
   /** One filter set, shared by every asset type. */
   setFilters: (filters: StoredFilters) => invoke<Prefs>('set_filters', { filters }),
   resetFilters: () => invoke<Prefs>('reset_filters'),
-  /** Browsing tile width for one asset type, in rem. Bounds are `ZOOM`'s, not Rust's. */
-  setZoom: (assetType: AssetType, value: number) =>
-    invoke<Prefs>('set_zoom', { assetType, value }),
+  /**
+   * Tile width for one grid of artwork, in rem. Bounds are `ZOOM`'s, not Rust's.
+   *
+   * `ZoomTarget`, not `AssetType`: the library list and the Current overview are resizable too
+   * and are not asset types. Rust validates the name against the same seven.
+   */
+  setZoom: (target: ZoomTarget, value: number) =>
+    invoke<Prefs>('set_zoom', { assetType: target, value }),
   /**
    * `null` clears the override and returns to the automatic Steam-appid match.
    *

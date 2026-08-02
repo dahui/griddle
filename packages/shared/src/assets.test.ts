@@ -18,6 +18,7 @@ import {
   STYLE_LABEL,
   STYLES,
   ZOOM,
+  ZOOM_TARGETS,
   assetPageUrl,
   isVideoPreview,
   zoomFor,
@@ -115,7 +116,7 @@ describe('tile zoom', () => {
   test('an unset, absurd or corrupt value falls back to the default', () => {
     // `settings.json` is a file a user can edit, and a zero or a NaN here is a grid with no
     // columns at all — an empty browsing tab that looks like "SteamGridDB has nothing".
-    for (const type of TYPES) {
+    for (const type of ZOOM_TARGETS) {
       expect(zoomFor(type, {})).toBe(ZOOM[type].default);
       expect(zoomFor(type, { [type]: Number.NaN })).toBe(ZOOM[type].default);
       expect(zoomFor(type, { [type]: Number.POSITIVE_INFINITY })).toBe(ZOOM[type].default);
@@ -150,8 +151,15 @@ describe('tile zoom', () => {
     expect(value).toBe(ZOOM.grid_l.min);
   });
 
-  test('every type has a usable range with the default inside it', () => {
-    for (const type of TYPES) {
+  test('every target has a usable range with the default inside it', () => {
+    // Premise: the two non-asset-type grids are in here. Without this the loop would still pass
+    // if `ZOOM_TARGETS` silently lost them, and the library would go back to being the one grid
+    // people scroll most and cannot resize.
+    expect(ZOOM_TARGETS).toContain('library');
+    expect(ZOOM_TARGETS).toContain('current');
+    expect(ZOOM_TARGETS).toHaveLength(TYPES.length + 2);
+
+    for (const type of ZOOM_TARGETS) {
       const { min, max, default: dflt, step } = ZOOM[type];
       expect(min).toBeLessThan(max);
       expect(dflt).toBeGreaterThanOrEqual(min);

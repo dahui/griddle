@@ -16,19 +16,14 @@
   grid-template-columns: repeat(auto-fill, minmax(var(--tile, 9.5rem), 1fr));
 }
 
-/* The hint on the left, the zoom stepper pushed to the right, baselines aligned. */
-.grid-bar {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.grid-bar .hint {
-  margin: 0;
-}
-
+/*
+ * The tile-size stepper, in the right-hand half of the nav row — see `navSlot`.
+ *
+ * It spent a while in the toolbar below, first as bordered buttons and then restyled to match the
+ * scope switcher, and neither sat right: that row already carries three control groups and a
+ * count, so a fourth thing had nowhere to be that did not read as an afterthought. Up here it is
+ * one of two groups on an otherwise empty row, which is the symmetry it was missing.
+ */
 .zoom {
   display: flex;
   align-items: center;
@@ -42,20 +37,15 @@
   color: var(--muted);
 }
 
-/* Square, so the two steppers are the same size whichever glyph is in them. */
+/*
+ * Equal width whichever glyph is inside. Without it the two differ by a pixel — "−" is narrower
+ * than "+" — which is small enough to read as a rendering fault rather than a deliberate size.
+ */
 .zoom-step {
-  padding: 0.15rem 0.5rem;
-  line-height: 1.2;
-  min-width: 2rem;
-}
-
-/* Tabular figures, so stepping does not shuffle the buttons sideways as the number changes. */
-.zoom-value {
-  font-size: 0.76rem;
-  color: var(--muted);
-  min-width: 3rem;
+  padding: 0.3rem 0;
+  min-width: 2.1rem;
   text-align: center;
-  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
 }
 
 .asset {

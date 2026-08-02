@@ -100,6 +100,19 @@ mod tests {
     }
 
     #[test]
+    fn the_two_extra_zoom_targets_are_not_asset_types() {
+        // `set_zoom` accepts seven names; `parse_asset_type` must still accept only five. If these
+        // ever started parsing, "library" would resolve to some slot and a size change on the game
+        // list would silently resize a browsing tab instead.
+        for extra in super::prefs::EXTRA_ZOOM_TARGETS {
+            assert!(
+                parse_asset_type(extra).is_err(),
+                "{extra} must not be an asset type",
+            );
+        }
+    }
+
+    #[test]
     fn an_unknown_asset_type_is_refused_rather_than_defaulted() {
         // Defaulting to the capsule would write art into the wrong slot and look like a
         // rendering bug rather than a wiring bug.

@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, asUiError, type LibraryEntry, type Status, type UiError } from './api';
 import { ErrorNote, Spinner, ToastProvider } from './components';
 import { SCREEN_DEPTH, useFocusItem, useScreenActions } from './focus';
+import { NavSlotCtx } from './navSlot';
 
 const TABS: Tab[] = ['library', 'settings'];
 import { Library } from './views/Library';
@@ -25,6 +26,9 @@ export function App() {
   const [error, setError] = useState<UiError | null>(null);
   const [tab, setTab] = useState<Tab>('library');
   const [selected, setSelected] = useState<LibraryEntry | null>(null);
+  // Held in state rather than a ref: the views portal into this node, and a ref would not
+  // re-render them once it was populated, so the first paint would have an empty nav row.
+  const [navSlot, setNavSlot] = useState<HTMLDivElement | null>(null);
 
   const refresh = useCallback(() => {
     api
@@ -75,31 +79,36 @@ export function App() {
 
   return (
     <Shell>
-      <nav className="tabs">
-        <div className="tab-group">
-          <NavTab col={0} active={tab === 'library'} onClick={() => setTab('library')}>
-            Library
-          </NavTab>
-          <NavTab col={1} active={tab === 'settings'} onClick={() => setTab('settings')}>
-            Settings
-          </NavTab>
-        </div>
-      </nav>
+      <NavSlotCtx.Provider value={navSlot}>
+        <nav className="tabs">
+          <div className="tab-group">
+            <NavTab col={0} active={tab === 'library'} onClick={() => setTab('library')}>
+              Library
+            </NavTab>
+            <NavTab col={1} active={tab === 'settings'} onClick={() => setTab('settings')}>
+              Settings
+            </NavTab>
+          </div>
+          {/* The other half of this row's `space-between`. Filled by whichever view is showing —
+              see `navSlot`. Empty on Settings, which has nothing to size. */}
+          <div className="nav-actions" ref={setNavSlot} />
+        </nav>
 
-      {tab === 'settings' ? (
-        <Settings status={status} onStatus={setStatus} />
-      ) : selected ? (
-        <AssetBrowser
-          entry={selected}
-          onBack={() => {
-            setSelected(null);
-            // Re-read on the way back so newly applied art shows in the list.
-            refresh();
-          }}
-        />
-      ) : (
-        <Library onPick={setSelected} />
-      )}
+        {tab === 'settings' ? (
+          <Settings status={status} onStatus={setStatus} />
+        ) : selected ? (
+          <AssetBrowser
+            entry={selected}
+            onBack={() => {
+              setSelected(null);
+              // Re-read on the way back so newly applied art shows in the list.
+              refresh();
+            }}
+          />
+        ) : (
+          <Library onPick={setSelected} />
+        )}
+      </NavSlotCtx.Provider>
     </Shell>
   );
 }

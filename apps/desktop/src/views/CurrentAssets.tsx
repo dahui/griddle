@@ -25,7 +25,11 @@ import { FocusScope, useFocusGrid, useFocusGridItem, useFocusItem } from '../foc
 
 type Menu = { x: number; y: number; slot: AssetSlot };
 
-export function CurrentAssets({ entry }: { entry: LibraryEntry }) {
+/**
+ * `tile` is the slot width in rem, owned by [`AssetBrowser`] because the control that changes it
+ * lives in the toolbar up there — this view is not the only thing on that screen.
+ */
+export function CurrentAssets({ entry, tile }: { entry: LibraryEntry; tile: number }) {
   const [slots, setSlots] = useState<AssetSlot[] | null>(null);
   // Only the *load* failure is held here, and only because it is the view: with no slots there
   // is nothing to render but the error. A reset failure leaves the grid perfectly readable, so
@@ -94,7 +98,9 @@ export function CurrentAssets({ entry }: { entry: LibraryEntry }) {
     <>
       <p className="hint">Click any artwork to see it larger, or right-click to reset it.</p>
 
-      <ul className="slots" ref={slotGrid}>
+      {/* Same `--tile` mechanism as the browsing grid, and the same reason `useFocusGrid` watches
+          the style attribute: this re-flows without the container or its children changing. */}
+      <ul className="slots" ref={slotGrid} style={{ '--tile': `${tile}rem` } as React.CSSProperties}>
         {slots.map((slot, index) => (
           <SlotTile
             key={slot.asset_type}

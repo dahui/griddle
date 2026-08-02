@@ -76,6 +76,19 @@ button.danger:hover:not(:disabled) {
   gap: 1rem;
   flex-wrap: wrap;
   margin-bottom: 1.1rem;
+  align-items: center;
+}
+
+/*
+ * The right-hand half of the nav row, opposite the Library/Settings switch.
+ *
+ * `.tabs` has been `space-between` since it was written, with one child — so this side was always
+ * intended and always empty. Whichever view is showing portals its tile-size control in here.
+ */
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .tab-group {

@@ -12,7 +12,14 @@
  */
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { useEffect, useMemo, useState } from 'react';
-import { steamCdnUrl, type AssetType } from '@griddle/shared';
+import {
+  ZOOM,
+  steamCdnUrl,
+  zoomFor,
+  zoomStep,
+  type AssetType,
+  type ZoomTarget,
+} from '@griddle/shared';
 import {
   api,
   asUiError,
@@ -21,7 +28,7 @@ import {
   type LibrarySort,
   type UiError,
 } from '../api';
-import { ArtImage, Empty, ErrorNote, Spinner } from '../components';
+import { ArtImage, Empty, ErrorNote, Spinner, StickyBar, ZoomControl } from '../components';
 import { SCREEN_DEPTH, useFocusGrid, useFocusGridItem, useFocusItem, useScreenActions } from '../focus';
 
 const LIST_ASSET: AssetType = 'grid_p';
@@ -41,6 +48,8 @@ export function Library({ onPick }: { onPick: (entry: LibraryEntry) => void }) {
   // wrong scope and then reload, which reads as a flicker on every launch.
   const [scope, setScope] = useState<LibraryScope | null>(null);
   const [sort, setSort] = useState<LibrarySort>('name');
+  const [zoom, setZoom] = useState<Partial<Record<ZoomTarget, number>>>({});
+  const tile = zoomFor('library', zoom);
   // Unconditional, above the early returns below: `useFocusGrid` is a hook, and the list has two
   // states (error, loading) that return before the grid renders.
   const grid = useFocusGrid<HTMLUListElement>('library');
@@ -51,6 +60,7 @@ export function Library({ onPick }: { onPick: (entry: LibraryEntry) => void }) {
       .then((p) => {
         setScope(p.library_scope);
         setSort(p.library_sort);
+        setZoom(p.zoom);
       })
       // A settings file we cannot read must not block the library; fall back to the defaults.
       .catch(() => setScope('installed'));
@@ -84,6 +94,14 @@ export function Library({ onPick }: { onPick: (entry: LibraryEntry) => void }) {
     void api.setLibraryView(nextScope, nextSort).catch(() => undefined);
   }
 
+  /** Local first, persisted after — a failure to remember the size is not worth a toast. */
+  function changeZoom(direction: 1 | -1) {
+    const next = zoomStep('library', tile, direction);
+    if (next === tile) return;
+    setZoom((z) => ({ ...z, library: next }));
+    void api.setZoom('library', next).catch(() => undefined);
+  }
+
   // The library's own "tabs" are the two scopes, so the bumpers toggle them here rather than
   // falling through to the Library/Settings switch. No `onBack`: the list is the root screen and
   // there is nowhere further back to go.
@@ -104,7 +122,11 @@ export function Library({ onPick }: { onPick: (entry: LibraryEntry) => void }) {
 
   return (
     <>
-      <div className="toolbar">
+      {/* Sticky, like the browser's toolbar and for the same reason: the library is the longest
+          scroller in the app, and a size control you have to scroll back to the top to reach is
+          one you cannot use while looking at what it resizes. The sort and filter controls get
+          the same benefit. */}
+      <StickyBar className="toolbar">
         <div className="tab-group">
           <ScopeTab col={0} active={scope === 'installed'} onClick={() => view('installed', sort)}>
             Installed
@@ -127,14 +149,25 @@ export function Library({ onPick }: { onPick: (entry: LibraryEntry) => void }) {
             ? `${entries.length} games`
             : `${shown.length} of ${entries.length}`}
         </span>
-      </div>
+      </StickyBar>
+
+      {/* Portals itself into the nav row, opposite the Library/Settings tabs. Columns 2 and 3 of
+          the `nav` focus row, after those two tabs, so left/right walks the row as it looks. */}
+      <ZoomControl
+        value={tile}
+        min={ZOOM.library.min}
+        max={ZOOM.library.max}
+        section="nav"
+        firstCol={2}
+        onChange={changeZoom}
+      />
 
       {shown.length === 0 ? (
         <Empty>
           {entries.length === 0 ? 'No games found.' : `Nothing matches “${filter}”.`}
         </Empty>
       ) : (
-        <ul className="library" ref={grid}>
+        <ul className="library" ref={grid} style={{ '--tile': `${tile}rem` } as React.CSSProperties}>
           {shown.map((entry, index) => (
             <GameTile
               key={`${entry.kind}-${entry.app_id}`}

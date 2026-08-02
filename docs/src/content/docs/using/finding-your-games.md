@@ -29,6 +29,13 @@ They have no name and no artwork, and Steam no longer knows anything about them.
 
 The filter box narrows by name as you type. **Sort** offers name, recently played, or most played.
 
+**Size −/+** at the top right, opposite the Library and Settings tabs, makes the capsules bigger
+or smaller, and the list re-flows to fit. Your choice is remembered, and the
+[artwork tabs](/griddle/using/artwork-types/) have the same control with their own settings.
+
+The scope, filter and sort bar below it stays pinned as you scroll, so a long library never puts
+those out of reach.
+
 ## When Griddle matches the wrong game
 
 Griddle looks a game up on SteamGridDB by its Steam app ID first. That is usually exact, but it

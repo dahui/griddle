@@ -4,9 +4,18 @@
  *
  * Nothing here owns state beyond its own element.
  */
-import { useEffect, useRef, useState, type ReactNode, type SyntheticEvent } from 'react';
+import {
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type SyntheticEvent,
+} from 'react';
+import { createPortal } from 'react-dom';
 import { api, asUiError, type UiError } from '../api';
 import { useFocusItem } from '../focus';
+import { NavSlotCtx } from '../navSlot';
 
 /**
  * An image with fallbacks, tried in order until one loads.
@@ -238,4 +247,76 @@ export function Flags({ asset }: { asset: { nsfw: boolean; humor: boolean; epile
       ))}
     </span>
   );
+}
+
+/**
+ * Tile size for a grid of artwork, as a pair of stepper buttons rather than a slider.
+ *
+ * `<input type="range">` is the obvious control and is the one thing a controller cannot drive
+ * here: left and right belong to the focus model, so a focused slider either ignores them or
+ * swallows them and traps the cursor. The library's sort control went the same way, from a native
+ * `<select>` to plain buttons, for the same reason.
+ *
+ * Each button disables itself at its end of the range, so a press that would do nothing is
+ * visibly unavailable instead of silently ignored — which on a pad is indistinguishable from the
+ * input not arriving.
+ *
+ * **There is no numeric readout.** It briefly showed a percentage of the target's own min–max
+ * window, which is a number with no meaning outside this control: "25%" at a perfectly ordinary
+ * size invites the question of what 100% would be, and there is no answer worth giving. The grid
+ * resizing under the press is the feedback, and it is immediate and unambiguous.
+ *
+ * `section`/`firstCol` are parameters because this now sits in three different toolbars, each its
+ * own focus row — the browser's sticky bar, the library's, and the Current tab's.
+ */
+export function ZoomControl({
+  value,
+  min,
+  max,
+  section,
+  firstCol,
+  onChange,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  section: string;
+  firstCol: number;
+  onChange: (direction: 1 | -1) => void;
+}) {
+  const out = useFocusItem<HTMLButtonElement>(section, 0, firstCol);
+  const inn = useFocusItem<HTMLButtonElement>(section, 0, firstCol + 1);
+  const slot = useContext(NavSlotCtx);
+  const control = (
+    <div className="zoom" role="group" aria-label="Tile size">
+      <span className="zoom-label">Size</span>
+      <button
+        ref={out.ref}
+        type="button"
+        className={`ghost zoom-step${out.focused ? ' focused' : ''}`}
+        disabled={value <= min}
+        onClick={() => onChange(-1)}
+        title="Smaller tiles"
+        aria-label="Smaller tiles"
+      >
+        −
+      </button>
+      <button
+        ref={inn.ref}
+        type="button"
+        className={`ghost zoom-step${inn.focused ? ' focused' : ''}`}
+        disabled={value >= max}
+        onClick={() => onChange(1)}
+        title="Larger tiles"
+        aria-label="Larger tiles"
+      >
+        +
+      </button>
+    </div>
+  );
+  // Rendered into the nav row, not where it is written. In the toolbar it had to compete with
+  // the scope switcher, the filter box and the sort group for one row, and no amount of restyling
+  // made a two-button stepper sit right among them. The nav row is half empty and its
+  // `space-between` was waiting for exactly this.
+  return slot ? createPortal(control, slot) : null;
 }

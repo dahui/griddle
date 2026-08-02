@@ -73,7 +73,15 @@ pub async fn set_filters(
     Ok(snapshot(&state).await)
 }
 
-/// Remember how wide one asset type's browsing tiles are, in rem.
+/// The two resizable grids that are not asset types.
+///
+/// The library list and the Current-artwork overview are the same kind of thing to a user — a
+/// wrapping grid of pictures they scroll — so they carry a tile size like the five browsing tabs
+/// do. Kept beside [`set_zoom`] rather than in `parse_asset_type`, which every other command uses
+/// and which must keep rejecting anything that is not a real asset type.
+pub(super) const EXTRA_ZOOM_TARGETS: [&str; 2] = ["library", "current"];
+
+/// Remember how wide one grid's tiles are, in rem.
 ///
 /// The **bounds are not checked here**, deliberately. They live in `ZOOM` in `@griddle/shared`,
 /// next to the stylesheet they describe, and the frontend clamps on read — so a value stored by
@@ -88,7 +96,9 @@ pub async fn set_filters(
 #[tauri::command]
 pub async fn set_zoom(state: State<'_, AppState>, asset_type: String, value: f32) -> Res<Prefs> {
     // Called for its rejection, not its result: an unknown key must not reach the file.
-    super::parse_asset_type(&asset_type)?;
+    if !EXTRA_ZOOM_TARGETS.contains(&asset_type.as_str()) {
+        super::parse_asset_type(&asset_type)?;
+    }
     if !value.is_finite() || value <= 0.0 {
         return Err(UiError::new(
             Kind::Unexpected,

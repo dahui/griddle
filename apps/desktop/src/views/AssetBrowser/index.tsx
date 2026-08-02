@@ -17,15 +17,24 @@ import {
   type AssetType,
   type Filters,
   type StoredFilters,
+  type ZoomTarget,
 } from '@griddle/shared';
 import { api, type GameMatch, type LibraryEntry } from '../../api';
-import { Empty, ErrorNote, Spinner, StickyBar, useErrorToast, useToast } from '../../components';
+import {
+  Empty,
+  ErrorNote,
+  Spinner,
+  StickyBar,
+  ZoomControl,
+  useErrorToast,
+  useToast,
+} from '../../components';
 import { SCREEN_DEPTH, useFocusGrid, useScreenActions } from '../../focus';
 import { CurrentAssets } from '../CurrentAssets';
 import { FilterPanel } from '../FilterPanel';
 import { GameSearchModal } from '../GameSearchModal';
 import { AssetDetails } from './AssetDetails';
-import { AssetTab, AssetTile, BackButton, LoadMore, ZoomControl } from './tiles';
+import { AssetTab, AssetTile, BackButton, LoadMore } from './tiles';
 import { useAssetSearch } from './useAssetSearch';
 
 /**
@@ -81,11 +90,14 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
   // from — a filter change that drops the asset closes it, with nothing to remember to do.
   const detailsAsset = assets.find((a) => a.id === details) ?? null;
 
-  // Tile width per asset type, in rem. Held as the whole map rather than one value, because it
-  // is per type and the tabs switch without a round trip: keeping a single number here would
+  // Tile width per target, in rem. Held as the whole map rather than one value, because it is
+  // per tab and the tabs switch without a round trip: keeping a single number here would
   // re-create the bug the filters had, where the state in hand briefly belonged to the last tab.
-  const [zoom, setZoom] = useState<Partial<Record<AssetType, number>>>({});
-  const tile = zoomFor(assetType, zoom);
+  const [zoom, setZoom] = useState<Partial<Record<ZoomTarget, number>>>({});
+  // The Current tab is a grid of artwork too, and gets its own size independent of the five
+  // browsing tabs — it holds five fixed slots rather than a scrolling list of candidates.
+  const zoomTarget: ZoomTarget = browsing ? assetType : 'current';
+  const tile = zoomFor(zoomTarget, zoom);
 
   // The one grid whose column count changes without the container resizing: `.assets` swaps
   // its `minmax` per asset tab (9.5rem capsules, 22rem heroes). `useFocusGrid` watches child
@@ -186,10 +198,10 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
    * sort control look dead, reloading before its own write had landed.
    */
   function changeZoom(direction: 1 | -1) {
-    const next = zoomStep(assetType, tile, direction);
+    const next = zoomStep(zoomTarget, tile, direction);
     if (next === tile) return;
-    setZoom((z) => ({ ...z, [assetType]: next }));
-    void api.setZoom(assetType, next).catch(() => undefined);
+    setZoom((z) => ({ ...z, [zoomTarget]: next }));
+    void api.setZoom(zoomTarget, next).catch(() => undefined);
   }
 
   /** Returns whether it worked, which is what decides if the details modal closes. */
@@ -237,6 +249,19 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
         <span className="count">{browsing && total > 0 ? `${assets.length} of ${total}` : ''}</span>
       </StickyBar>
 
+      {/* Portals into the nav row, opposite the Library/Settings tabs — columns 2 and 3 of the
+          `nav` focus row. Hidden only while a browsing tab has nothing to size. */}
+      {(!browsing || assets.length > 0) && (
+        <ZoomControl
+          value={tile}
+          min={ZOOM[zoomTarget].min}
+          max={ZOOM[zoomTarget].max}
+          section="nav"
+          firstCol={2}
+          onChange={changeZoom}
+        />
+      )}
+
       {/* The asset slots belong to a single game, which is why this bar lives here and not in
           the app-level nav — on the library list it was a control with nothing to control. */}
       <nav className="tab-group asset-tabs">
@@ -255,7 +280,7 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
         </AssetTab>
       </nav>
 
-      {!browsing && <CurrentAssets entry={entry} />}
+      {!browsing && <CurrentAssets entry={entry} tile={tile} />}
 
       {browsing && filters && (
         <FilterPanel
@@ -292,15 +317,7 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
           style, format and vote counts appear at all. Same wording shape as the Current tab, which
           already teaches the right-click idiom one screen away. */}
       {browsing && assets.length > 0 && (
-        <div className="grid-bar">
-          <p className="hint">Click artwork to apply it, or right-click to see the details.</p>
-          <ZoomControl
-            value={tile}
-            min={ZOOM[assetType].min}
-            max={ZOOM[assetType].max}
-            onChange={changeZoom}
-          />
-        </div>
+        <p className="hint">Click artwork to apply it, or right-click to see the details.</p>
       )}
 
       {browsing && (

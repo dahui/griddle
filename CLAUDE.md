@@ -581,7 +581,7 @@ architecture.
 | **M4** | 🟢 **Default art, library scope, and filter parity.** Steam's own artwork behind the custom art (local cache → CDN → placeholder); an Installed / All games toggle with sorting; the full SteamGridDB filter set wired through; and the "wrong game?" picker. The asset tabs now render only inside a game. |
 | **M6** | 🔵 **Cut.** The Big Picture UI is not being built — see the header. `apps/bpm`, `cdp::modules` and the eleven finders are deleted; the research stays. |
 | **M5** | 🟢 **Controller navigation** (spatial focus grid + native gamepad read) and the **asset details modal** — right-click or **Y** on a candidate for full-size art, author, size, format, style, votes and a link to its SteamGridDB page. Opening it applies nothing; left-click and **A** still apply straight from the grid, which is the fast path and the documented walkthrough. |
-| **M5** | 🟢 …plus the **tile-size control**, per asset tab and persisted. Buttons, not a slider — see below. |
+| **M5** | 🟢 …plus the **tile-size control** on all seven grids — five browsing tabs, the Current overview and the library list — persisted per grid. Buttons, not a slider, and no numeric readout; both deliberate, see below. |
 | **Next** | The rest of M4 — logo positioner, non-Steam icon flow. |
 
 **The M4 changes worth remembering**, all detailed above: `librarycache` is indexed by
@@ -1060,6 +1060,39 @@ A stale count is invisible in the worst way: every tile renders correctly and on
 wrong, so pressing down moves two rows and it reads as the focus model being broken rather than as
 a measurement nobody retook. Pinned by a test in `focus.test.tsx`, confirmed to fail with
 `attributes` removed.
+
+🔵 **The tile-size control took three placements to land, and the last one was the maintainer's
+call.** Worth recording because the first two each fixed a real problem and each looked wrong:
+
+1. **A plain row above the results.** Visible on a fresh tab, gone after one screenful of infinite
+   scroll — reported as *"I don't see the zoom controls."*
+2. **In the sticky toolbar**, which fixed reachability and created a symmetry problem: that row
+   already carries a scope switcher, a filter box, a sort group and a count, so a fourth group had
+   nowhere to sit that did not read as an afterthought. Restyling it to match the others did not
+   help; the issue was the crowding, not the buttons.
+3. **The right-hand half of the nav row**, opposite the Library/Settings tabs. `.tabs` has been
+   `justify-content: space-between` with a single child since it was written — the slot was
+   designed and never filled.
+
+⚠️ **The nav row is not sticky**, so this trades reachability back for symmetry: scroll far enough
+and the control leaves with the header. That is a deliberate choice, not an oversight — the
+library's scope/filter/sort bar below it stays pinned either way.
+
+**It is a portal, not lifted state.** The zoom *target* depends on which asset tab is open, which
+only `AssetBrowser` knows; threading that up through `App` to render one control would invert the
+ownership. `navSlot.ts` holds the anchor in context and the views `createPortal` into it. React
+portals render at the anchor's real DOM position, so the focus model still sees the buttons in the
+nav row — columns 2 and 3 of the `nav` section, after the two tabs.
+
+🔵 **No numeric readout, after briefly having one.** It showed a percentage of the target's own
+min–max window, so an ordinary size read *"25%"* and invited the question of what 100% would be —
+a number with no meaning outside the control. The grid resizing under the press is the feedback.
+
+🔵 **`ZoomTarget` is wider than `AssetType`.** The library list and the Current overview are not
+asset types but they are the same thing to a user — a wrapping grid of pictures they scroll — and
+keying zoom by asset type alone left the grid people scroll *most* as the one that could not be
+resized. Rust validates the seven names in `set_zoom`; `parse_asset_type` still accepts only the
+five, with a test pinning that the two extras are refused by it.
 
 🔵 **`ZOOM` in `@griddle/shared` is now the only copy of the tile widths.** `assets.css` had
 per-type rules (15rem wide capsules, 22rem heroes, 13rem logos) *and* the table declared its own
