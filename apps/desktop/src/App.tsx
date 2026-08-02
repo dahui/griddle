@@ -9,6 +9,7 @@
  * something this component has to remember to do when a game is picked.
  */
 import { useCallback, useEffect, useState } from 'react';
+import logo from './assets/logo.png';
 import { api, asUiError, type LibraryEntry, type Status, type UiError } from './api';
 import { ErrorNote, Spinner, ToastProvider } from './components';
 import { SCREEN_DEPTH, useFocusItem, useScreenActions } from './focus';
@@ -69,8 +70,10 @@ export function App() {
   // `has_api_key` alone sends that user straight into a library where every request fails with
   // nothing on screen to explain why.
   if (!status.has_api_key || status.key_unreadable) {
+    // `bare`: the welcome screen shows the wordmark itself, so the app header would be the same
+    // logo twice on the one screen where there is nothing else to look at.
     return (
-      <Shell>
+      <Shell bare>
         <Welcome status={status} onStatus={setStatus} />
       </Shell>
     );
@@ -145,14 +148,32 @@ function NavTab({
  * turn, because the focus model has to outlive any single screen: an overlay opened on the last
  * one still needs somewhere to hand focus back to.
  */
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell({
+  children,
+  bare,
+}: {
+  children: React.ReactNode;
+  /** Drop the header, for a screen that shows the wordmark itself. */
+  bare?: boolean;
+}) {
   return (
     <ToastProvider>
       <main>
-        <header>
-          <h1>Griddle</h1>
-          <p className="sub">Artwork for your Steam library.</p>
-        </header>
+        {!bare && (
+          <header>
+            {/* The image *is* the heading, so it keeps the `h1` and `alt` carries the name -- the
+                opposite of the decorative `alt=""` on the welcome screen, where a real heading
+                sits beside it. Dimensions are explicit so the header does not reflow when it
+                decodes.
+
+                The same file the welcome screen uses, deliberately. The artwork is never cropped
+                or recomposed now, so a header-sized copy would be a second encoding of an image
+                already in the bundle -- the browser downscales this one and it costs nothing. */}
+            <h1>
+              <img className="brand" src={logo} alt="Griddle" width={128} height={84} />
+            </h1>
+          </header>
+        )}
         {children}
       </main>
     </ToastProvider>

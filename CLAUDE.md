@@ -691,6 +691,95 @@ drives a release build on a machine that has a key, so it never reaches first ru
 not clear the key to get there, because the plaintext is DPAPI-sealed and cannot be put back. A
 throwaway Windows profile is the only honest way to capture it.
 
+### 🟢 The logo, and why the background removal is a flood fill
+
+**Two sources, one script.** `assets/griddle-logo.jpg` is the wordmark — the app header, the
+welcome screen, the docs nav and the README. `assets/griddle-icon.jpg` is the "G" mark — the
+`.ico` and the docs favicon. `scripts/logo.ps1` derives everything from them, so the set cannot
+drift and a new size is one line. It uses `System.Drawing`, like `screenshots.ps1`; neither
+ImageMagick nor Pillow is installed and adding one for a script that runs once a year is not
+worth it.
+
+🔑 **Two sources is the whole fix.** The first artwork stacked its wordmark under a mascot badge,
+so a header wanted a wide crop and an icon a square one, and both had to come out of one picture.
+That failed — the word was drawn *over* the badge's lower third, so the badge had no clean edge to
+cut along, and every attempt showed the seams. Purpose-drawn art per shape means **nothing here
+crops or rearranges anything**: both images are used whole. The four failed attempts and what each
+produced are in git history; the short version is that a circular mask rendered "riddl" in a
+circle, and cutting the badge free left a raw cross-section along the bottom.
+
+#### The background removal
+
+Both grounds come off by flooding **inward from the border**, never by matching a colour — but
+for opposite reasons, so the mode is a property of the source rather than a global.
+
+| Source | Ground | Why it is awkward |
+|---|---|---|
+| logo | white | 🔴 **The lettering is white too** — 252.9 against 254.1, a 1.2 separation. No threshold can tell them apart. The word survives because the splash **encloses** it and the fill cannot reach in. |
+| icon | dark charcoal | A soft vignette is baked around the mark. It is background, but sits well above the ground in luminance. |
+
+🔴 **That logo row is the one to remember.** The correctness of the cut-out does not rest on any
+number — it rests on the splash being closed. If a future source lets the ground touch a letter,
+the word hollows out silently. **Check the cut-out, not the thumbnail**, and check it on a
+checkerboard: a white halo is invisible against white and a dark one against dark.
+
+Three settings, each of which was got wrong first:
+
+- **Thresholds come from a percentile of the border ring (15th / 85th), never the extreme.**
+  Deriving from the minimum put one candidate at `lo=-26, hi=16` and keyed the entire image away,
+  because a handful of very dark pixels survived in its border. One outlier must not set the
+  threshold for the other 99%.
+- **The light-mode ramp runs the opposite way to the dark one.** With `hi` above the ground's
+  luminance, every background pixel comes out at alpha 0.2 instead of 0 — nothing is removed, and
+  the "content bounds" then span the whole frame, which is what the symptom looks like.
+- **An alpha floor at 0.11**, or the icon's vignette renders as a dark rectangular smudge behind
+  the mark. Real watercolour splatter sits well above it.
+
+Edge pixels are then **un-mixed** — `true = (observed - bg*(1-a)) / a` — because a semi-transparent
+pixel is part background, and leaving that in is what haloes the artwork on a different ground.
+
+#### Sizes
+
+🔵 **Posterising to 32 levels is a size fix, and here it needed checking rather than assuming.**
+The previous artwork was flat pixel art, where snapping colours is nearly free. Watercolour is
+continuous gradient everywhere, so banding was the real risk — but a 3× zoom through the wash
+behind the letters is indistinguishable at 64 and at 32, because the paint texture dithers the
+steps. The wordmark goes from 630 KB to 122 KB. Alpha is excluded, or the soft rim comes back as
+a hard edge.
+
+The app copy is **440px wide**, which is 2.2× the 200px the welcome screen draws it at; the docs
+copy stays native, since Astro re-encodes to webp and derives its own sizes. Nothing is ever
+resampled *up* — an earlier revision wrote a 482px source out at 640 and the extra pixels were
+invented.
+
+⚠️ **`Icon.ToBitmap()` cannot verify a PNG-compressed `.ico`.** It reported non-zero alpha in
+corners that are empty and decoded the 256 frame as 128×128 — both wrong. Decode each embedded PNG
+payload directly instead. The same lesson as the focus-tree probes: when a probe reports something
+broken, check the probe first.
+
+⚠️ **The docs screenshots predate all of this, and `screenshots.ps1` needs more than a re-run.**
+
+The header changed height four times, so any claim about its click targets has to say *which*
+version it means. Measuring the header's own rule, all at 100/100 samples:
+
+| Header | Rule at |
+|---|---|
+| 44px horizontal lockup + tagline | y=180 |
+| 72px mascot + tagline | y=232 |
+| 72px mascot, no tagline | y=188 |
+| **64px wordmark, no tagline — what ships** | **y=178** |
+
+🔑 **A 2px drift is small enough to look like it still works and not be**, which is the dangerous
+size: the script's own header records that a mis-aimed click fails *silently*, producing a
+duplicate of the previous image rather than an error. Re-derive the coordinates from a fresh
+capture and check that successive captures actually differ. It also resets the filter panel as it
+goes, which writes to `settings.json`.
+
+⚠️ **A harness that hides `settings.json` to reach first run must COPY it back, not move it.** An
+earlier version moved the file aside and the maintainer's API key was lost when a cycle went
+wrong — DPAPI-sealed, so unrecoverable from anything on disk. Keep the backup until the key has
+been confirmed working, not merely until the file is back.
+
 ### Running it
 
 | | Command | What it does |
@@ -1017,8 +1106,27 @@ should not treat those as equally bad.
 
 #### 🟢 The SteamGridDB API, measured `[VERIFIED-BOX 2026-07-30]`
 
+> 🟢 **Re-probed in full on 2026-08-02, and every claim below held.** This section was the one
+> class of the 2026-08-02 audit that could not be checked at the time, for want of a key, and it
+> was reported as an outstanding gap rather than quietly assumed. It is now closed.
+>
+> Portal 2 resolved to `#17830`, an unknown appid came back as `None` rather than an error, all
+> five asset endpoints answered, every dimension value was accepted by its own endpoint, page 1
+> differed from page 0, and a CDN thumbnail downloaded with a valid JPEG magic. Counts move with
+> the site and are not findings: 423 assets across the types on 620 this run.
+>
+> 🔑 Two things worth noting because they are *negative* results that still hold. `logos` and
+> `icons` return **no** dimension vocabulary at all — the same fact recorded below as "icons
+> rejects `dimensions` outright". And `heroes?dimensions=1600x650` is still **valid with 0
+> matches**, so an empty result there remains not-a-bug.
+
 Reproduce with `$env:SGDB_API_KEY = "<key>"; cargo run -p griddle-core --example sgdb_probe`
 (read-only). The key is read from the environment and **never** from a file in this repo.
+
+⚠️ **Set it in the process, not in a file.** The probe above was run by assigning `$env:SGDB_API_KEY`
+for one invocation and clearing it afterwards. A `.env` is gitignored, but `check-secrets.sh` only
+scans what git tracks — so a key in an ignored file is invisible to the guard rather than blocked
+by it, and lives on disk until someone remembers to delete it.
 
 | Probe | Result |
 |---|---|

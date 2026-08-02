@@ -22,6 +22,14 @@ export default defineConfig({
       description:
         'Artwork for your Steam library, applied instantly. A Windows app for browsing and ' +
         'applying SteamGridDB artwork without restarting Steam.',
+      // Served from `public/`, so the path is site-absolute and must NOT include `base` -- Astro
+      // prefixes it. Writing '/griddle/favicon.png' here yields '/griddle/griddle/favicon.png'.
+      favicon: '/favicon.png',
+      // The artwork is itself a wordmark and reads at nav height, so the text title would print
+      // the name twice. Starlight still emits an `sr-only` title alongside, so turning the visible
+      // one off costs nothing for a screen reader. The previous artwork stacked its word under a
+      // badge and could not do this -- at Starlight's ~40px cap the word was a smudge.
+      logo: { src: './src/assets/logo.png', replacesTitle: true },
       social: [
         { icon: 'github', label: 'GitHub', href: 'https://github.com/dahui/griddle' },
       ],

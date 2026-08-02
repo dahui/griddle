@@ -15,6 +15,7 @@
  * The numbered steps are word-for-word the ones in `docs/start/your-api-key.mdx`. Same words in
  * both places is the point: two sets of instructions for one task is how they drift.
  */
+import lockup from '../assets/logo.png';
 import { ExternalLink, KeyEntry } from '../components';
 import type { Status } from '../api';
 
@@ -35,29 +36,38 @@ export function Welcome({
 
   return (
     <section className="welcome">
-      {stale ? (
-        <>
-          <h2>Enter your API key again</h2>
-          <p className="lead">
-            Griddle found a saved SteamGridDB key but could not read it. Keys are encrypted for
-            one Windows account, so a settings file that came from another PC — or another
-            account on this one — cannot be unlocked here. Nothing else was lost.
-          </p>
-        </>
-      ) : (
-        <>
-          <h2>Welcome to Griddle</h2>
-          <p className="lead">
-            Browse SteamGridDB and apply artwork to your Steam library. Unlike other Windows
-            tools, the artwork appears straight away — no Steam restart.
-          </p>
-        </>
-      )}
+      {/* This screen renders without the app header -- see `Shell`'s `bare` -- so the wordmark
+          here is the only one on the page rather than the second copy of it.
 
-      <p>
-        {stale ? 'Paste it below, or generate a new one.' : 'First, a SteamGridDB API key.'} It is
-        free, and it takes about a minute.
-      </p>
+          `alt=""` and a real `h1` below, rather than the reverse. The heading carries the name
+          for a screen reader, which leaves this decorative in the precise sense the attribute
+          means. Dimensions are explicit so the card does not reflow when the image decodes. */}
+      <div className="welcome-head">
+        <img className="wordmark" src={lockup} alt="" width={320} height={210} />
+        {stale ? (
+          <>
+            <h1>Enter your API key again</h1>
+            <p className="lead">
+              Griddle found a saved SteamGridDB key but could not read it. Keys are encrypted for
+              one Windows account, so a settings file that came from another PC — or another
+              account on this one — cannot be unlocked here. Nothing else was lost.
+            </p>
+          </>
+        ) : (
+          <>
+            <h1>Welcome</h1>
+            <p className="lead">
+              Browse SteamGridDB and apply artwork to your Steam library. Unlike other Windows
+              tools, the artwork appears straight away — no Steam restart.
+            </p>
+          </>
+        )}
+
+        <p>
+          {stale ? 'Paste it below, or generate a new one.' : 'First, a SteamGridDB API key.'} It
+          is free, and it takes about a minute.
+        </p>
+      </div>
 
       <ol className="steps">
         <li>

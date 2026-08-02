@@ -84,6 +84,25 @@ header {
   margin-bottom: 1.25rem;
 }
 
+/*
+ * The logo carries the app's name, so the `h1` holds no text of its own and only needs to stop
+ * contributing the type styles meant for one. `line-height: 0` because an inline image otherwise
+ * sits on a text baseline and leaves a few pixels of descender space beneath it.
+ */
+header h1 {
+  margin: 0;
+  line-height: 0;
+}
+
+header .brand {
+  height: 84px;
+  width: auto;
+  /* The watercolour fades out rather than ending, so its bounding box extends past anything the
+     eye reads as the edge. Aligning by the box leaves the mark looking indented against the
+     content below; this pulls it back to optical alignment. */
+  margin-left: -0.6rem;
+}
+
 h1 {
   font-size: 1.35rem;
   margin: 0 0 0.25rem;
@@ -99,7 +118,6 @@ h2 {
   font-weight: 600;
 }
 
-.sub,
 p {
   margin: 0 0 0.6rem;
   color: var(--muted);

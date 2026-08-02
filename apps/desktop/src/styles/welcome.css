@@ -1,26 +1,65 @@
-/* -- the first-run screen ------------------------------------------------------------- */
+﻿/* -- the first-run screen ------------------------------------------------------------- */
 
 /*
  * One card, read top to bottom, so everything here is about vertical rhythm rather than layout.
  * The screen has no nav and no sidebar: it is the only thing on the page until a key exists.
+ *
+ * A centred column rather than the full window width. The card used to stretch to ~1150px with a
+ * logo and a heading floating at its left edge, which is what made a centred logo look like it
+ * belonged to a different design. Narrowing it puts the centred head and the left-aligned steps
+ * on the same axis.
  */
+.welcome {
+  max-width: 44rem;
+  margin-left: auto;
+  margin-right: auto;
+}
 
 .welcome p {
   font-size: 0.95rem;
 }
 
 /*
- * The app-wide `h2` is a small-caps *section label* -- correct where a heading names one panel
- * among several, which is every other screen. Here the heading is the page: the welcome screen
- * has exactly one card and nothing to label it against, and inheriting the label style left the
- * only real title on screen smaller and dimmer than the sentence beneath it.
+ * Logo above the text, centred.
+ *
+ * This costs vertical space, which is why the card is now a narrow centred column rather than the
+ * full width of the window: with the header gone there is room for it, and the key field still
+ * has to stay above the fold at the default 1280x820 -- it is the one control the screen exists
+ * to collect.
  */
-.welcome h2 {
-  font-size: 1.5rem;
-  text-transform: none;
+.welcome-head {
+  text-align: center;
+  margin-bottom: 0.9rem;
+}
+
+/*
+ * 260px, and the ceiling is the fold rather than taste.
+ *
+ * Centred above the text, every pixel of logo height pushes the key field down, and at 320px the
+ * field landed past the bottom of the default 1280x820 window -- the one control this screen
+ * exists to collect. The rhythm below is tightened for the same reason. Raising this again means
+ * finding the space somewhere else, not just changing the number.
+ */
+.welcome .wordmark {
+  display: block;
+  height: auto;
+  width: 260px;
+  max-width: 100%;
+  margin: 0 auto 0.3rem;
+}
+
+/*
+ * This screen has no app header -- `Shell`'s `bare` -- so its own heading is the page's `h1`,
+ * and it is the only one. The app-wide `h1` is sized for a header bar rather than for a title
+ * standing on its own, which is why it is re-specified here.
+ */
+.welcome h1 {
+  font-size: 1.6rem;
+  font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text);
-  margin-bottom: 0.6rem;
+  margin: 0 0 0.6rem;
+  line-height: 1.2;
 }
 
 /* The one sentence that says what the app is. Larger than the instructions that follow it. */
@@ -35,7 +74,7 @@
  * ordered instructions and a screen reader should say so.
  */
 .welcome .steps {
-  margin: 0.9rem 0 1.2rem;
+  margin: 0.6rem 0 0.85rem;
   padding-left: 1.4rem;
   display: grid;
   gap: 0.4rem;
@@ -74,7 +113,7 @@
 
 /* The key field and Save, given room to breathe under the call to action. */
 .welcome .row {
-  margin: 1.1rem 0 0;
+  margin: 0.85rem 0 0;
 }
 
 /*
@@ -87,6 +126,6 @@
 }
 
 .welcome .hint {
-  margin-top: 0.9rem;
+  margin-top: 0.7rem;
   max-width: 46rem;
 }

@@ -53,7 +53,8 @@ describe('Welcome', () => {
 
   test('leads with what the app is, and how to get a key', () => {
     show(statusWith());
-    expect(screen.getByRole('heading').textContent).toContain('Welcome to Griddle');
+    // Just "Welcome": the lockup beside it carries the name, and the app header shows it too.
+    expect(screen.getByRole('heading').textContent).toContain('Welcome');
     // The steps are an ordered list on purpose: they are instructions, and a screen reader
     // should say so.
     expect(screen.getByRole('list').tagName).toBe('OL');
