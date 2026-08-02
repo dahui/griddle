@@ -9,7 +9,7 @@ import { describe, expect, mock, test } from 'bun:test';
 import { act, cleanup, render } from '@testing-library/react';
 import { useContext, useEffect } from 'react';
 import { FocusCtx, FocusProvider } from './provider';
-import { useFocusItem, useScreenActions } from './hooks';
+import { useFocusGrid, useFocusItem, useScreenActions } from './hooks';
 import { SCREEN_DEPTH } from './model';
 
 /**
@@ -103,6 +103,61 @@ describe('focus registration', () => {
 
     press('ArrowRight');
     expect(document.querySelector('.focused')?.getAttribute('data-testid')).toBe('cell-1');
+    cleanup();
+  });
+});
+
+describe('grid column measurement', () => {
+  /** Exposes the container so a test can mutate it the way the zoom control does. */
+  function Grid() {
+    const ref = useFocusGrid<HTMLDivElement>('assets');
+    return <div ref={ref} data-testid="grid" />;
+  }
+
+  /**
+   * Capture `setColumns` calls without replacing the provider.
+   *
+   * The real provider is what wires the observers, so the spy sits between it and the grid rather
+   * than standing in for it — a hand-built fake context would test the fake.
+   */
+  function Spy({ onMeasure, children }: { onMeasure: () => void; children: React.ReactNode }) {
+    const real = useContext(FocusCtx);
+    if (!real) return null;
+    const wrapped = { ...real, setColumns: (s: string, n: number) => {
+      onMeasure();
+      real.setColumns(s, n);
+    } };
+    return <FocusCtx.Provider value={wrapped}>{children}</FocusCtx.Provider>;
+  }
+
+  test('changing the container style re-measures the column count', async () => {
+    // The zoom control's whole mechanism: it writes `--tile` to the container's inline style.
+    // That re-flows the same children inside a container of the same width, so neither the
+    // ResizeObserver nor a childList MutationObserver sees anything at all.
+    //
+    // A stale count is invisible — the tiles render perfectly and only *navigation* is wrong, so
+    // pressing down moves two rows. Confirmed to fail with `attributes` removed from the observer
+    // options: the count stays at its mount-time measurement forever.
+    const onMeasure = mock(() => {});
+    render(
+      <FocusProvider>
+        <Spy onMeasure={onMeasure}>
+          <Grid />
+        </Spy>
+      </FocusProvider>,
+    );
+
+    const atMount = onMeasure.mock.calls.length;
+    expect(atMount).toBeGreaterThan(0);
+
+    const grid = document.querySelector('[data-testid="grid"]') as HTMLElement;
+    await act(async () => {
+      grid.style.setProperty('--tile', '14rem');
+      // MutationObserver callbacks are delivered as a microtask, not synchronously.
+      await Promise.resolve();
+    });
+
+    expect(onMeasure.mock.calls.length).toBeGreaterThan(atMount);
     cleanup();
   });
 });

@@ -8,9 +8,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ASSET_LABEL,
   ASSET_TYPES,
+  ZOOM,
   defaultFilters,
   fromStored,
   toStored,
+  zoomFor,
+  zoomStep,
   type AssetType,
   type Filters,
   type StoredFilters,
@@ -22,7 +25,7 @@ import { CurrentAssets } from '../CurrentAssets';
 import { FilterPanel } from '../FilterPanel';
 import { GameSearchModal } from '../GameSearchModal';
 import { AssetDetails } from './AssetDetails';
-import { AssetTab, AssetTile, BackButton, LoadMore } from './tiles';
+import { AssetTab, AssetTile, BackButton, LoadMore, ZoomControl } from './tiles';
 import { useAssetSearch } from './useAssetSearch';
 
 /**
@@ -78,6 +81,12 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
   // from — a filter change that drops the asset closes it, with nothing to remember to do.
   const detailsAsset = assets.find((a) => a.id === details) ?? null;
 
+  // Tile width per asset type, in rem. Held as the whole map rather than one value, because it
+  // is per type and the tabs switch without a round trip: keeping a single number here would
+  // re-create the bug the filters had, where the state in hand briefly belonged to the last tab.
+  const [zoom, setZoom] = useState<Partial<Record<AssetType, number>>>({});
+  const tile = zoomFor(assetType, zoom);
+
   // The one grid whose column count changes without the container resizing: `.assets` swaps
   // its `minmax` per asset tab (9.5rem capsules, 22rem heroes). `useFocusGrid` watches child
   // mutations as well as size for exactly this reason.
@@ -120,7 +129,9 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
     api
       .prefs()
       .then((p) => {
-        if (!cancelled) setFilters(fromStored(p.filters));
+        if (cancelled) return;
+        setFilters(fromStored(p.filters));
+        setZoom(p.zoom);
       })
       // Unreadable settings must not block browsing — fall through to the defaults.
       .catch(() => {
@@ -164,6 +175,21 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
 
   function resetFilters() {
     applyFilters(defaultFilters(), () => api.resetFilters());
+  }
+
+  /**
+   * Resize the tiles, locally first and persisted after.
+   *
+   * Same shape as `applyFilters`, and for the same reason: the grid must resize on the press
+   * rather than after a round trip, and failing to *remember* the size is not worth interrupting
+   * anyone over. It also cannot re-read from `prefs()` afterwards — that is what made the library
+   * sort control look dead, reloading before its own write had landed.
+   */
+  function changeZoom(direction: 1 | -1) {
+    const next = zoomStep(assetType, tile, direction);
+    if (next === tile) return;
+    setZoom((z) => ({ ...z, [assetType]: next }));
+    void api.setZoom(assetType, next).catch(() => undefined);
   }
 
   /** Returns whether it worked, which is what decides if the details modal closes. */
@@ -266,11 +292,28 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
           style, format and vote counts appear at all. Same wording shape as the Current tab, which
           already teaches the right-click idiom one screen away. */}
       {browsing && assets.length > 0 && (
-        <p className="hint">Click artwork to apply it, or right-click to see the details.</p>
+        <div className="grid-bar">
+          <p className="hint">Click artwork to apply it, or right-click to see the details.</p>
+          <ZoomControl
+            value={tile}
+            min={ZOOM[assetType].min}
+            max={ZOOM[assetType].max}
+            onChange={changeZoom}
+          />
+        </div>
       )}
 
       {browsing && (
-        <div className={`assets assets-${assetType}`} ref={assetGrid} aria-busy={applying !== null}>
+        <div
+          className={`assets assets-${assetType}`}
+          ref={assetGrid}
+          aria-busy={applying !== null}
+          // The one input to the grid's column count. `useFocusGrid` watches the container's
+          // `style` attribute precisely because this changes the layout without changing either
+          // the container's size or its children, so neither observer would otherwise fire and
+          // navigation would keep moving by the previous column count.
+          style={{ '--tile': `${tile}rem` } as React.CSSProperties}
+        >
           {assets.map((asset, index) => (
             <AssetTile
               key={asset.id}

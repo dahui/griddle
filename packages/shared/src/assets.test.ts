@@ -17,8 +17,11 @@ import {
   MIMES,
   STYLE_LABEL,
   STYLES,
+  ZOOM,
   assetPageUrl,
   isVideoPreview,
+  zoomFor,
+  zoomStep,
   type AssetType,
 } from './assets';
 import { PAGE_LIMIT } from './filters';
@@ -105,6 +108,56 @@ describe('animated previews', () => {
     const apng = { mime: 'image/png', thumb: 'https://cdn2.steamgriddb.com/thumb/x.webm' };
     expect(apng.mime).toBe('image/png');
     expect(isVideoPreview(apng.thumb)).toBe(true);
+  });
+});
+
+describe('tile zoom', () => {
+  test('an unset, absurd or corrupt value falls back to the default', () => {
+    // `settings.json` is a file a user can edit, and a zero or a NaN here is a grid with no
+    // columns at all — an empty browsing tab that looks like "SteamGridDB has nothing".
+    for (const type of TYPES) {
+      expect(zoomFor(type, {})).toBe(ZOOM[type].default);
+      expect(zoomFor(type, { [type]: Number.NaN })).toBe(ZOOM[type].default);
+      expect(zoomFor(type, { [type]: Number.POSITIVE_INFINITY })).toBe(ZOOM[type].default);
+      expect(zoomFor(type, { [type]: 'big' as unknown as number })).toBe(ZOOM[type].default);
+    }
+  });
+
+  test('a stored value outside the range is clamped, not discarded', () => {
+    // Clamped on read, so a build that narrows the bounds does not silently rewrite a choice
+    // the user made under the old ones. Same reasoning as clamping filters at query time.
+    expect(zoomFor('grid_p', { grid_p: 1000 })).toBe(ZOOM.grid_p.max);
+    expect(zoomFor('grid_p', { grid_p: -5 })).toBe(ZOOM.grid_p.min);
+    expect(zoomFor('grid_p', { grid_p: 12 })).toBe(12);
+  });
+
+  test('stepping stops at the bounds instead of running past them', () => {
+    expect(zoomStep('grid_p', ZOOM.grid_p.max, 1)).toBe(ZOOM.grid_p.max);
+    expect(zoomStep('grid_p', ZOOM.grid_p.min, -1)).toBe(ZOOM.grid_p.min);
+    expect(zoomStep('grid_p', 10, 1)).toBe(11);
+    expect(zoomStep('grid_p', 10, -1)).toBe(9);
+  });
+
+  test('a fractional step lands exactly on the bound', () => {
+    // 1.5-rem steps off a 9.5 default accumulate float error, and the +/- buttons are disabled by
+    // comparing against the bound for equality — so 31.999999999999996 leaves "bigger" live
+    // forever at the top of the range.
+    let value = ZOOM.grid_l.default;
+    for (let i = 0; i < 40; i++) value = zoomStep('grid_l', value, 1);
+    expect(value).toBe(ZOOM.grid_l.max);
+
+    for (let i = 0; i < 80; i++) value = zoomStep('grid_l', value, -1);
+    expect(value).toBe(ZOOM.grid_l.min);
+  });
+
+  test('every type has a usable range with the default inside it', () => {
+    for (const type of TYPES) {
+      const { min, max, default: dflt, step } = ZOOM[type];
+      expect(min).toBeLessThan(max);
+      expect(dflt).toBeGreaterThanOrEqual(min);
+      expect(dflt).toBeLessThanOrEqual(max);
+      expect(step).toBeGreaterThan(0);
+    }
   });
 });
 

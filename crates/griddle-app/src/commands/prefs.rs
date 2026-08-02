@@ -4,6 +4,7 @@
 //! to guess what the store now holds.
 
 use super::Res;
+use crate::error::{Kind, UiError};
 use crate::state::AppState;
 use griddle_core::settings::{LibraryScope, LibrarySort};
 use serde::Serialize;
@@ -67,6 +68,39 @@ pub async fn set_filters(
     {
         let mut settings = state.settings.lock().await;
         settings.filters = Some(filters);
+        state.store.save(&settings)?;
+    }
+    Ok(snapshot(&state).await)
+}
+
+/// Remember how wide one asset type's browsing tiles are, in rem.
+///
+/// The **bounds are not checked here**, deliberately. They live in `ZOOM` in `@griddle/shared`,
+/// next to the stylesheet they describe, and the frontend clamps on read — so a value stored by
+/// one build survives a later one moving the range instead of being rewritten. Duplicating that
+/// table in Rust would be a second copy to hold in step, which is the failure this codebase keeps
+/// choosing to design out rather than remember.
+///
+/// What *is* checked: the asset type, through the same `parse_asset_type` every other command
+/// uses, so an unknown key cannot accumulate in `settings.json`; and that the value is finite and
+/// positive, which is a correctness floor rather than a layout policy — zero or NaN reaches CSS
+/// as a grid with no columns, and an empty tab reads as "SteamGridDB has nothing for this game".
+#[tauri::command]
+pub async fn set_zoom(state: State<'_, AppState>, asset_type: String, value: f32) -> Res<Prefs> {
+    // Called for its rejection, not its result: an unknown key must not reach the file.
+    super::parse_asset_type(&asset_type)?;
+    if !value.is_finite() || value <= 0.0 {
+        return Err(UiError::new(
+            Kind::Unexpected,
+            format!("{asset_type} zoom must be a positive number, not {value}"),
+        ));
+    }
+    {
+        let mut settings = state.settings.lock().await;
+        // Stored under the wire name (`grid_p`), not `AssetType`'s display label. Every other
+        // command speaks SteamGridDB's vocabulary across this boundary, and a settings file that
+        // used both would need a translation table to read.
+        let _ = settings.zoom.insert(asset_type, value);
         state.store.save(&settings)?;
     }
     Ok(snapshot(&state).await)

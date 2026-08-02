@@ -244,6 +244,9 @@ export const api = {
   /** One filter set, shared by every asset type. */
   setFilters: (filters: StoredFilters) => invoke<Prefs>('set_filters', { filters }),
   resetFilters: () => invoke<Prefs>('reset_filters'),
+  /** Browsing tile width for one asset type, in rem. Bounds are `ZOOM`'s, not Rust's. */
+  setZoom: (assetType: AssetType, value: number) =>
+    invoke<Prefs>('set_zoom', { assetType, value }),
   /**
    * `null` clears the override and returns to the automatic Steam-appid match.
    *

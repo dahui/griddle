@@ -134,6 +134,7 @@ fn main() {
             commands::set_library_view,
             commands::set_filters,
             commands::reset_filters,
+            commands::set_zoom,
             commands::set_game_override,
             commands::search_games,
             commands::current_game_match,

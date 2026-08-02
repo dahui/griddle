@@ -581,7 +581,8 @@ architecture.
 | **M4** | 🟢 **Default art, library scope, and filter parity.** Steam's own artwork behind the custom art (local cache → CDN → placeholder); an Installed / All games toggle with sorting; the full SteamGridDB filter set wired through; and the "wrong game?" picker. The asset tabs now render only inside a game. |
 | **M6** | 🔵 **Cut.** The Big Picture UI is not being built — see the header. `apps/bpm`, `cdp::modules` and the eleven finders are deleted; the research stays. |
 | **M5** | 🟢 **Controller navigation** (spatial focus grid + native gamepad read) and the **asset details modal** — right-click or **Y** on a candidate for full-size art, author, size, format, style, votes and a link to its SteamGridDB page. Opening it applies nothing; left-click and **A** still apply straight from the grid, which is the fast path and the documented walkthrough. |
-| **Next** | The rest of M4 — zoom slider, logo positioner, non-Steam icon flow. |
+| **M5** | 🟢 …plus the **tile-size control**, per asset tab and persisted. Buttons, not a slider — see below. |
+| **Next** | The rest of M4 — logo positioner, non-Steam icon flow. |
 
 **The M4 changes worth remembering**, all detailed above: `librarycache` is indexed by
 `appinfo.vdf`, not by filename; the CDN has its own name table that is *not* the disk name;
@@ -1043,11 +1044,30 @@ without touching it: `packages/shared/src/focusgrid.ts` (pure maths) → `apps/d
 Within a section, items sit at explicit row/column indices — except wrapping grids, which register
 by *index* and have their row/column derived from a **measured** column count.
 
-🔴 **The column count cannot come from React state.** `repeat(auto-fill, minmax(9.5rem, 1fr))`
+🔴 **The column count cannot come from React state.** `repeat(auto-fill, minmax(var(--tile), 1fr))`
 resolves against the window, so `.library`, `.assets` and `.slots` are all measured by grouping
-children on `offsetTop`. `.assets` is the trap: it changes its `minmax` **per asset tab**
-(9.5rem capsules → 22rem heroes) *without the container resizing*, so a `ResizeObserver` alone
-silently keeps the previous tab's count. `useFocusGrid` watches child mutations as well.
+children on `offsetTop`. `.assets` is the trap: its tile width changes **per asset tab** (9.5rem
+capsules → 22rem heroes) *without the container resizing*, so a `ResizeObserver` alone silently
+keeps the previous tab's count.
+
+🔴 **The tile-size control made that worse, and the existing mitigation did not cover it.**
+`useFocusGrid` also watched `childList`, which catches a tab change only because the *children*
+change with it. Stepping the zoom re-flows **the same children in a container of the same width**
+— neither observer fires. The fix is `attributes: true, attributeFilter: ['style', 'class']`,
+since the control's whole mechanism is writing `--tile` to the container's inline style.
+
+A stale count is invisible in the worst way: every tile renders correctly and only *navigation* is
+wrong, so pressing down moves two rows and it reads as the focus model being broken rather than as
+a measurement nobody retook. Pinned by a test in `focus.test.tsx`, confirmed to fail with
+`attributes` removed.
+
+🔵 **`ZOOM` in `@griddle/shared` is now the only copy of the tile widths.** `assets.css` had
+per-type rules (15rem wide capsules, 22rem heroes, 13rem logos) *and* the table declared its own
+numbers in different units — hero and logo were measured in whole **columns**, a second mechanism
+the stylesheet had never implemented, because nothing had ever consumed the table. CSS now reads
+`--tile` and keeps one fallback for first paint. Stored under the **wire** names (`grid_p`), like
+every other value crossing the boundary; the range is clamped on *read*, so a value saved under
+one build's bounds survives a later one narrowing them.
 
 **Enter and Space are deliberately not intercepted.** Focus is real DOM focus, so the browser
 already fires `click` on a focused `<button>` for both; handling them too would apply every piece

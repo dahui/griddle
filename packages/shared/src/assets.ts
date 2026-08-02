@@ -90,16 +90,58 @@ export const MIMES: Record<AssetType, string[]> = {
 };
 
 /**
- * Zoom slider bounds. Grid-like types are sized in pixels per card; hero and logo are laid
- * out in columns instead, because their aspect ratios make a pixel width meaningless.
+ * How wide one tile is in the browsing grid, per asset type, in **rem**.
+ *
+ * The grid is `repeat(auto-fill, minmax(<this>, 1fr))`, so this is a minimum width and the
+ * column count falls out of the window: larger value, fewer and bigger tiles.
+ *
+ * `default` is the value `assets.css` used to hardcode per type, which is why the numbers look
+ * arbitrary — they are the sizes the layout was designed around. **This table is now the only
+ * copy.** The stylesheet reads `--tile` and carries one fallback for the case where no value has
+ * been applied yet; a per-type rule there as well would be a second table to keep in step.
+ *
+ * An earlier version of this had hero and logo measured in whole *columns* rather than a width,
+ * on the theory that their aspect ratios make a width meaningless. Nothing ever consumed it, and
+ * the stylesheet had always sized all five the same way — so it was two mechanisms where the
+ * rendering only ever had one.
  */
-export const ZOOM: Record<AssetType, { min: number; max: number; default: number; unit: 'px' | 'cols' }> = {
-  grid_p: { min: 100, max: 200, default: 150, unit: 'px' },
-  grid_l: { min: 160, max: 280, default: 220, unit: 'px' },
-  icon: { min: 100, max: 200, default: 150, unit: 'px' },
-  hero: { min: 2, max: 4, default: 3, unit: 'cols' },
-  logo: { min: 2, max: 6, default: 4, unit: 'cols' },
-};
+export const ZOOM: Record<AssetType, { min: number; max: number; default: number; step: number }> =
+  {
+    grid_p: { min: 6, max: 20, default: 9.5, step: 1 },
+    grid_l: { min: 10, max: 32, default: 15, step: 1.5 },
+    hero: { min: 14, max: 44, default: 22, step: 2 },
+    logo: { min: 8, max: 28, default: 13, step: 1.5 },
+    icon: { min: 6, max: 20, default: 9.5, step: 1 },
+  };
+
+/**
+ * The tile width in force for one asset type, given whatever is stored.
+ *
+ * Clamped on the way *out* rather than on the way in, the same way filters are narrowed at query
+ * time and not on save: a value stored for one build should not be destroyed because a later one
+ * moved the bounds. A missing, non-numeric or non-finite entry falls back to the default, so a
+ * hand-edited `settings.json` cannot produce a grid with no columns.
+ */
+export function zoomFor(type: AssetType, stored: Partial<Record<AssetType, number>>): number {
+  const { min, max, default: fallback } = ZOOM[type];
+  const value = stored[type];
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
+}
+
+/**
+ * One step bigger or smaller, clamped to the type's range.
+ *
+ * Returns the same number at either end, which is what lets the caller grey out the button that
+ * would do nothing instead of offering a press that silently does not move.
+ */
+export function zoomStep(type: AssetType, current: number, direction: 1 | -1): number {
+  const { min, max, step } = ZOOM[type];
+  const next = current + step * direction;
+  // Rounded because repeated 1.5-rem steps off a 9.5 default accumulate binary float error, and
+  // `zoomedIn`/`zoomedOut` compare for equality against the bounds.
+  return Math.round(Math.min(max, Math.max(min, next)) * 100) / 100;
+}
 
 /**
  * The path segment SteamGridDB's own site uses for each asset kind.

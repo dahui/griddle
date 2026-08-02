@@ -1,22 +1,61 @@
 /* -- asset grid ----------------------------------------------------------------------- */
 
+/*
+ * Tile width comes from `--tile`, set inline per asset type and adjusted by the zoom control.
+ *
+ * The per-type rules that used to live here (15rem wide capsules, 22rem heroes, 13rem logos) are
+ * gone deliberately: those numbers are now in `ZOOM` in `@griddle/shared`, which is also what the
+ * zoom control steps and clamps. Keeping a copy here as well would be two tables to hold in step,
+ * and the one that lost would win silently — CSS does not report being overridden.
+ *
+ * The fallback covers the first paint only, before the stored value has arrived.
+ */
 .assets {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--tile, 9.5rem), 1fr));
 }
 
-/* Wide and hero art needs far more width per card than a portrait capsule. */
-.assets-grid_l {
-  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+/* The hint on the left, the zoom stepper pushed to the right, baselines aligned. */
+.grid-bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
-.assets-hero {
-  grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr));
+.grid-bar .hint {
+  margin: 0;
 }
 
-.assets-logo {
-  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+.zoom {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.zoom-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+}
+
+/* Square, so the two steppers are the same size whichever glyph is in them. */
+.zoom-step {
+  padding: 0.15rem 0.5rem;
+  line-height: 1.2;
+  min-width: 2rem;
+}
+
+/* Tabular figures, so stepping does not shuffle the buttons sideways as the number changes. */
+.zoom-value {
+  font-size: 0.76rem;
+  color: var(--muted);
+  min-width: 3rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .asset {

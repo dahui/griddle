@@ -114,7 +114,16 @@ pub struct Settings {
     /// Tab order, hidden tabs, and which one opens first.
     pub tabs: TabSettings,
 
-    /// `zoomlevel_<type>` in the Decky plugin.
+    /// Browsing tile width per asset type, in rem. `zoomlevel_<type>` in the Decky plugin.
+    ///
+    /// Keyed by the **wire** name — `grid_p`, `grid_l`, `hero`, `logo`, `icon` — not by
+    /// [`crate::grid::AssetType`]'s display label, which is what this used to claim while nothing
+    /// wrote to it. Every command that crosses the boundary speaks SteamGridDB's vocabulary, and
+    /// a settings file mixing both would need a translation table to read.
+    ///
+    /// The **range lives in TypeScript**, in `ZOOM` in `@griddle/shared`, beside the stylesheet
+    /// it describes; the frontend clamps on read. So an out-of-range value here is not corrupt,
+    /// it is a choice made under different bounds, and it is kept rather than rewritten.
     pub zoom: PerAssetType<f32>,
 
     /// The content filters, **shared by every asset type**.

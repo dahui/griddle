@@ -63,10 +63,18 @@ export function useFocusGridItem<T extends HTMLElement = HTMLElement>(
 /**
  * Attach to a wrapping grid container so its column count stays measured.
  *
- * Both observers earn their place: `ResizeObserver` catches the window being resized, and
- * `MutationObserver` catches the grid growing from infinite scroll **and** the asset tab changing
- * — that one alters `minmax` without altering the container's width, so a resize observer alone
- * would silently keep the previous tab's column count.
+ * All three triggers earn their place, and each covers a case the others cannot see:
+ *
+ * - `ResizeObserver` — the window being resized.
+ * - `MutationObserver` on `childList` — the grid growing from infinite scroll.
+ * - `MutationObserver` on `style` — the **asset tab changing** and the **zoom being stepped**.
+ *   Both re-layout the same children inside a container of the same width, so neither of the
+ *   first two fires at all.
+ *
+ * That last one is the whole hazard. A stale column count is not a visible failure: the tiles
+ * render perfectly and only *navigation* is wrong, so pressing down moves two rows or lands in a
+ * different column, which reads as the focus model being broken rather than as a measurement
+ * that was never retaken.
  */
 export function useFocusGrid<T extends HTMLElement = HTMLElement>(section: string) {
   const ref = useRef<T | null>(null);
@@ -80,7 +88,9 @@ export function useFocusGrid<T extends HTMLElement = HTMLElement>(section: strin
     const resize = new ResizeObserver(measure);
     resize.observe(el);
     const mutation = new MutationObserver(measure);
-    mutation.observe(el, { childList: true });
+    // `setColumns` ignores a count it already holds, so the extra callbacks this brings in cost
+    // a `measureColumns` and stop there — no render, no observer feedback loop.
+    mutation.observe(el, { childList: true, attributes: true, attributeFilter: ['style', 'class'] });
     return () => {
       resize.disconnect();
       mutation.disconnect();
