@@ -6,9 +6,8 @@
        alt="Griddle" width="300">
 </p>
 
-<h1 align="center">Griddle</h1>
 
-**Artwork for your Steam library, applied instantly — no Steam restart.**
+**Artwork for your Steam library.**
 
 [![Latest release](https://img.shields.io/github/v/release/dahui/griddle?label=download&sort=semver)](https://github.com/dahui/griddle/releases/latest)
 [![CI](https://github.com/dahui/griddle/actions/workflows/ci.yml/badge.svg)](https://github.com/dahui/griddle/actions/workflows/ci.yml)
@@ -20,7 +19,7 @@
 ![Griddle showing a Steam library as a grid of game capsules](https://raw.githubusercontent.com/dahui/griddle/main/docs/src/assets/library.png)
 
 Griddle browses [SteamGridDB](https://www.steamgriddb.com/) and applies artwork to your Steam
-library. Unlike every other Windows tool for this, **the artwork appears immediately** — Griddle
+library. Unlike every other Windows tool for this, **the artwork appears immediately.**   Griddle
 asks Steam itself to change it rather than writing files and hoping you restart.
 
 It is a Windows-native replacement for the SteamGridDB plugin for Decky Loader.
@@ -29,8 +28,8 @@ It is a Windows-native replacement for the SteamGridDB plugin for Decky Loader.
 
 Grab the [latest release](https://github.com/dahui/griddle/releases/latest):
 
-- **`Griddle-<version>-portable.zip`** — unzip and run. Nothing is installed.
-- **`Griddle_<version>_x64-setup.exe`** — installer, with a Start menu entry and an uninstaller.
+- **`Griddle-<version>-portable.zip`** - unzip and run. Nothing is installed.
+- **`Griddle_<version>_x64-setup.exe`** - installer, with a Start menu entry and an uninstaller.
 
 > [!NOTE]
 > **Windows will show "Windows protected your PC" on first run.** Griddle is unsigned, and
