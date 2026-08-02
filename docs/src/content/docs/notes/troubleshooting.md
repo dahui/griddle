@@ -5,9 +5,9 @@ sidebar:
   order: 3
 ---
 
-**Settings → Diagnostics** reports what Griddle found on your machine — Steam's location, your
-account, whether instant apply is available. Almost every problem here shows up there first, and
-it is the right thing to include in a bug report.
+**Settings → Diagnostics** reports what Griddle found on your machine — its own version, Steam's
+location, your account, and whether instant apply is available. Almost every problem here shows up
+there first, and it is the right thing to include in a bug report.
 
 ## "Windows protected your PC" when starting Griddle
 
@@ -40,7 +40,16 @@ as it was. See [Your API key](/griddle/start/your-api-key/).
 Griddle reads Steam's location from the registry. If Steam has never been run on this account, or
 was installed by a different user, that entry may be missing.
 
-Set the path yourself in **Settings**, pointing at the folder containing `steam.exe`.
+Start Steam once and restart Griddle — that writes the registry entry Griddle looks for, and is
+the fix in nearly every case.
+
+If Steam is somewhere the registry does not know about, set the `SGDB_STEAM_PATH` environment
+variable to the folder containing `steam.exe` and start Griddle from there. Diagnostics then shows
+`SGDB_STEAM_PATH` as where it found Steam, so you can tell it took effect.
+
+**Griddle found the wrong Steam.** With more than one installation, the registry decides which one
+wins. **Settings → Diagnostics** names the path *and* the registry key it came from, and
+`SGDB_STEAM_PATH` overrides both.
 
 ## Artwork applies but Steam does not change
 
@@ -84,5 +93,8 @@ nameless rows.
 
 ## Reporting a bug
 
-Include the version from **Settings → Diagnostics**, and the Steam build number shown beside it.
+Include the **Version** from **Settings → Diagnostics**. Press **Test live apply** on the same
+screen and include the Steam build number it reports — that pins the problem to a Steam build as
+well as a Griddle one.
+
 Issues go to [GitHub](https://github.com/dahui/griddle/issues).

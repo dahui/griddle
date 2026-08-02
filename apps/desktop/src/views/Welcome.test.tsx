@@ -14,16 +14,14 @@ import type { Status } from '../api';
 
 function statusWith(over: Partial<Status> = {}): Status {
   return {
+    app_version: '0.0.0',
     steam_root: 'C:\\Program Files (x86)\\Steam',
     steam_source: 'HKCU',
     account_id: 1,
-    steam_running: true,
     has_api_key: false,
     key_unreadable: false,
-    sentinel_present: true,
     sentinel_explanation: 'Live apply is on.',
     app_types_loaded: 2930,
-    cache_bytes: 0,
     steam_error: null,
     ...over,
   };

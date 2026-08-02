@@ -10,15 +10,25 @@ import browse from '../../../assets/browse.png';
 
 The **Filters** panel above the results narrows what SteamGridDB returns.
 
-Everything starts **ticked** except Adult Content, so unticking a box always narrows the results.
+Almost everything starts **ticked**, so unticking a box narrows the results. Two things are off to
+begin with: **Adult Content**, and the **512×512** and **1024×1024** sizes — those are valid for
+capsules but match very little and are not the shape Steam renders, so they are opt-in.
+
 An empty result usually means the filters are too tight, not that the game has no artwork.
 
 <Image src={browse} alt="The filter panel, showing style, size, format and content columns" />
 
 ## Styles
 
-Alternate, Blurred, White Logo, Material, No Logo — SteamGridDB's own categories. Which ones exist
-depends on the artwork type, so the Logo tab offers fewer than the Capsule tab.
+SteamGridDB's own categories. Which ones exist depends on the artwork type:
+
+- **Capsule** and **Wide Capsule** — Alternate, White Logo, No Logo, Blurred, Minimal
+- **Hero** — Alternate, Blurred, Minimal
+- **Logo** — Official, White, Black, Custom
+- **Icon** — Official, Custom
+
+**Minimal** is SteamGridDB's `material` style. Griddle shows it under the name the site's own
+interface uses, so the two agree.
 
 ## Sizes
 
@@ -30,7 +40,12 @@ do not exist:
 
 ## Formats
 
-Static (JPEG, PNG) and animated (WebP, APNG). Untick **Animated** if you only want still images.
+Two independent things in one column, which is worth knowing before you untick anything:
+
+- **The file type** — PNG, JPEG and WebP for capsules and heroes; PNG and WebP for logos; PNG and
+  ICO for icons.
+- **Animated / Static** — untick **Animated** if you only want still images. Animated artwork is
+  usually WebP or APNG, so this is not the same as unticking WebP.
 
 ## Content tags
 
@@ -54,4 +69,5 @@ Where a tab cannot use one of your choices — a size that only applies to capsu
 ignores it for that tab and keeps it for the others. Nothing is greyed out and nothing is quietly
 discarded, so switching back restores what you picked.
 
-**Reset filters** returns everything to the defaults.
+**Reset filters** returns everything to the defaults. It appears only once you have changed
+something — if you cannot see it, nothing is filtered out that would not be by default.

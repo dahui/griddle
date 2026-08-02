@@ -16,6 +16,24 @@ import { ErrorNote, FocusButton, Spinner } from '../../components';
  * restarting Steam, or whether it gets written to disk and needs one. Resist adding checks for
  * capabilities the app does not have — a green tick against a feature that does not exist is
  * worse than no panel at all.
+ *
+ * # Every row earns its place, and four did not
+ *
+ * The test is narrow: **does this help a bug report, or help the user act?** Applied before the
+ * first release, it removed four rows and added the one the docs had been promising:
+ *
+ * | Was | Why it went |
+ * |---|---|
+ * | `Steam running: yes/no` | A snapshot taken at startup, rendered as though it were current — and **Live apply already says it**, as "Live apply is on, but Steam isn't running". A duplicate in the worse form. |
+ * | `Known apps: 2930` | A parser statistic with nothing to compare it against. Only the *unreadable* case explains anything, so only that case is left. |
+ * | `Cache: 4.2 MB` | Nothing clears it and nothing needs to: the cache is LRU-capped at 512 MB and manages itself. A number the user could neither act on nor worry about. |
+ * | `Found via` as its own row | Kept, but folded in beside the path — a bare registry key path reads as internals when it stands alone. |
+ *
+ * **Version was missing, and `notes/troubleshooting.md` told people to include it.** That is the
+ * drift worth naming: the docs described a panel nobody had checked against the panel. It reads
+ * `0.0.0` on a development build, which is not a placeholder — the git tag is the source of
+ * truth and the release job stamps it in, so `0.0.0` is the true statement "not built from a
+ * tag".
  */
 export function DiagnosticsPanel({ status }: { status: Status }) {
   const [check, setCheck] = useState<LiveApplyCheck | null>(null);
@@ -39,26 +57,36 @@ export function DiagnosticsPanel({ status }: { status: Status }) {
     <section>
       <h2>Diagnostics</h2>
       <dl>
+        {/* First, because it is the first thing a bug report needs. */}
+        <dt>Version</dt>
+        <dd>{status.app_version}</dd>
         <dt>Steam</dt>
-        <dd>{status.steam_root ?? <span className="bad">{status.steam_error}</span>}</dd>
-        <dt>Found via</dt>
-        <dd>{status.steam_source ?? '—'}</dd>
+        <dd>
+          {status.steam_root ?? <span className="bad">{status.steam_error}</span>}
+          {/* Which registry key produced that path. It matters for exactly one failure — the
+              wrong Steam of two installs — so it rides along with the path rather than taking a
+              row and reading as internals. */}
+          {status.steam_root && status.steam_source && (
+            <span className="hint"> — found via {status.steam_source}</span>
+          )}
+        </dd>
         <dt>Account</dt>
         <dd>{status.account_id ?? '—'}</dd>
-        <dt>Steam running</dt>
-        <dd>{status.steam_running ? 'yes' : 'no'}</dd>
         {/* Reported, not offered. The panel that used to let you toggle this is gone — live
-            apply is set up at startup because it is the point of the app. */}
+            apply is set up at startup because it is the point of the app.
+
+            This row also carries whether Steam is running: `explain()` says "Live apply is on,
+            but Steam isn't running", which is what the separate yes/no row was for. */}
         <dt>Live apply</dt>
         <dd>{status.sentinel_explanation}</dd>
-        <dt>Known apps</dt>
-        <dd>
-          {status.app_types_loaded === null
-            ? "Steam's app cache is unreadable — falling back to the built-in list"
-            : `${status.app_types_loaded}`}
-        </dd>
-        <dt>Cache</dt>
-        <dd>{(status.cache_bytes / 1024 / 1024).toFixed(1)} MB</dd>
+        {/* Only the failure. A count of apps read is a parser statistic; a library that is
+            missing games because the cache would not parse is something to report. */}
+        {status.app_types_loaded === null && (
+          <>
+            <dt>Steam&rsquo;s app list</dt>
+            <dd className="bad">Unreadable — falling back to the built-in list</dd>
+          </>
+        )}
       </dl>
 
       <div className="row" style={{ marginTop: '1rem' }}>

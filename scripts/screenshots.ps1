@@ -1,6 +1,7 @@
 # Capture the documentation screenshots from the release build.
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\screenshots.ps1
+#   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\screenshots.ps1 -Welcome
 #
 # Screenshots go stale silently when the UI changes -- nothing fails, the docs just start
 # describing a version nobody has. So this is a script rather than a remembered procedure, and
@@ -14,6 +15,30 @@
 # the keystroke. Clicks land wherever the cursor is and do not care about focus.
 #
 # ASCII-only, like the other scripts here.
+#
+# # Two modes, because the API key decides which screens exist
+#
+# The four main captures need a key -- without one the app never leaves first run. `-Welcome`
+# needs the opposite. They cannot be one pass, and each mode ASSERTS its precondition rather than
+# creating it.
+#
+# That asymmetry is deliberate and is the whole safety story of this script. An earlier harness
+# reached first run by moving `settings.json` aside and restoring it afterwards; the maintainer's
+# DPAPI-sealed key was destroyed by it twice -- once when a cycle failed mid-run, and once when a
+# LATER run restored a stale backup over good settings. A key sealed by DPAPI cannot be recovered
+# from anything on disk.
+#
+# So this script never moves, copies, deletes or writes `settings.json`. To capture the welcome
+# screen, remove your key in the app first (Settings -> "Remove it") and put it back afterwards.
+# That is a deliberate manual step, and it is the point: the person who can undo it is the one
+# doing it.
+
+[CmdletBinding()]
+param(
+    # Capture the first-run welcome screen instead of the four main screens. Requires that no API
+    # key is stored; this script will not remove one for you.
+    [switch]$Welcome
+)
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -26,6 +51,55 @@ if (-not (Test-Path $exe)) {
     exit 1
 }
 New-Item -ItemType Directory -Force $outDir | Out-Null
+
+# Which screens the app will show us. Read-only -- see the header.
+$settingsPath = Join-Path $env:APPDATA 'Griddle\settings.json'
+$hasKey = $false
+if (Test-Path $settingsPath) {
+    $hasKey = $null -ne (Get-Content $settingsPath -Raw | ConvertFrom-Json).api_key_protected
+}
+
+if ($Welcome -and $hasKey) {
+    Write-Host "an API key is stored, so Griddle will not show the welcome screen" -ForegroundColor Red
+    Write-Host "remove it in the app (Settings -> 'Remove it'), re-run, then paste it back."
+    Write-Host "this script deliberately will not touch settings.json -- see its header."
+    exit 1
+}
+if (-not $Welcome -and -not $hasKey) {
+    # Without this the run "succeeds" and writes four identical copies of the welcome screen over
+    # the real docs images, because every click lands on a screen that has none of those controls.
+    Write-Host "no API key is stored, so Griddle opens on first run and the four main screens" -ForegroundColor Red
+    Write-Host "are unreachable. Paste your key into the app first, then re-run."
+    Write-Host "(for the welcome screen itself, use -Welcome)"
+    exit 1
+}
+
+# Default filters are a PRECONDITION, checked -- they used to be a click, and that click was
+# dangerous.
+#
+# This script used to press "Reset filters" before expanding the panel, so the shot showed the
+# product rather than whoever ran it. But that button renders only when the filters ARE modified
+# (`{modified && ...}` in FilterPanel.tsx), and the panel is seeded open on the same condition. So
+# on a machine already at defaults -- the common case -- the panel was shut, the button did not
+# exist, and the click went to fixed coordinates that now land inside the artwork grid.
+#
+# Clicking artwork APPLIES it. A normalisation step that silently rewrites a game's capsule is a
+# far worse failure than the one it was preventing, and nothing about it would have been visible
+# in the output.
+#
+# Asserting is strictly better here: it cannot misfire, it needs no coordinates, and the remedy is
+# one button press by the person already sitting in front of the app.
+#
+# Only in the main mode -- the welcome screen has no filter panel to show anyone's choices in.
+if (-not $Welcome -and (Test-Path $settingsPath)) {
+    $filters = (Get-Content $settingsPath -Raw | ConvertFrom-Json).filters
+    if ($null -ne $filters) {
+        Write-Host "filters are not at their defaults, so the screenshots would show your choices" -ForegroundColor Red
+        Write-Host "open Griddle, pick any game, expand Filters, press 'Reset filters', then re-run."
+        Write-Host "(a null 'filters' key in $settingsPath is what this checks)"
+        exit 1
+    }
+}
 
 Add-Type -AssemblyName System.Drawing
 Add-Type @'
@@ -128,48 +202,47 @@ function Scroll([int]$x, [int]$y, [int]$notches) {
 }
 
 Write-Host "capturing:" -ForegroundColor Cyan
+
+# The welcome screen needs no navigation at all -- it is what the app opens on when there is no
+# key, which the precondition above has already established. So this mode synthesises no input
+# whatsoever: nothing to mis-aim, and nothing that could land on a control.
+if ($Welcome) {
+    Capture 'welcome'
+    Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+    Write-Host "done. Now paste your API key back into Griddle." -ForegroundColor Yellow
+    exit 0
+}
+
 Capture 'library'
 
 # Click targets are read off a captured image and converted to client coordinates, which is what
 # `Click` takes: client X = image X - ($client.X - $win.L), and likewise for Y. Getting that
 # conversion wrong is silent -- the click lands somewhere harmless and the next capture is just
 # a duplicate of the previous one, which is exactly how the first attempt failed.
+#
+# Every value below was re-derived from fresh captures on 2026-08-02, after the 64px -> 84px
+# wordmark pushed the whole page down: the Settings tab had drifted 23px and was landing 1px
+# ABOVE the tab. That is the drift this file's own header warns about, and it had already
+# happened.
 Click 152 467      # the first game tile
 Start-Sleep -Seconds 5
-# Reset the filters before capturing, so the shot shows the app's out-of-the-box state rather
-# than whatever the machine running this happens to have saved. Notably it puts the Adult tick
-# back to off, which is the default and is not something to publish either way round by accident.
-#
-# This *writes* to the settings file. It is the only thing in this script that changes anything,
-# and it is here rather than left to chance because a screenshot of someone's personal filter
-# choices is not a screenshot of the product.
-# Reset the filters, so the shot shows the app's out-of-the-box state rather than whatever the
-# machine running this happens to have saved -- notably the Adult tick, which is off by default
-# and is not something to publish either way round by accident.
-#
-# This *writes* to the settings file, and it is the only thing in this script that changes
-# anything. A screenshot of someone's personal filter choices is not a screenshot of the product.
-Click 1053 501     # Reset filters
-Start-Sleep -Seconds 3
 
-# Then expand the panel, because resetting collapses it.
-#
-# The panel is seeded open only when the filters differ from their defaults -- so resetting them
-# makes it close, and the two steps fight each other unless the second one exists. Clicking the
-# summary is also idempotent in the wrong direction: run this twice against an already-default
-# settings file and the first click hits nothing, leaving the panel shut. Hence the assertion in
-# the output: the browse capture must show an expanded panel.
-Click 95 399       # the Filters summary
+# Expand the Filters panel. Safe to click unconditionally *because* the precondition above
+# guarantees the filters are at their defaults, which means the panel is seeded shut -- so this
+# is always an open, never a close. Without that guarantee it would be a coin flip.
+Click 103 422      # the Filters summary
 Start-Sleep -Seconds 2
 Capture 'browse'
 
-Click 543 328      # the Current tab, last in the asset tab bar
+Click 551 351      # the Current tab, last in the asset tab bar
 Start-Sleep -Seconds 4
 Capture 'current'
 
-Click 88 262       # back to the library
-Start-Sleep -Seconds 2
-Click 176 193      # the Settings tab
+# Straight to Settings from the asset browser. There used to be a "back to the library" click
+# first, which was pointless twice over: the Settings tab is in the same nav row on both screens,
+# and the *nav* tab cannot return to the list anyway -- `App` renders the browser whenever
+# `selected` is set, so only the view's own "<- Library" button clears it.
+Click 184 216      # the Settings tab
 Start-Sleep -Seconds 3
 # The top of the screen, not the Diagnostics rows below the fold. Two ways of reaching those
 # failed *silently* and are worth recording: synthesised `mouse_event` wheel messages never
@@ -182,3 +255,5 @@ Capture 'settings'
 
 Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
 Write-Host "done. Check each image before committing -- the click targets are positional." -ForegroundColor Yellow
+Write-Host "in particular: 'browse' must show an EXPANDED filter panel, and 'settings' must NOT" -ForegroundColor Yellow
+Write-Host "show any Diagnostics row -- the account id lives there." -ForegroundColor Yellow

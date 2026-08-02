@@ -686,10 +686,27 @@ asserts the model's own `.focused` class rather than `document.activeElement`, b
 former can tell the two apart; it was written first and **failed against the `autoFocus` version**,
 which is how this was found rather than shipped.
 
-⚠️ **There is no screenshot of this screen, and `scripts/screenshots.ps1` cannot take one.** It
-drives a release build on a machine that has a key, so it never reaches first run — and it must
-not clear the key to get there, because the plaintext is DPAPI-sealed and cannot be put back. A
-throwaway Windows profile is the only honest way to capture it.
+🟢 **Captured 2026-08-02 as `docs/src/assets/welcome.png`, via `screenshots.ps1 -Welcome`.** This
+section previously said it could not be done without a throwaway Windows profile. That was wrong
+about the *goal* while being right about the danger: what must never happen is a script clearing
+a DPAPI-sealed key to reach first run, and the conclusion drawn from it — "so it cannot be
+captured" — did not follow.
+
+🔑 **The resolution was to make the state a precondition instead of an action**, the same move that
+fixed the "Reset filters" click. The maintainer removes the key in the app, runs `-Welcome`, and
+pastes it back; the script asserts that no key is stored and **refuses to run** otherwise. It
+touches `settings.json` in neither mode. The person who can undo the state change is the one making
+it, which is exactly the property every automated attempt at this lacked.
+
+🔴 **`-Welcome` also forced a guard the main mode had always needed.** With no key stored, the four
+main captures are all unreachable — every click lands on a welcome screen that has none of those
+controls — so the run would have "succeeded" and overwritten `library`, `browse`, `current` and
+`settings` with four copies of the welcome screen. The main mode now asserts a key *is* present.
+Fired against the real condition before being trusted, which is how the missing guard was noticed
+at all.
+
+The welcome capture synthesises **no input whatsoever** — the app opens on that screen — so there
+is nothing to mis-aim and nothing that can land on a control.
 
 ### 🟢 The logo, and why the background removal is a flood fill
 
@@ -757,17 +774,47 @@ corners that are empty and decoded the 256 frame as 128×128 — both wrong. Dec
 payload directly instead. The same lesson as the focus-tree probes: when a probe reports something
 broken, check the probe first.
 
-⚠️ **The docs screenshots predate all of this, and `screenshots.ps1` needs more than a re-run.**
+🟢 **Re-captured 2026-08-02, and `screenshots.ps1` needed more than a re-run — as predicted.** All
+four (`library`, `browse`, `current`, `settings`) now show the wordmark, the new taskbar icon, no
+tagline, and Sort as buttons. Every click target was re-derived from fresh captures; the docs build
+is clean and `settings.png` still stops above the Diagnostics rows, which is what keeps the Steam
+account id unpublished.
+
+🔴 **One of its clicks had become capable of applying artwork to the maintainer's library.** The
+script pressed *"Reset filters"* at fixed coordinates *before* expanding the panel — but that
+button renders only when the filters **are** modified (`{modified && …}`), and the panel is seeded
+open on the same condition. So on a machine already at defaults, which is the normal case, the
+panel was shut, the button did not exist, and the click went to coordinates that the taller header
+had moved into the artwork grid. **Clicking artwork applies it.**
+
+The fix is not better coordinates, it is not clicking: default filters are now a **precondition**
+asserted against `settings.json` (`filters` must be `null`), and the script exits telling the
+maintainer to press the button themselves. That also removed the script's only write to settings.
+A normalisation step that can silently rewrite a game's capsule is worse than the unnormalised
+screenshot it was preventing.
 
 The header changed height four times, so any claim about its click targets has to say *which*
 version it means. Measuring the header's own rule, all at 100/100 samples:
 
-| Header | Rule at |
-|---|---|
-| 44px horizontal lockup + tagline | y=180 |
-| 72px mascot + tagline | y=232 |
-| 72px mascot, no tagline | y=188 |
-| **64px wordmark, no tagline — what ships** | **y=178** |
+| Header | Rule at | Basis |
+|---|---|---|
+| 44px horizontal lockup + tagline | y=180 | **unrecorded** |
+| 72px mascot + tagline | y=232 | **unrecorded** |
+| 72px mascot, no tagline | y=188 | **unrecorded** |
+| ~~64px wordmark, no tagline~~ | ~~y=178~~ | superseded — the header is 84px now |
+| **84px wordmark, no tagline — what ships** | **y=165** | **client**, `[VERIFIED-BOX 2026-08-02]` |
+
+🔴 **The four older rows do not say which origin they were measured from, and that makes them
+unusable rather than merely old.** `screenshots.ps1` clicks through `ClientToScreen`, so its
+coordinates exclude the title bar; a capture taken from `DwmGetWindowAttribute`'s frame bounds
+includes it, and on this box that is a **38px** difference — larger than the whole spread of the
+table. So "y=178" could mean 178 or 140 and there is no way to tell which. The new row states its
+basis, and any replacement must too.
+
+The re-measurement is `scratchpad/measure-header.ps1`: it prints the frame origin, the client
+origin *and* the delta, then scans a column for the first row matching `--line` (`#2c2f3d`) and
+reports the hit in both. It found rgb(44,47,61) at image y=203, client y=165 — the exact token
+value, so it matched the rule and not a panel edge.
 
 🔑 **A 2px drift is small enough to look like it still works and not be**, which is the dangerous
 size: the script's own header records that a mis-aimed click fails *silently*, producing a
@@ -779,6 +826,27 @@ goes, which writes to `settings.json`.
 earlier version moved the file aside and the maintainer's API key was lost when a cycle went
 wrong — DPAPI-sealed, so unrecoverable from anything on disk. Keep the backup until the key has
 been confirmed working, not merely until the file is back.
+
+🔴 **That rule is necessary and it is not sufficient — the fixed version destroyed the key a
+second time, 2026-08-02, by exactly the mechanism it introduced.** "Keep the backup" leaves a
+`settings.json.held` lying around, and the restore was guarded by `if (Test-Path $held)`. A *later*
+run — not even a first-run one, so it created no backup at all — reached its `finally`, found the
+**stale** `.held` from the previous session, and copied that keyless file over live settings that
+were newer and had a working key in them.
+
+Both halves looked right in isolation, which is why this got through: keeping the backup is
+correct, and restoring it in a `finally` is correct. What is wrong is deciding *whether this run
+has a backup* by asking the filesystem, because the filesystem cannot distinguish this run's
+backup from last week's.
+
+**The rule that actually holds: a restore must be gated on a flag the same run set** (`$heldByThisRun`),
+never on the backup's existence — and a run that is *about* to create one must refuse to start if a
+stale backup is already there, since at that moment it cannot tell them apart either.
+
+🔑 **The tell was in the screenshots and was nearly missed.** Capture one showed the full library
+— which requires `has_api_key` — and capture two, forty seconds later, showed the welcome screen.
+Two images that disagreed about a fact that cannot change on its own. **When two captures of the
+same session disagree, something between them wrote to disk.**
 
 ### Running it
 
@@ -2316,6 +2384,65 @@ and one `typeof` check.
 What survives of the idea: `cdp::mod` still reads `CLSTAMP` and Diagnostics still shows it, so a
 bug report can name the build it was seen on. It gates nothing.
 
+### 🟢 The diagnostics row audit, 2026-08-02 — four rows out, the version in
+
+Run against the panel's own stated test — **does this help a bug report, or help the user act?**
+The panel already carried the rule that matters (*"a green tick against a feature that does not
+exist is worse than no panel"*); what it had not been asked is whether each *fact* earns its row.
+
+| Removed | Why |
+|---|---|
+| `Steam running: yes/no` | A snapshot taken at startup and never refreshed, rendered as though current — and 🔴 **`sentinel_explanation` already says it**, as *"Live apply is on, but Steam isn't running"*. A duplicate in the worse form. |
+| `Known apps: 2930` | A parser statistic with nothing to compare against. Only the `None` case explains anything, so only that case renders now. |
+| `Cache: 4.2 MB` | Checked rather than assumed: `cache` is **LRU-capped at `DEFAULT_MAX_BYTES` = 512 MB** and self-manages, and `notes/uninstalling.md` already documents the directory. A number with nothing behind it. |
+| `sentinel_present` | 🔴 **Dead across the boundary** — serialised, mirrored in `api.ts`, rendered nowhere. `sentinel_explanation` had absorbed it. |
+
+`Found via` was kept but folded in beside the path: it explains exactly one failure — the wrong
+Steam of two installs — and a bare registry key path standing alone reads as internals.
+
+🔑 **The find that matters is the opposite direction: `Version` was missing, and
+`notes/troubleshooting.md` told people to include it.** *"Include the version from Settings →
+Diagnostics"* had never been true. Nothing catches this class — the docs described a panel that
+nobody had read the panel against — and it is the single most useful line in a bug report.
+
+`app_version` is `env!("CARGO_PKG_VERSION")`, so it reads **`0.0.0` on a development build**. That
+is information, not a placeholder: the git tag is the source of truth and `scripts/set-version.ps1`
+stamps it in during the release job, so `0.0.0` states truthfully "not built from a tag". Do not
+"fix" it by hardcoding a number.
+
+#### 🔴 Three more capability claims had gone stale the same way, all in release-facing copy
+
+Found by sweeping the docs for the same question. Every one describes the product as it was before
+a fix landed, and all three would have shipped in the release notes users read:
+
+| Claim | Where | Reality |
+|---|---|---|
+| *"Steam games cannot have a custom icon… the control is disabled"* | `CHANGELOG.md` known limitations | The **reverted regression**, still recorded as a limitation. `commands/icon.rs`'s own header says icons for Steam games "go through `apply_asset` like every other slot… works and always has". |
+| *"The **Sort** control is a native dropdown a controller cannot open"* | `CHANGELOG.md`, **and a whole `## One control a controller cannot reach` section** in `using/controller-and-keyboard.md` ending *"Replacing it is planned"* | Already replaced — `SortOptions` is three `useFocusItem` buttons. |
+| *"Set the path yourself in **Settings**"* | `notes/troubleshooting.md` | 🔴 **There is no such control.** `SGDB_STEAM_PATH` is the only override, which `error.rs` says correctly — so the app was honest and the docs were not. |
+
+🔑 **The pattern is one-directional and worth naming.** All four (these three plus the missing
+version) are documentation that stopped tracking a change *in the product's favour* — a fix landed,
+a limitation was lifted, a row was never added — and nothing failed, because prose does not compile.
+`check-claims.sh` cannot reach any of them: they are claims about behaviour, not grep-able facts.
+**Before a release, read the limitations list against the code, not against its own last version.**
+
+#### 🟡 And three in `using/filters.mdx`, caught by the screenshot rather than by reading
+
+A different and more useful discovery route: re-capturing `browse.png` put the filter panel and its
+documentation side by side, and they disagreed three times. **A screenshot is a test of the prose
+next to it** — none of these had been noticed by reading the page.
+
+| It said | The panel shows |
+|---|---|
+| the styles are *"Alternate, Blurred, White Logo, **Material**, No Logo"* | **Minimal** — `STYLE_LABEL` maps `material` → `'Minimal'` deliberately, to match SteamGridDB's own UI, so "Material" is a name the reader cannot find anywhere |
+| *"Everything starts **ticked** except Adult Content"* | **512×512 and 1024×1024 are also unticked**, deliberately — valid for grids but "not the shape Steam renders", per `DIMENSIONS`' own doc comment |
+| *"Formats: Static (JPEG, PNG) and animated (WebP, APNG)"* | **five** ticks that are two independent things — three mime types, plus Animated/Static. Unticking WebP is not the same as unticking Animated, which is exactly the confusion the old wording invited |
+
+The styles list is now written out per asset type, since it varies and the page said so without
+saying how. Also added: **Reset filters** only appears once something is modified — a reader who
+goes looking for it in the default state would otherwise report it missing.
+
 ---
 
 ## Deliberate divergences from the Decky plugin
@@ -2328,7 +2455,7 @@ bug report can name the build it was seen on. It gates nothing.
 | **One filter set for all five tabs**, not `filters_<type>` | Decky keys filters per asset type. Re-picking "no adult content" on five tabs is busywork, not a feature. Per-endpoint vocabularies (sizes, styles) are handled by **clamping at query time**, so a selection another tab cannot show is kept rather than discarded. |
 | **No MOTD, donation modal, or tutorial video** | Decky-store furniture. The first-run API-key flow replaces the tutorial. |
 | **Library style tweaks ship behind "Experimental"** | Square Capsules / Matching Recents / Capsule Glow patch Steam's own library rendering *globally* — the most fragile surface in the product. Same features, honest labelling, individually disableable. ⚠️ **Open question after the B cut:** these need the same structural module discovery that was just deleted, so shipping them means bringing that machinery back for them alone. Not yet decided. |
-| **Plus, not in Decky: a diagnostics screen** | It reports the environment — Steam root, account, whether live apply is available — because almost every failure here is environmental. The build-stamped module map that used to sit beside it is gone; see the reliability section above. |
+| **Plus, not in Decky: a diagnostics screen** | It reports the environment — **version**, Steam root, account, whether live apply is available — because almost every failure here is environmental. The build-stamped module map that used to sit beside it is gone; see the reliability section above, and the row audit below for the four rows that went with it. |
 | **Plus, not in Decky: controller navigation on the desktop window** | Decky is already gamepad-native inside Steam's shell. We get there by making our own window drivable by a pad, which costs one spatial focus model and no Steam internals whatsoever. |
 
 Matching Decky's restraint, explicitly **not** added: favorites, download history,

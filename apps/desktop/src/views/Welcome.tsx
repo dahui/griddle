@@ -12,8 +12,14 @@
  * live apply — already happen silently at startup, and the screen that used to ask about one of
  * them was deleted for being unnecessary. This does not bring it back.
  *
- * The numbered steps are word-for-word the ones in `docs/start/your-api-key.mdx`. Same words in
- * both places is the point: two sets of instructions for one task is how they drift.
+ * The numbered steps mirror `docs/start/your-api-key.mdx`. One set of instructions for one task is
+ * the point — two is how they drift.
+ *
+ * Steps 2 and 3 are identical. Steps 1 and 4 differ, and only in ways the medium forces: this
+ * screen can say "Paste it below" because the field is right there, and the docs page cannot, so
+ * it names Settings instead. Keep the *substance* in step; do not reword either one for its own
+ * sake. (This comment used to claim "word-for-word", which was never true of step 4 — an overclaim
+ * that would eventually be discovered as a discrepancy and fixed in the wrong direction.)
  */
 import lockup from '../assets/logo.png';
 import { ExternalLink, KeyEntry } from '../components';

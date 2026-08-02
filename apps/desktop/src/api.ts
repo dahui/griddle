@@ -43,10 +43,18 @@ export function asUiError(e: unknown): UiError {
 }
 
 export interface Status {
+  /**
+   * Griddle's own version.
+   *
+   * `0.0.0` on a development build, and that is information rather than a bug: the git tag is
+   * the source of truth and the release job stamps it in, so `0.0.0` means "not built from a
+   * tag".
+   */
+  app_version: string;
   steam_root: string | null;
+  /** Which registry key found `steam_root`. Shown beside the path, not as a row of its own. */
   steam_source: string | null;
   account_id: number | null;
-  steam_running: boolean;
   /** A key is *stored*. Not the same as usable — check `key_unreadable` alongside it. */
   has_api_key: boolean;
   /**
@@ -56,11 +64,15 @@ export interface Status {
    * looks like. The first-run gate treats it as "no key", because the remedy is identical.
    */
   key_unreadable: boolean;
-  /** Whether the CEF debugging flag is in place. Set up at startup; not a user setting. */
-  sentinel_present: boolean;
+  /**
+   * Live apply in one sentence, including whether Steam is up.
+   *
+   * This says "Live apply is on, but Steam isn't running" where a separate boolean row used to
+   * say `no` — the same fact, in the form that says what it means.
+   */
   sentinel_explanation: string;
+  /** `null` when `appinfo.vdf` could not be read. Only that case is shown. */
   app_types_loaded: number | null;
-  cache_bytes: number;
   steam_error: string | null;
 }
 

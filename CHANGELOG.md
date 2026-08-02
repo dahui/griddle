@@ -23,7 +23,9 @@ First release in preparation. Griddle can:
 
 Known limitations:
 
-- Steam games cannot have a custom icon. The call Steam exposes accepts one and does nothing;
-  the control is disabled rather than silently failing.
-- The library's **Sort** control is a native dropdown a controller cannot open.
+- **Icons never appear until Steam restarts**, whichever way they were applied. That is true of
+  every route into Steam's icons, the Decky plugin's included; Griddle says so when it applies one
+  rather than pretending otherwise.
+- **Griddle cannot be told where Steam is from inside the app.** It reads the registry, and the
+  `SGDB_STEAM_PATH` environment variable is the only override.
 - The binaries are unsigned, so Windows SmartScreen warns on first run.

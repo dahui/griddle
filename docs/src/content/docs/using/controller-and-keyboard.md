@@ -50,7 +50,8 @@ whenever the Steam Overlay is attached, which is exactly the case here.
 You also get Steam Input for free — remap Griddle's controls the way you would for any game, and
 Griddle sees the result.
 
-## One control a controller cannot reach
+## Every control is reachable
 
-The **Sort** dropdown in the library toolbar is a native Windows dropdown, and its popup does not
-accept controller input. You can reach and open it with the keyboard. Replacing it is planned.
+There is nothing in Griddle a controller cannot operate. **Sort** was the one exception — a native
+Windows dropdown whose popup is drawn outside the page and receives no controller input — and it is
+now three ordinary buttons beside the scope tabs.

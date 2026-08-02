@@ -6,11 +6,14 @@ sidebar:
 ---
 
 import { Image } from 'astro:assets';
+import welcome from '../../../assets/welcome.png';
 import settings from '../../../assets/settings.png';
 
 Griddle opens on a welcome screen the first time it runs, and asks for a **SteamGridDB API key**.
 It is free, and it takes about a minute. The same four steps are on that screen, with a button
 that opens the right page for you.
+
+<Image src={welcome} alt="Griddle's first-run welcome screen, with the four steps and the key field" />
 
 ## Getting one
 
@@ -23,6 +26,9 @@ Griddle checks the key with SteamGridDB before saving it, so you find out immedi
 wrong rather than at the first game you open. If what you pasted does not look like a key — a
 half-copied string, or a label that came along with it — the screen says so, but it will still
 let you try: the check is a hint, not a rule.
+
+Afterwards the key lives under **Settings → SteamGridDB API key**, where you can replace or remove
+it. Removing it puts Griddle back on the welcome screen above.
 
 <Image src={settings} alt="Griddle's settings screen, showing the API key panel" />
 
