@@ -10,6 +10,7 @@
  */
 export { ToastProvider, useErrorToast, useToast } from './toast';
 export { ContextMenu, MenuItem } from './menu';
+export { KeyEntry } from './KeyEntry';
 export {
   ArtImage,
   Empty,

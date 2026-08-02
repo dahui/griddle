@@ -96,8 +96,12 @@ impl From<griddle_core::sgdb::client::Error> for UiError {
     fn from(e: griddle_core::sgdb::client::Error) -> Self {
         use griddle_core::sgdb::client::Error as E;
         match &e {
-            E::Unauthorized => UiError::new(Kind::Unauthorized, e.to_string())
-                .with_action("Check your key in Settings, or generate a new one."),
+            // No screen is named: this same action is read on the first-run screen, where there
+            // is no Settings tab yet, and inside Settings, where saying so is redundant. What
+            // does not change in either place is where a replacement key comes from.
+            E::Unauthorized => UiError::new(Kind::Unauthorized, e.to_string()).with_action(
+                "Generate a fresh key on your SteamGridDB preferences page, then paste it again.",
+            ),
             E::NotFound => UiError::new(Kind::NotOnSteamGridDb, e.to_string())
                 .with_action("Try “Wrong game?” to search for it by name."),
             E::Timeout | E::Network(_) => UiError::new(Kind::Network, e.to_string())
@@ -210,7 +214,11 @@ mod tests {
     fn a_bad_key_is_not_reported_as_a_network_problem() {
         let e: UiError = griddle_core::sgdb::client::Error::Unauthorized.into();
         assert_eq!(e.kind, Kind::Unauthorized);
-        assert!(e.action.unwrap().contains("Settings"));
+        let action = e.action.unwrap();
+        // Says where a key comes from, not which screen to be on. The first-run screen shows
+        // this before a Settings tab exists, so naming one sends the user nowhere.
+        assert!(action.contains("preferences page"), "{action}");
+        assert!(!action.contains("Settings"), "{action}");
     }
 
     #[test]

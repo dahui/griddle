@@ -70,7 +70,12 @@ async fn a_401_is_reported_as_a_key_problem_and_is_not_retried() {
     let client = client_for(&server).await;
     let err = client.validate_key().await.unwrap_err();
     assert!(matches!(err, Error::Unauthorized), "{err:?}");
-    assert!(err.to_string().contains("Settings"), "{err}");
+
+    // The message must name no screen. It used to say "Check it in Settings.", which is a dead
+    // end on the first-run screen -- there is no Settings tab until a key exists -- and
+    // redundant once the user is in Settings. The remedy belongs to whoever is showing the
+    // error, not to the transport.
+    assert!(!err.to_string().contains("Settings"), "{err}");
 }
 
 #[tokio::test]

@@ -111,6 +111,7 @@ export function ExternalLink({
   section = 'key',
   row = 0,
   col = 0,
+  className,
 }: {
   href: string;
   children: ReactNode;
@@ -118,13 +119,20 @@ export function ExternalLink({
   section?: string;
   row?: number;
   col?: number;
+  /**
+   * Extra classes, so a link can be presented as a button where it is the primary action.
+   *
+   * It stays an `ExternalLink` rather than becoming a `FocusButton` that calls `api.openUrl`:
+   * there is one allowlisted path out to a browser and it should have one call site.
+   */
+  className?: string;
 }) {
   const { ref, focused } = useFocusItem<HTMLAnchorElement>(section, row, col);
   return (
     <a
       ref={ref}
       href={href}
-      className={focused ? 'focused' : undefined}
+      className={[className, focused ? 'focused' : null].filter(Boolean).join(' ') || undefined}
       onClick={(e) => {
         e.preventDefault();
         void api.openUrl(href).catch((err: unknown) => onError?.(asUiError(err)));

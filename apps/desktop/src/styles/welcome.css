@@ -1,0 +1,92 @@
+/* -- the first-run screen ------------------------------------------------------------- */
+
+/*
+ * One card, read top to bottom, so everything here is about vertical rhythm rather than layout.
+ * The screen has no nav and no sidebar: it is the only thing on the page until a key exists.
+ */
+
+.welcome p {
+  font-size: 0.95rem;
+}
+
+/*
+ * The app-wide `h2` is a small-caps *section label* -- correct where a heading names one panel
+ * among several, which is every other screen. Here the heading is the page: the welcome screen
+ * has exactly one card and nothing to label it against, and inheriting the label style left the
+ * only real title on screen smaller and dimmer than the sentence beneath it.
+ */
+.welcome h2 {
+  font-size: 1.5rem;
+  text-transform: none;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  margin-bottom: 0.6rem;
+}
+
+/* The one sentence that says what the app is. Larger than the instructions that follow it. */
+.welcome .lead {
+  font-size: 1.05rem;
+  color: var(--text);
+  max-width: 46rem;
+}
+
+/*
+ * The steps for obtaining a key. `ol` is deliberate rather than styled `div`s -- these are
+ * ordered instructions and a screen reader should say so.
+ */
+.welcome .steps {
+  margin: 0.9rem 0 1.2rem;
+  padding-left: 1.4rem;
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.95rem;
+  max-width: 46rem;
+}
+
+.welcome .steps strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/*
+ * A link presented as the primary action.
+ *
+ * Matched to `button` in controls.css by hand rather than by sharing a selector: `button` sets
+ * properties an anchor does not need, and an anchor needs `text-decoration` and `display` that a
+ * button does not. Keep the two in step if the button style changes -- the cost of drift is
+ * cosmetic, which is why this is not worth a shared class.
+ */
+.welcome .linkbutton {
+  display: inline-block;
+  font-size: 0.85rem;
+  color: #0e0f16;
+  background: var(--accent);
+  border: 1px solid transparent;
+  border-radius: 7px;
+  padding: 0.45rem 0.9rem;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.welcome .linkbutton:hover {
+  filter: brightness(1.08);
+}
+
+/* The key field and Save, given room to breathe under the call to action. */
+.welcome .row {
+  margin: 1.1rem 0 0;
+}
+
+/*
+ * Capped, because `.search` is `flex: 1` and this screen is a full-width card -- so the field
+ * stretched to roughly three times the width of the 32-character key it holds, which reads as a
+ * search box rather than as somewhere to paste one short value.
+ */
+.welcome .search {
+  flex: 0 1 26rem;
+}
+
+.welcome .hint {
+  margin-top: 0.9rem;
+  max-width: 46rem;
+}

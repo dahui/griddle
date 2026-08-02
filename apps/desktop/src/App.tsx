@@ -17,7 +17,8 @@ import { NavSlotCtx } from './navSlot';
 const TABS: Tab[] = ['library', 'settings'];
 import { Library } from './views/Library';
 import { AssetBrowser } from './views/AssetBrowser';
-import { ApiKeyPanel, Settings } from './views/Settings';
+import { Settings } from './views/Settings';
+import { Welcome } from './views/Welcome';
 
 type Tab = 'library' | 'settings';
 
@@ -62,17 +63,15 @@ export function App() {
 
   // First run: nothing else is useful without a key, so ask for it rather than showing an
   // empty library the user cannot explain.
-  if (!status.has_api_key) {
+  //
+  // `key_unreadable` is the second half of that condition and not an edge case: a settings file
+  // copied from another Windows account has a key stored that DPAPI will not unseal here, so
+  // `has_api_key` alone sends that user straight into a library where every request fails with
+  // nothing on screen to explain why.
+  if (!status.has_api_key || status.key_unreadable) {
     return (
       <Shell>
-        <section className="welcome">
-          <h2>Welcome</h2>
-          <p>
-            Browse SteamGridDB and apply artwork to your Steam library. You&rsquo;ll need a
-            SteamGridDB API key to get started.
-          </p>
-        </section>
-        <ApiKeyPanel status={status} onStatus={setStatus} />
+        <Welcome status={status} onStatus={setStatus} />
       </Shell>
     );
   }

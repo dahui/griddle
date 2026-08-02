@@ -13,7 +13,19 @@ pub struct Status {
     pub steam_source: Option<String>,
     pub account_id: Option<u32>,
     pub steam_running: bool,
+    /// Whether a key is *stored*. This is ciphertext-present, not key-usable — see
+    /// [`Status::key_unreadable`], which the first-run flow must check alongside it.
     pub has_api_key: bool,
+    /// A key is stored but could not be turned into a client — almost always a settings file
+    /// carried over from another Windows account, since DPAPI is scoped to the user who sealed
+    /// it.
+    ///
+    /// Without this the two states are indistinguishable to the UI: `has_api_key` is true either
+    /// way, so the user sails past first run into a library where every request fails with no
+    /// explanation. `settings.api_key()` already reports the difference and `AppState::load`
+    /// already logs it — but a `warn!` in a `windows_subsystem = "windows"` binary reaches
+    /// nobody.
+    pub key_unreadable: bool,
     /// Whether the CEF debugging flag is in place. Set up at startup, not by the user — this is
     /// reported for diagnostics, not offered as a control.
     pub sentinel_present: bool,
@@ -47,12 +59,18 @@ pub async fn status(state: State<'_, AppState>) -> Res<Status> {
         Err(_) => (None, None, None, None, None),
     };
 
+    // Stored, but no client was built from it. The slot is populated only by a successful load
+    // or a successful `set_api_key`, so this pair is exactly "stored and unusable" and needs no
+    // extra state to track.
+    let key_unreadable = settings.has_api_key() && state.sgdb.lock().await.is_none();
+
     Ok(Status {
         steam_root: root,
         steam_source: source,
         account_id: account,
         steam_running: process::is_running(),
         has_api_key: settings.has_api_key(),
+        key_unreadable,
         sentinel_present: sentinel.as_ref().is_some_and(Sentinel::exists),
         sentinel_explanation: sentinel.as_ref().map_or_else(
             || "Steam was not found.".to_owned(),

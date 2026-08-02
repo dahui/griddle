@@ -63,7 +63,12 @@ pub const MAX_DOWNLOAD_BYTES: usize = 64 * 1024 * 1024;
 pub enum Error {
     /// HTTP 401 — the key is missing, wrong, or revoked. All three look identical from here
     /// (the body is empty), so the message covers all three.
-    #[error("SteamGridDB rejected the API key (HTTP 401). Check it in Settings.")]
+    ///
+    /// It deliberately names no screen. This message used to end "Check it in Settings.", which
+    /// is wrong in both places it appears: the first-run screen has no Settings to go to, and in
+    /// Settings the user is already there. Where to go next belongs to the caller, which knows —
+    /// see `UiError`'s action.
+    #[error("SteamGridDB rejected the API key (HTTP 401).")]
     Unauthorized,
 
     /// HTTP 404 — for a game lookup this usually means "SteamGridDB has no entry", not a bug.

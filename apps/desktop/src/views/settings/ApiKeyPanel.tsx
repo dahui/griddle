@@ -1,10 +1,14 @@
 /**
- * The SteamGridDB API key: entering it, replacing it, and clearing it.
+ * The SteamGridDB API key in Settings: replacing it, and clearing it.
+ *
+ * Entering one is [`KeyEntry`]'s job, shared with the first-run screen so the two cannot drift
+ * apart. What differs here is the framing: this reader already has the app, so the panel explains
+ * the policy and offers the key as something to manage, rather than walking anybody through
+ * obtaining one.
  */
 import { useState } from 'react';
-import { api, asUiError, type Status, type UiError } from '../../api';
-import { ErrorNote, ExternalLink, FocusButton, useToast } from '../../components';
-import { useFocusItem } from '../../focus';
+import { api, type Status, type UiError } from '../../api';
+import { ErrorNote, ExternalLink, FocusButton, KeyEntry } from '../../components';
 
 /** Where the user generates their own key. Allowlisted in `griddle_core::browser`. */
 const KEY_PAGE = 'https://www.steamgriddb.com/profile/preferences/api';
@@ -16,37 +20,24 @@ export function ApiKeyPanel({
   status: Status;
   onStatus: (s: Status) => void;
 }) {
-  const [key, setKey] = useState('');
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<UiError | null>(null);
-
-  async function save() {
-    setBusy(true);
-    setError(null);
-    try {
-      // Validated against the live API before it is stored, so a wrong key is rejected here
-      // rather than turning into a 401 on every later request.
-      await api.setApiKey(key);
-      setKey('');
-      onStatus(await api.status());
-    } catch (e: unknown) {
-      setError(asUiError(e));
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function clear() {
     await api.clearApiKey();
     onStatus(await api.status());
   }
 
+  // Stored is not the same as usable: a settings file from another Windows account decrypts
+  // nowhere else. Saying "Key saved." over one of those would describe a key that cannot make a
+  // single request.
+  const usable = status.has_api_key && !status.key_unreadable;
+
   return (
     <section>
       <h2>SteamGridDB API key</h2>
       <p>
-        This app uses <strong>your own</strong> API key rather than shipping a shared one. It
-        is stored encrypted for your Windows account and only ever sent to SteamGridDB.
+        This app uses <strong>your own</strong> API key rather than shipping a shared one. It is
+        stored encrypted for your Windows account and only ever sent to SteamGridDB.
       </p>
       <p>
         Grab one from{' '}
@@ -56,7 +47,14 @@ export function ApiKeyPanel({
         .
       </p>
 
-      {status.has_api_key ? (
+      {status.key_unreadable && (
+        <p className="note note-bad">
+          The saved key could not be decrypted on this Windows account, so Griddle cannot use it.
+          Paste it again to fix this.
+        </p>
+      )}
+
+      {usable ? (
         <div className="row">
           <span className="ok">Key saved.</span>
           <FocusButton section="key" row={1} col={0} className="ghost" onClick={() => void clear()}>
@@ -64,58 +62,9 @@ export function ApiKeyPanel({
           </FocusButton>
         </div>
       ) : (
-        <div className="row">
-          <KeyInput
-            value={key}
-            onChange={setKey}
-            onSubmit={() => {
-              if (key.trim() && !busy) void save();
-            }}
-          />
-          <FocusButton
-            section="key"
-            row={1}
-            col={1}
-            disabled={busy || !key.trim()}
-            onClick={() => void save()}
-          >
-            {busy ? 'Checking…' : 'Save'}
-          </FocusButton>
-        </div>
+        <KeyEntry onStatus={onStatus} />
       )}
       {error && <ErrorNote error={error} />}
     </section>
-  );
-}
-
-/**
- * The API-key field.
- *
- * Enter submits, and that handler survives the focus model untouched: arrow keys navigate, but
- * left/right are surrendered whenever a text field holds focus, so the caret still moves through
- * a pasted key normally.
- */
-function KeyInput({
-  value,
-  onChange,
-  onSubmit,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  onSubmit: () => void;
-}) {
-  const { ref, focused } = useFocusItem<HTMLInputElement>('key', 1, 0);
-  return (
-    <input
-      ref={ref}
-      type="password"
-      className={`search${focused ? ' focused' : ''}`}
-      placeholder="Paste your API key"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') onSubmit();
-      }}
-    />
   );
 }

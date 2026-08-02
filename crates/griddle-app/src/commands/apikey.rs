@@ -7,7 +7,24 @@ use super::Res;
 use crate::error::{Kind, UiError};
 use crate::state::AppState;
 use griddle_core::sgdb::{self, ApiKey};
+use std::time::Duration;
 use tauri::State;
+
+/// How patient the *validation* request is allowed to be.
+///
+/// The shipping defaults — a 20 s timeout and 3 retries with backoff — are right for browsing,
+/// where a transient failure should be ridden out and nobody is watching a single request. They
+/// are wrong here, because a human is sitting in front of a button that says "Checking…": offline,
+/// the defaults take over a minute to conclude what is obvious in seconds, with no way to cancel.
+///
+/// One retry rather than none, so a single dropped packet does not read as a bad key.
+fn validation_config() -> sgdb::client::Config {
+    sgdb::client::Config {
+        timeout: Duration::from_secs(8),
+        max_retries: 1,
+        ..sgdb::client::Config::default()
+    }
+}
 
 /// Validate a key against the live API **before** storing it.
 ///
@@ -20,8 +37,13 @@ pub async fn set_api_key(state: State<'_, AppState>, key: String) -> Res<()> {
             .with_action("Paste the key from your SteamGridDB preferences page.")
     })?;
 
+    // Two clients on purpose: the impatient one answers the user, and the one that gets stored
+    // keeps the ordinary retry policy for everything afterwards.
+    let checker =
+        sgdb::Client::with_config(parsed.clone(), validation_config()).map_err(UiError::from)?;
+    checker.validate_key().await?;
+
     let client = sgdb::Client::new(parsed.clone()).map_err(UiError::from)?;
-    client.validate_key().await?;
 
     let mut settings = state.settings.lock().await;
     settings.set_api_key(&parsed)?;

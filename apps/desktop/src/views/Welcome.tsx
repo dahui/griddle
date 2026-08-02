@@ -1,0 +1,98 @@
+/**
+ * First run: the one screen between installing Griddle and using it.
+ *
+ * **Task first, policy last.** This screen used to open with why the key is the user's own rather
+ * than shipped — a good argument, aimed at someone who had not yet been told what they were being
+ * asked for. What a new user needs first is that a key exists, that it is free, and where the
+ * button is. The reasoning is still here, at the bottom, where it answers a question the user
+ * might now be asking rather than pre-empting one they are not.
+ *
+ * **Not a wizard, deliberately.** There is exactly one thing to do, and Next/Back around a single
+ * field is ceremony. The other things a setup wizard might walk through — locating Steam, enabling
+ * live apply — already happen silently at startup, and the screen that used to ask about one of
+ * them was deleted for being unnecessary. This does not bring it back.
+ *
+ * The numbered steps are word-for-word the ones in `docs/start/your-api-key.mdx`. Same words in
+ * both places is the point: two sets of instructions for one task is how they drift.
+ */
+import { ExternalLink, KeyEntry } from '../components';
+import type { Status } from '../api';
+
+/** Where the user generates their own key. Allowlisted in `griddle_core::browser`. */
+const KEY_PAGE = 'https://www.steamgriddb.com/profile/preferences/api';
+
+export function Welcome({
+  status,
+  onStatus,
+}: {
+  status: Status;
+  onStatus: (s: Status) => void;
+}) {
+  // A key is stored but unusable — nearly always settings carried from another Windows account,
+  // since DPAPI seals to the user. Worth its own opening, because "welcome, get started" is a
+  // strange thing to say to someone who did this months ago on another machine.
+  const stale = status.key_unreadable;
+
+  return (
+    <section className="welcome">
+      {stale ? (
+        <>
+          <h2>Enter your API key again</h2>
+          <p className="lead">
+            Griddle found a saved SteamGridDB key but could not read it. Keys are encrypted for
+            one Windows account, so a settings file that came from another PC — or another
+            account on this one — cannot be unlocked here. Nothing else was lost.
+          </p>
+        </>
+      ) : (
+        <>
+          <h2>Welcome to Griddle</h2>
+          <p className="lead">
+            Browse SteamGridDB and apply artwork to your Steam library. Unlike other Windows
+            tools, the artwork appears straight away — no Steam restart.
+          </p>
+        </>
+      )}
+
+      <p>
+        {stale ? 'Paste it below, or generate a new one.' : 'First, a SteamGridDB API key.'} It is
+        free, and it takes about a minute.
+      </p>
+
+      <ol className="steps">
+        <li>
+          Sign in at <strong>steamgriddb.com</strong> — a Steam login works.
+        </li>
+        <li>
+          Open your <strong>profile → Preferences → API</strong>.
+        </li>
+        <li>Generate a key and copy it.</li>
+        <li>Paste it below.</li>
+      </ol>
+
+      <p className="row">
+        <ExternalLink href={KEY_PAGE} className="linkbutton">
+          Open SteamGridDB
+        </ExternalLink>
+      </p>
+
+      <KeyEntry onStatus={onStatus} autoFocus />
+
+      <p className="hint">
+        Your key is stored encrypted for your Windows account, and is only ever sent to
+        SteamGridDB — never with image downloads, and never anywhere else. Griddle does not ship a
+        shared key: one inside a downloaded app gets scraped and revoked, and then every
+        installation breaks at once.
+      </p>
+
+      {/* Said plainly rather than left to be discovered as an empty library. Not a blocker: the
+          key is worth saving either way, and Steam may simply not be installed yet. */}
+      {status.steam_error && (
+        <p className="note note-bad">
+          Steam was not found on this PC, so Griddle cannot list your games yet. You can still
+          save your key. ({status.steam_error})
+        </p>
+      )}
+    </section>
+  );
+}

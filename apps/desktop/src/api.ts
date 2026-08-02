@@ -47,7 +47,15 @@ export interface Status {
   steam_source: string | null;
   account_id: number | null;
   steam_running: boolean;
+  /** A key is *stored*. Not the same as usable — check `key_unreadable` alongside it. */
   has_api_key: boolean;
+  /**
+   * A key is stored but could not be decrypted, so there is no client behind it.
+   *
+   * DPAPI seals to one Windows account, so this is what a settings file carried from another PC
+   * looks like. The first-run gate treats it as "no key", because the remedy is identical.
+   */
+  key_unreadable: boolean;
   /** Whether the CEF debugging flag is in place. Set up at startup; not a user setting. */
   sentinel_present: boolean;
   sentinel_explanation: string;

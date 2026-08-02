@@ -8,8 +8,9 @@ sidebar:
 import { Image } from 'astro:assets';
 import settings from '../../../assets/settings.png';
 
-Griddle asks for a **SteamGridDB API key** the first time it runs. It is free, and it takes about
-a minute.
+Griddle opens on a welcome screen the first time it runs, and asks for a **SteamGridDB API key**.
+It is free, and it takes about a minute. The same four steps are on that screen, with a button
+that opens the right page for you.
 
 ## Getting one
 
@@ -17,6 +18,11 @@ a minute.
 2. Open your **profile → Preferences → API**.
 3. Generate a key and copy it.
 4. Paste it into Griddle when it asks, or later under **Settings → API key**.
+
+Griddle checks the key with SteamGridDB before saving it, so you find out immediately if it is
+wrong rather than at the first game you open. If what you pasted does not look like a key — a
+half-copied string, or a label that came along with it — the screen says so, but it will still
+let you try: the check is a hint, not a rule.
 
 <Image src={settings} alt="Griddle's settings screen, showing the API key panel" />
 
@@ -41,8 +47,9 @@ app-specific entropy. In practice:
   image downloads from their CDN.
 
 If you copy your settings file to a different machine or a different Windows account, the key will
-not decrypt there. Griddle reports that specifically and keeps the rest of your settings, so you
-only need to paste the key again.
+not decrypt there. Griddle opens on the welcome screen again and says so — *"Griddle found a saved
+SteamGridDB key but could not read it"* — and keeps the rest of your settings, so you only need to
+paste the key again.
 
 ## Next
 

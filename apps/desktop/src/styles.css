@@ -17,6 +17,8 @@
 
 @import './styles/base.css';
 @import './styles/controls.css';
+/* After `controls`, because `.linkbutton` restyles an anchor to match the button rules there. */
+@import './styles/welcome.css';
 @import './styles/chrome.css';
 @import './styles/library.css';
 @import './styles/assets.css';

@@ -640,12 +640,56 @@ architecture.
 | **M5** | 🟢 **Controller navigation, and the three M4 leftovers.** Spatial focus grid + native gamepad read; the **asset details modal** (right-click or **Y** for full-size art, author, size, format, style, votes, and a link to its SteamGridDB page); the **tile-size control** on all seven grids, persisted per grid; and the **logo positioner** (Current tab → right-click the logo). Applying from the grid is unchanged — the modal applies nothing until asked. |
 | **M6** | 🔵 **Cut.** The Big Picture UI is not being built — see the header. `apps/bpm`, `cdp::modules` and the eleven finders are deleted; the research stays. |
 | **M7** | 🟢 **The non-Steam icon flow**, which closed the last M4 item. Icons for Steam games were always an ordinary file write and still are; a *shortcut* additionally needs its `shortcuts.vdf` entry repointed, done through `SteamClient.Apps.SetShortcutIcon` with Steam up and by editing the file with Steam down. Griddle never closes Steam. Every icon needs a restart to show, whichever route ran. |
+| **M8** | 🟢 **The first-run screen** — `views/Welcome.tsx`, replacing twelve lines inlined in `App.tsx` that showed the *Settings* key panel under a second heading. Task before policy: what the app is, then the four steps for getting a key (word-for-word the ones in `docs/start/your-api-key.mdx`), then an **Open SteamGridDB** button, then the field. Deliberately **not** a wizard — see below. |
 | **Next** | No feature work outstanding. What remains is release mechanics — a real `v0.1.0-rc.1` tag run, installing the NSIS bundle, and the clean-machine docs walkthrough — plus the undecided **Experimental library tweaks**, which would need the module discovery that went with M6. |
 
 **The M4 changes worth remembering**, all detailed above: `librarycache` is indexed by
 `appinfo.vdf`, not by filename; the CDN has its own name table that is *not* the disk name;
 `localconfig.vdf` is the "all games" source and contains one negative key that is a shortcut;
 and the `asset:` scope now covers a second directory **recursively**.
+
+#### 🔴 Four things the first-run screen settled, and one of them is a general trap
+
+**1. `has_api_key` means ciphertext is present, not that a key works.** DPAPI seals to one Windows
+account, so a settings file carried from another PC leaves `has_api_key: true` with
+`state.sgdb == None` — and `AppState::load` only `warn!`s about it, which reaches nobody in a
+`windows_subsystem = "windows"` binary. The gate is therefore
+`!status.has_api_key || status.key_unreadable`, where `key_unreadable` is
+`has_api_key() && state.sgdb.lock().await.is_none()` — exactly "stored and unusable", from state
+that already existed. The docs had *promised* this was reported since before it was true.
+
+**2. An error message must not name a screen the reader may not have.** `Error::Unauthorized` read
+*"…Check it in Settings."*, which is a dead end on first run — the nav bar renders only in the
+post-key branch — and redundant once you are in Settings. The message now states the fact and
+`UiError`'s `action` carries the remedy, which is the caller's to know. Tests assert the *absence*
+of "Settings" in both, so the copy cannot drift back.
+
+**3. Validation gets its own `Config`.** Browsing wants the patient defaults (20 s, 3 retries,
+backoff). A human watching a button labelled "Checking…" does not: offline, the defaults take over
+a minute to conclude the obvious. `commands::apikey` validates through
+`Client::with_config(…, timeout: 8s, max_retries: 1)` and stores a client built the ordinary way.
+One retry rather than none, so a single dropped packet does not read as a bad key.
+
+🔑 **4. `autoFocus` cannot seed the focus model, and neither can `.focus()` from an effect.** This
+generalises well beyond this screen. The model learns about focus from a `focusin` listener that
+looks the element up in the registry, and **both** obvious spellings lose a race with it:
+
+| Spelling | Why it fails |
+|---|---|
+| React's `autoFocus` prop | Applied during commit, *before* any passive effect — the control is not registered yet, so the lookup finds nothing |
+| `.focus()` in a `useEffect` | React runs **child effects before parent effects**, so the provider is an ancestor and has not installed the listener yet. Nothing is listening at all |
+
+`queueMicrotask(() => ref.current?.focus())` runs after the whole effect pass, by which point both
+hold. The failure is near-invisible — the caret blinks in the field either way, so it *looks*
+focused, and only the first D-pad press reveals the cursor was never set. `Welcome.test.tsx`
+asserts the model's own `.focused` class rather than `document.activeElement`, because only the
+former can tell the two apart; it was written first and **failed against the `autoFocus` version**,
+which is how this was found rather than shipped.
+
+⚠️ **There is no screenshot of this screen, and `scripts/screenshots.ps1` cannot take one.** It
+drives a release build on a machine that has a key, so it never reaches first run — and it must
+not clear the key to get there, because the plaintext is DPAPI-sealed and cannot be put back. A
+throwaway Windows profile is the only honest way to capture it.
 
 ### Running it
 

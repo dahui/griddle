@@ -14,6 +14,27 @@ it is the right thing to include in a bug report.
 Expected. Griddle is unsigned, and SmartScreen flags anything it has not seen widely run. Click
 **More info → Run anyway**; Windows remembers.
 
+## My API key was rejected
+
+Griddle checks a key with SteamGridDB before storing it, so this is caught while you are still
+looking at the box rather than at the first game you open. SteamGridDB answers the same way for a
+key that is wrong, one that was never valid, and one that has been revoked, so there is nothing
+more specific to report.
+
+- **Check you copied all of it.** A key is 32 letters and numbers. If Griddle says what you pasted
+  does not look like one, that is usually a half-selected copy, or a label dragged along with the
+  value. Pasting `Bearer <key>` is fine — Griddle strips it.
+- **Generate a fresh one** at **profile → Preferences → API** and paste that instead.
+- **If it fails in a few seconds with a network message**, the key was never the problem — Griddle
+  could not reach SteamGridDB at all. Check your connection and try again.
+
+## Griddle asks for my key again on a new PC
+
+Expected, and nothing has been lost. Your key is encrypted for one Windows account, so a settings
+file copied to another machine — or another account on the same one — cannot be unlocked. Griddle
+says so on the welcome screen and keeps every other setting; paste the key again and everything is
+as it was. See [Your API key](/griddle/start/your-api-key/).
+
 ## Griddle cannot find Steam
 
 Griddle reads Steam's location from the registry. If Steam has never been run on this account, or
