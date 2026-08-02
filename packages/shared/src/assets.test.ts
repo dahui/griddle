@@ -17,6 +17,7 @@ import {
   MIMES,
   STYLE_LABEL,
   STYLES,
+  assetPageUrl,
   isVideoPreview,
   type AssetType,
 } from './assets';
@@ -104,6 +105,35 @@ describe('animated previews', () => {
     const apng = { mime: 'image/png', thumb: 'https://cdn2.steamgriddb.com/thumb/x.webm' };
     expect(apng.mime).toBe('image/png');
     expect(isVideoPreview(apng.thumb)).toBe(true);
+  });
+});
+
+describe('the SteamGridDB page for an asset', () => {
+  test('builds the measured route shapes', () => {
+    // Each of these was fetched with a browser User-Agent and returned 200 with a title naming
+    // the game and the author. The site 403s a bare client, so a plain probe proves nothing.
+    expect(assetPageUrl('hero', 100)).toBe('https://www.steamgriddb.com/hero/100');
+    expect(assetPageUrl('logo', 1)).toBe('https://www.steamgriddb.com/logo/1');
+    expect(assetPageUrl('icon', 1)).toBe('https://www.steamgriddb.com/icon/1');
+  });
+
+  test('both capsule types collapse to /grid/, because there is no /grid_p/ route', () => {
+    // The same collapsing as the API, where `grids` serves both and only `dimensions` separates
+    // them. Inventing a per-type segment here would 404 on the two most-used tabs.
+    expect(assetPageUrl('grid_p', 1)).toBe('https://www.steamgriddb.com/grid/1');
+    expect(assetPageUrl('grid_l', 1)).toBe('https://www.steamgriddb.com/grid/1');
+  });
+
+  test('every asset type produces a link the browser allowlist accepts', () => {
+    // `browser::open` refuses anything that is not https on steamgriddb.com or a subdomain, and
+    // a refusal surfaces as an error toast rather than as a dead link — so a new asset type
+    // added without a segment must fail here, not in front of the user.
+    for (const type of TYPES) {
+      const url = assetPageUrl(type, 7);
+      expect(url.startsWith('https://www.steamgriddb.com/')).toBe(true);
+      expect(url.endsWith('/7')).toBe(true);
+      expect(url).not.toContain('undefined');
+    }
   });
 });
 

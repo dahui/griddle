@@ -117,3 +117,81 @@
   align-items: baseline;
   gap: 0.7rem;
 }
+
+/* -- candidate artwork details -------------------------------------------------------- */
+
+/*
+ * The details modal reuses `.preview`'s layout — artwork as large as it fits, information under
+ * it — but not its transparency.
+ *
+ * `.preview` deliberately has no panel behind it, because there the artwork *is* the content and
+ * a frame would just compete with the border the art already has. The moment there is a metadata
+ * table and a row of buttons, that inverts: without a surface the text floats over the page and
+ * the tiles behind read straight through it. Verified on screen, which is the only way this was
+ * ever going to be noticed.
+ */
+.details {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1.1rem 1.2rem;
+  width: min(44rem, 100%);
+  /* The modal scrolls rather than the page: a hero plus a long `notes` field can exceed the
+     viewport, and the actions must stay reachable without the window scrolling underneath. */
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+/* A ceiling the plain preview does not need. Without it a 3840x1240 hero fills the viewport on
+   its own and pushes Apply off the bottom, where a mouse can still scroll to it and a pad cannot. */
+.details .preview-art img,
+.details .preview-art video {
+  max-height: 44vh;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 0.3rem 1.4rem;
+  margin: 0;
+  width: 100%;
+}
+
+.fact {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+/*
+ * Notes get the full width. It is free text an author typed, and the only field that can be a
+ * sentence — one asset here carries a 200-character store URL. In a shared column that single
+ * value sets the column width for everything beside it.
+ */
+.fact-wide {
+  grid-column: 1 / -1;
+}
+
+.fact dt {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  flex: none;
+}
+
+.fact dd {
+  margin: 0;
+  font-size: 0.82rem;
+  /* Notes are free text and can be a sentence; wrapping beats a row that widens the whole grid. */
+  overflow-wrap: anywhere;
+}
+
+.details-actions {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+}

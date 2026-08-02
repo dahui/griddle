@@ -15,7 +15,7 @@ from the couch, which is the one thing the Decky plugin it replaces had over a d
 | **Left stick / D-pad** | Move between tiles and controls |
 | **A** | Select — apply the artwork, press the button |
 | **B** | Back — close a dialog, or return to the previous screen |
-| **Y** | Open the menu for whatever is selected (the same as right-clicking it) |
+| **Y** | Open the menu for whatever is selected (the same as right-clicking it) — an artwork slot's reset menu, or a search result's details |
 | **LB / RB** | Move between tabs |
 
 Holding a direction repeats, accelerating as you hold it, so a long library scrolls quickly.

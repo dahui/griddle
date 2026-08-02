@@ -102,6 +102,39 @@ export const ZOOM: Record<AssetType, { min: number; max: number; default: number
 };
 
 /**
+ * The path segment SteamGridDB's own site uses for each asset kind.
+ *
+ * Both capsule types collapse to `grid`, the same way both are served by the `grids` API
+ * endpoint and separated only by `dimensions`. There is no `/grid_p/` route.
+ */
+const ASSET_PAGE_SEGMENT: Record<AssetType, string> = {
+  grid_p: 'grid',
+  grid_l: 'grid',
+  hero: 'hero',
+  logo: 'logo',
+  icon: 'icon',
+};
+
+/**
+ * SteamGridDB's page for one asset — where to report it, upvote it, or find more by its author.
+ *
+ * **The route shapes were measured, not guessed** `[VERIFIED-BOX 2026-08-01]`. Each returned 200
+ * with a title naming the game and the author (`grid/1`, `logo/1`, `icon/1`, `hero/100`); an id
+ * that does not exist 404s (`hero/1`, `grid/99999999`), as does a segment that is not a route.
+ *
+ * It has to be probed with a browser `User-Agent`: the *site* is Cloudflare-gated and returns 403
+ * to a bare client, unlike the API, which does not. That is why this could not be checked the
+ * obvious way, and it is worth knowing before someone re-verifies it and reads the 403 as proof
+ * the URL is wrong.
+ *
+ * `browser::open` refuses anything that is not https on steamgriddb.com or a subdomain, so this
+ * is inside the allowlist by construction.
+ */
+export function assetPageUrl(type: AssetType, id: number): string {
+  return `https://www.steamgriddb.com/${ASSET_PAGE_SEGMENT[type]}/${id}`;
+}
+
+/**
  * Whether a SteamGridDB preview URL is a **video** rather than an image.
  *
  * Animated artwork is served with a `.webm` *thumbnail* — the full asset is a WebP or an

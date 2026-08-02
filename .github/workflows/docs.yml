@@ -25,12 +25,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
       # `docs/` is deliberately outside the bun workspace, so it has its own lockfile and its
       # dependency tree never enters the app's `bun install --frozen-lockfile`.
       - name: Build the site
-        uses: withastro/action@v4
+        uses: withastro/action@v6
         with:
           path: ./docs
           package-manager: bun@latest
@@ -45,4 +45,4 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - id: deploy
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

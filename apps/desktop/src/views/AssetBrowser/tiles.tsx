@@ -19,9 +19,14 @@ import { useFocusGridItem, useFocusItem } from '../../focus';
  * The `<video>` needs `muted` for `autoPlay` to be allowed at all, and the CSP already carries
  * `media-src https://cdn2.steamgriddb.com` — someone anticipated this and the renderer did not
  * catch up.
+ *
+ * `full` switches from the thumbnail to the asset itself, for the details modal. It stays opt-in
+ * because a grid of full-size assets is tens of megabytes, which is exactly what the thumbnails
+ * exist to avoid — and an animated asset's thumbnail is the `.webm`, so the two differ in kind
+ * and not only in size.
  */
-function AssetPreview({ asset }: { asset: Asset }) {
-  const src = asset.thumb ?? asset.url;
+export function AssetPreview({ asset, full = false }: { asset: Asset; full?: boolean }) {
+  const src = full ? asset.url : (asset.thumb ?? asset.url);
   if (isVideoPreview(src)) {
     return (
       <video
@@ -36,7 +41,8 @@ function AssetPreview({ asset }: { asset: Asset }) {
       />
     );
   }
-  return <img src={src} alt="" loading="lazy" />;
+  // Never lazy at full size: it is the only thing on screen and the one the user asked to see.
+  return <img src={src} alt="" loading={full ? 'eager' : 'lazy'} />;
 }
 
 /** The way out. Its own section, above the tabs, and the first thing the pad reaches going up. */
@@ -98,6 +104,7 @@ export function AssetTile({
   applying,
   anyApplying,
   onApply,
+  onDetails,
 }: {
   index: number;
   asset: Asset;
@@ -105,6 +112,7 @@ export function AssetTile({
   applying: boolean;
   anyApplying: boolean;
   onApply: () => void;
+  onDetails: () => void;
 }) {
   const { ref, focused } = useFocusGridItem<HTMLButtonElement>('assets', index);
   return (
@@ -116,7 +124,14 @@ export function AssetTile({
         disabled={applying}
         aria-disabled={anyApplying}
         onClick={onApply}
-        title={`Apply this ${label}`}
+        // Right-click opens the details, matching the Current tab, where right-click is already
+        // "the other thing you can do to this artwork". The pad reaches it for free: the `menu`
+        // action synthesises a contextmenu event on whatever is focused.
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onDetails();
+        }}
+        title={`Apply this ${label} — right-click for details`}
       >
         <AssetPreview asset={asset} />
         {applying && <span className="applying">Applying…</span>}

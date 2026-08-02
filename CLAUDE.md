@@ -580,7 +580,8 @@ architecture.
 | **M3** | 🟢 **The app runs.** Library list with current art, five asset tabs, SteamGridDB browsing with infinite scroll, apply with the live→file ladder, first-run key flow, and a diagnostics screen. |
 | **M4** | 🟢 **Default art, library scope, and filter parity.** Steam's own artwork behind the custom art (local cache → CDN → placeholder); an Installed / All games toggle with sorting; the full SteamGridDB filter set wired through; and the "wrong game?" picker. The asset tabs now render only inside a game. |
 | **M6** | 🔵 **Cut.** The Big Picture UI is not being built — see the header. `apps/bpm`, `cdp::modules` and the eleven finders are deleted; the research stays. |
-| **Next** | Controller navigation (spatial focus grid + native gamepad read), then the rest of M4 — details modal, zoom slider, logo positioner, non-Steam icon flow. |
+| **M5** | 🟢 **Controller navigation** (spatial focus grid + native gamepad read) and the **asset details modal** — right-click or **Y** on a candidate for full-size art, author, size, format, style, votes and a link to its SteamGridDB page. Opening it applies nothing; left-click and **A** still apply straight from the grid, which is the fast path and the documented walkthrough. |
+| **Next** | The rest of M4 — zoom slider, logo positioner, non-Steam icon flow. |
 
 **The M4 changes worth remembering**, all detailed above: `librarycache` is indexed by
 `appinfo.vdf`, not by filename; the CDN has its own name table that is *not* the disk name;
@@ -936,6 +937,20 @@ because a manual game override stores only SteamGridDB's id, and an override wri
 name was stored alongside it would otherwise display as `SteamGridDB game #17830`. Current
 overrides need no request — the name is captured when the user picks it — so this is a
 fallback for old entries only.
+
+🟢 **The site's asset pages are `/{grid,hero,logo,icon}/<id>`, and asset ids are numbered _per
+type_.** `[VERIFIED-BOX 2026-08-01]` `grid/1`, `logo/1`, `icon/1` and `hero/100` all return 200
+with a title naming the game and the author; `hero/1`, `grid/99999999` and `nonsense/1` all 404.
+
+🔴 The three `…/1` pages are **three different artworks by two different authors**, which is what
+settles the id question: an id is unique within its type and means nothing without one. Anything
+keyed on a bare asset id — an open modal, a selection, a cache entry — collides the moment the
+asset type changes underneath it. `assetPageUrl` also collapses both capsule types to `/grid/`,
+mirroring the API, where `grids` serves both.
+
+⚠️ **Probing this needs a browser `User-Agent`.** The *site* is Cloudflare-gated and 403s a bare
+client — the opposite of the API, per S11 — so `WebFetch` and a default client both report 403 for
+every path, valid or not. Read as "the URL is wrong", that 403 is exactly backwards.
 
 🔴 **`icons` rejects `dimensions` outright** — every value 400s, including `8x8`, `16x16`,
 `32x32`, `64x64`, `128x128`, `256x256`, `512x512`, `1024x1024`. An earlier draft carried

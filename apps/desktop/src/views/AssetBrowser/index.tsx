@@ -21,6 +21,7 @@ import { SCREEN_DEPTH, useFocusGrid, useScreenActions } from '../../focus';
 import { CurrentAssets } from '../CurrentAssets';
 import { FilterPanel } from '../FilterPanel';
 import { GameSearchModal } from '../GameSearchModal';
+import { AssetDetails } from './AssetDetails';
 import { AssetTab, AssetTile, BackButton, LoadMore } from './tiles';
 import { useAssetSearch } from './useAssetSearch';
 
@@ -65,9 +66,17 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
   const [picking, setPicking] = useState(false);
   const [match, setMatch] = useState<GameMatch | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // Which asset the details modal is showing, by id. An id rather than the asset itself, so the
+  // modal is resolved from the live list every render and can never outlive it — the same reason
+  // the current-art preview holds a slot type rather than a slot.
+  const [details, setDetails] = useState<number | null>(null);
 
   const { assets, page, total, hasMore, loading, error, sentinel, loadPage, ready } =
     useAssetSearch({ appId: entry.app_id, assetType, filters, browsing, reloadKey });
+
+  // Resolved from the live list every render, so the modal cannot outlive the results it came
+  // from — a filter change that drops the asset closes it, with nothing to remember to do.
+  const detailsAsset = assets.find((a) => a.id === details) ?? null;
 
   // The one grid whose column count changes without the container resizing: `.assets` swaps
   // its `minmax` per asset tab (9.5rem capsules, 22rem heroes). `useFocusGrid` watches child
@@ -92,6 +101,17 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
     onTabPrev: () => cycleTab(-1),
     onTabNext: () => cycleTab(1),
   });
+
+  /*
+   * Close the details modal when the tab or the game changes.
+   *
+   * Not cosmetic: asset ids are numbered **per type**, not globally. `steamgriddb.com/grid/1`,
+   * `/logo/1` and `/icon/1` are three different artworks by two different authors, so id 1 exists
+   * three times over. Resolving by id alone would let a switch from Capsule to Hero repopulate an
+   * open modal with whatever collided — right artwork, wrong tab, and no error anywhere. Clearing
+   * on the switch is what makes the id lookup safe.
+   */
+  useEffect(() => setDetails(null), [tab, reloadKey]);
 
   // Read once. A tab change needs no round trip, so there is no window in which the filters in
   // hand belong to something other than what is about to be queried.
@@ -146,12 +166,13 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
     applyFilters(defaultFilters(), () => api.resetFilters());
   }
 
-  async function apply(assetId: number, url: string) {
+  /** Returns whether it worked, which is what decides if the details modal closes. */
+  async function apply(assetId: number, url: string): Promise<boolean> {
     // An explicit guard, because the implicit one is gone. Every tile used to carry
     // `disabled={applying !== null}`, which prevented a second apply as a side effect of being
     // unclickable — and also made all of them unfocusable, which a controller cannot survive.
     // Now only the tile in flight is disabled, so the re-entry check has to be stated.
-    if (applyingRef.current !== null) return;
+    if (applyingRef.current !== null) return false;
     applyingRef.current = assetId;
     setApplying(assetId);
     try {
@@ -163,11 +184,13 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
         message: result.method === 'live' ? 'Applied.' : 'Applied. Restart Steam to see it.',
         action: result.fell_back_because,
       });
+      return true;
     } catch (e: unknown) {
       // A toast, not `setError`. That state drives the *load* failure display, and an apply
       // that fails leaves the grid perfectly usable — putting it there replaced a working list
       // with an error box, or sat below one that was about something else entirely.
       toastError(e);
+      return false;
     } finally {
       applyingRef.current = null;
       setApplying(null);
@@ -239,6 +262,13 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
         <ErrorNote error={error} onRetry={() => void loadPage(0)} />
       )}
 
+      {/* Right-click is not discoverable on its own, and the details modal is the only place the
+          style, format and vote counts appear at all. Same wording shape as the Current tab, which
+          already teaches the right-click idiom one screen away. */}
+      {browsing && assets.length > 0 && (
+        <p className="hint">Click artwork to apply it, or right-click to see the details.</p>
+      )}
+
       {browsing && (
         <div className={`assets assets-${assetType}`} ref={assetGrid} aria-busy={applying !== null}>
           {assets.map((asset, index) => (
@@ -250,9 +280,27 @@ export function AssetBrowser({ entry, onBack }: { entry: LibraryEntry; onBack: (
               applying={applying === asset.id}
               anyApplying={applying !== null}
               onApply={() => void apply(asset.id, asset.url)}
+              onDetails={() => setDetails(asset.id)}
             />
           ))}
         </div>
+      )}
+
+      {detailsAsset && (
+        <AssetDetails
+          asset={detailsAsset}
+          assetType={assetType}
+          applying={applying === detailsAsset.id}
+          // Closed on success, kept open on failure: the toast explains what went wrong and the
+          // "View on SteamGridDB" link is the next thing anyone reaches for when an asset will
+          // not apply.
+          onApply={() => {
+            void apply(detailsAsset.id, detailsAsset.url).then((ok) => {
+              if (ok) setDetails(null);
+            });
+          }}
+          onClose={() => setDetails(null)}
+        />
       )}
 
       {/* `!ready` matters: nothing is fetched until the stored filters arrive, so without it
