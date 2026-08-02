@@ -80,3 +80,90 @@
   font-size: 0.72rem;
   color: var(--muted);
 }
+
+/* -- logo positioner ------------------------------------------------------------------ */
+
+.logo-modal {
+  /* Wider than the other modals: the stage is a hero banner, which is ~3:1. */
+  width: min(52rem, 100%);
+}
+
+/*
+ * The preview. Everything inside is positioned in percentages of this box, so the geometry is
+ * faithful at whatever size the window allows — which is the whole point of positioning by eye
+ * rather than by number.
+ */
+.logo-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  background: #0e0f16;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 0.6rem 0 0.9rem;
+  /* Steam's hero is 1920x620. Reserving the ratio keeps the box from collapsing before the
+     image loads, which would otherwise make the overlay jump once it arrives. */
+  aspect-ratio: 1920 / 620;
+}
+
+.logo-stage > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/*
+ * The logo, laid over the hero exactly as Steam draws it.
+ *
+ * `object-fit: contain` and not `cover`: Steam fits the logo inside the box the percentages
+ * describe, and cropping it here would make the preview a lie in precisely the case the user
+ * opened this to check.
+ */
+.logo-ghost {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.logo-ghost img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.logo-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.4rem;
+  align-items: center;
+}
+
+.logo-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.field-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+}
+
+/* Tabular figures so stepping does not shuffle the buttons sideways as the digits change. */
+.logo-value {
+  font-size: 0.8rem;
+  min-width: 3.4rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The actions row overrides `.modal-actions`' right-alignment: Save leads here. */
+.modal-actions.row {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: flex-start;
+}

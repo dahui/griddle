@@ -142,6 +142,8 @@ fn main() {
             commands::apply_asset,
             commands::asset_status,
             commands::clear_asset,
+            commands::logo_placement,
+            commands::set_logo_placement,
             commands::reset_all_plan,
             commands::reset_all_art,
             commands::live_apply_check,

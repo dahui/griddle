@@ -9,7 +9,7 @@ import { invoke } from '@tauri-apps/api/core';
 // `StoredFilters` is the wire shape of Rust's `FilterState`. Imported rather than redeclared
 // here: a second copy of a nine-field struct is a drift waiting to happen, and the field that
 // would drift first is `static`, which is a rename on the Rust side.
-import type { AssetType, StoredFilters, ZoomTarget } from '@griddle/shared';
+import type { AssetType, LogoPosition, StoredFilters, ZoomTarget } from '@griddle/shared';
 
 export type ErrorKind =
   | 'no_api_key'
@@ -144,6 +144,21 @@ export interface AssetSlot {
   removes: string[];
 }
 
+/** Where a custom logo sits, and what a reset would restore. */
+export interface LogoPlacement {
+  /** Null when this app has never had a position written. */
+  position: LogoPosition | null;
+  default: LogoPosition;
+}
+
+/** What moving the logo actually did. */
+export interface LogoMoved {
+  method: 'live' | 'file';
+  needs_restart: boolean;
+  path: string | null;
+  fell_back_because: string | null;
+}
+
 /** What a reset actually did. */
 export interface Cleared {
   method: 'live' | 'file';
@@ -234,6 +249,11 @@ export const api = {
   applyAsset: (appId: number, assetType: AssetType, url: string) =>
     invoke<Applied>('apply_asset', { appId, assetType, url }),
   assetStatus: (appId: number) => invoke<AssetSlot[]>('asset_status', { appId }),
+  /** Read from the file, not from Steam, so the positioner works with Steam closed. */
+  logoPlacement: (appId: number) => invoke<LogoPlacement>('logo_placement', { appId }),
+  /** Live if Steam is running, and the file is written either way. */
+  setLogoPlacement: (appId: number, position: LogoPosition) =>
+    invoke<LogoMoved>('set_logo_placement', { appId, position }),
   clearAsset: (appId: number, assetType: AssetType) =>
     invoke<Cleared>('clear_asset', { appId, assetType }),
   /** Read-only: counts what a full reset would delete, so the confirmation can quote it. */

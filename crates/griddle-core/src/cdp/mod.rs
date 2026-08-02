@@ -58,6 +58,12 @@ pub enum Error {
 
     #[error("refusing to apply empty image data")]
     EmptyImage,
+
+    /// The percentages are `f64`, and `serde_json` refuses NaN and infinity — so this is a real
+    /// path, not a formality. It fires before anything is sent rather than letting Steam receive
+    /// a position it cannot parse and quietly keep the old one.
+    #[error("refusing to send a logo position that is not a finite percentage")]
+    InvalidLogoPosition,
 }
 
 /// What the readiness probe found.
@@ -170,6 +176,44 @@ impl SteamJs {
             "window.SteamClient.Apps.ClearCustomArtworkForApp({}, {})",
             app.get(),
             asset as u32
+        );
+        Ok(self.connection.evaluate_unit(&expr).await?)
+    }
+
+    /// Move a custom logo within the hero area, live.
+    ///
+    /// The payload shape is Valve's own, read out of the module that implements Steam's
+    /// artwork flow: `SetCustomLogoPositionForApp(e.appid, JSON.stringify({nVersion:1,
+    /// logoPosition:t}))`. `[VERIFIED-BOX @ CLSTAMP 10840511, 2026-07-27]` Note the argument is
+    /// a **JSON string**, not an object — passing the object is the obvious mistake and Steam
+    /// simply ignores it.
+    ///
+    /// Serialised through `serde_json` rather than formatted by hand, so the field names come
+    /// from [`crate::logo`]'s `serde` renames — the same ones the file writer uses. Two
+    /// spellings of `pinnedPosition` would be two ways for this to fail silently.
+    pub async fn set_logo_position(
+        &mut self,
+        app: AppId,
+        position: crate::logo::LogoPosition,
+    ) -> Result<(), Error> {
+        let payload =
+            serde_json::to_string(&position.for_app()).map_err(|_| Error::InvalidLogoPosition)?;
+        // `JSON.stringify` of a string literal we built: the inner JSON is embedded as a JS
+        // string, so it needs escaping. `serde_json` again, on the string itself, produces a
+        // quoted-and-escaped JS literal that cannot break out.
+        let literal = serde_json::to_string(&payload).map_err(|_| Error::InvalidLogoPosition)?;
+        let expr = format!(
+            "window.SteamClient.Apps.SetCustomLogoPositionForApp({}, {literal})",
+            app.get()
+        );
+        Ok(self.connection.evaluate_unit(&expr).await?)
+    }
+
+    /// Drop a custom logo position, restoring whatever Steam would place by itself.
+    pub async fn clear_logo_position(&mut self, app: AppId) -> Result<(), Error> {
+        let expr = format!(
+            "window.SteamClient.Apps.ClearCustomLogoPositionForApp({})",
+            app.get()
         );
         Ok(self.connection.evaluate_unit(&expr).await?)
     }

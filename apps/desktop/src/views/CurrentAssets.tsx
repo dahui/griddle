@@ -11,7 +11,14 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { useCallback, useEffect, useState } from 'react';
 import { steamCdnUrl, type AssetType } from '@griddle/shared';
-import { api, asUiError, type AssetSlot, type LibraryEntry, type UiError } from '../api';
+import {
+  api,
+  asUiError,
+  type AssetSlot,
+  type LibraryEntry,
+  type LogoPlacement,
+  type UiError,
+} from '../api';
 import {
   ArtImage,
   ContextMenu,
@@ -22,6 +29,7 @@ import {
   useToast,
 } from '../components';
 import { FocusScope, useFocusGrid, useFocusGridItem, useFocusItem } from '../focus';
+import { LogoPositioner } from './LogoPositioner';
 
 type Menu = { x: number; y: number; slot: AssetSlot };
 
@@ -42,6 +50,10 @@ export function CurrentAssets({ entry, tile }: { entry: LibraryEntry; tile: numb
   // the old ones here would leave the preview showing artwork that is no longer there.
   const [preview, setPreview] = useState<AssetType | null>(null);
   const [busy, setBusy] = useState<AssetType | null>(null);
+  // Non-null only while the positioner is open. Holds the placement rather than a boolean so the
+  // modal opens with the stored value already in hand — mounting it first and fetching after
+  // would show the default for a frame and look like the position had been reset.
+  const [placement, setPlacement] = useState<LogoPlacement | null>(null);
   // `.slots` wraps at `repeat(auto-fill, minmax(13rem, 1fr))`, so how many slots sit on a row is
   // a function of the window width and has to be measured.
   const slotGrid = useFocusGrid<HTMLUListElement>('slots');
@@ -88,11 +100,32 @@ export function CurrentAssets({ entry, tile }: { entry: LibraryEntry; tile: numb
     }
   }
 
+  /**
+   * Fetch the stored position, then open the positioner.
+   *
+   * The menu closes first because it is dismissed by a capture-phase click listener and would
+   * otherwise still be on screen behind the modal.
+   */
+  async function openPositioner() {
+    setMenu(null);
+    try {
+      setPlacement(await api.logoPlacement(entry.app_id));
+    } catch (e: unknown) {
+      toastError(e);
+    }
+  }
+
   if (loadError) return <ErrorNote error={loadError} onRetry={load} />;
   if (!slots) return <Spinner label="Reading current artwork…" />;
 
   // Resolved from the live list every render, so the preview can never outlive the slot it shows.
   const previewSlot = slots.find((s) => s.asset_type === preview) ?? null;
+
+  /** One slot's source ladder by type, for the positioner's two layers. Empty if absent. */
+  const slotSources = (type: AssetType): string[] => {
+    const slot = slots.find((s) => s.asset_type === type);
+    return slot ? sourcesFor(entry, slot) : [];
+  };
 
   return (
     <>
@@ -122,6 +155,21 @@ export function CurrentAssets({ entry, tile }: { entry: LibraryEntry; tile: numb
         />
       )}
 
+      {placement && (
+        <LogoPositioner
+          appId={entry.app_id}
+          gameName={entry.name}
+          // Both ladders come from the slots already loaded here, so the preview shows exactly
+          // what the Current tab shows — including Steam's own hero when there is no custom one.
+          heroSources={slotSources('hero')}
+          logoSources={slotSources('logo')}
+          initial={placement.position}
+          fallback={placement.default}
+          onSaved={(message) => toast({ kind: 'ok', message })}
+          onClose={() => setPlacement(null)}
+        />
+      )}
+
       {menu && (
         <ContextMenu x={menu.x} y={menu.y} onClose={() => setMenu(null)}>
           <div className="menu-title">{menu.slot.label}</div>
@@ -138,6 +186,24 @@ export function CurrentAssets({ entry, tile }: { entry: LibraryEntry; tile: numb
               <span className="menu-note">You haven&rsquo;t set artwork here.</span>
             </div>
           )}
+
+          {/*
+            Only on the logo, and only once there is a custom one. Steam stores a position for
+            *your* logo; with none applied there is nothing on screen the number would move, so
+            the item would be a control that visibly does nothing.
+          */}
+          {menu.slot.asset_type === 'logo' &&
+            (menu.slot.custom_art ? (
+              <MenuItem row={1} onSelect={() => void openPositioner()}>
+                Adjust position…
+                <span className="menu-note">Where the logo sits on the hero banner</span>
+              </MenuItem>
+            ) : (
+              <div className="menu-item menu-disabled">
+                Adjust position…
+                <span className="menu-note">Apply a logo first.</span>
+              </div>
+            ))}
         </ContextMenu>
       )}
     </>

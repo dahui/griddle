@@ -582,7 +582,8 @@ architecture.
 | **M6** | 🔵 **Cut.** The Big Picture UI is not being built — see the header. `apps/bpm`, `cdp::modules` and the eleven finders are deleted; the research stays. |
 | **M5** | 🟢 **Controller navigation** (spatial focus grid + native gamepad read) and the **asset details modal** — right-click or **Y** on a candidate for full-size art, author, size, format, style, votes and a link to its SteamGridDB page. Opening it applies nothing; left-click and **A** still apply straight from the grid, which is the fast path and the documented walkthrough. |
 | **M5** | 🟢 …plus the **tile-size control** on all seven grids — five browsing tabs, the Current overview and the library list — persisted per grid. Buttons, not a slider, and no numeric readout; both deliberate, see below. |
-| **Next** | The rest of M4 — logo positioner, non-Steam icon flow. |
+| **M5** | 🟢 …plus the **logo positioner**. Current tab → right-click the logo → *Adjust position…*: the hero with the logo laid over it, five anchors, width/height steppers, applied on Save through the same live→file ladder as artwork. |
+| **Next** | The rest of M4 — the non-Steam icon flow. |
 
 **The M4 changes worth remembering**, all detailed above: `librarycache` is indexed by
 `appinfo.vdf`, not by filename; the CDN has its own name table that is *not* the disk name;
@@ -1060,6 +1061,30 @@ A stale count is invisible in the worst way: every tile renders correctly and on
 wrong, so pressing down moves two rows and it reads as the focus model being broken rather than as
 a measurement nobody retook. Pinned by a test in `focus.test.tsx`, confirmed to fail with
 `attributes` removed.
+
+#### 🟢 The logo positioner, and two things it did *not* need
+
+The geometry was already written — `logo.rs` and `logo.ts` against one shared fixture — for the
+Big Picture UI that was cut, and none of it needed touching. What was missing was everything
+around it: a CDP call, a command pair, and a preview.
+
+🔴 **`SetCustomLogoPositionForApp` takes a JSON _string_, not an object.** Valve's own call site
+is `SetCustomLogoPositionForApp(e.appid, JSON.stringify({nVersion:1, logoPosition:t}))`. Passing
+the object is the obvious mistake and Steam ignores it silently. The payload is built with
+`serde_json` from `logo::LogoPosition` — the same type and the same `serde` renames the file
+writer uses, so `pinnedPosition` cannot acquire a second spelling — and then serialised *again*
+to produce an escaped JS string literal.
+
+🔵 **The file is written on the live path too**, unlike an artwork apply. S3 *measured* Steam
+writing the artwork file itself; whether it does the same for a logo position has never been
+checked, so rather than assume it, `set_logo_placement` writes unconditionally. It costs one small
+JSON document and guarantees a later read agrees with what was applied.
+
+⚠️ **`resizeByDpad` and `rampStep` are still unused.** They implement arrow-key resizing, which
+cannot work in the desktop app: arrows belong to the focus model, and a control that swallowed
+them would trap the cursor with no way out. The positioner steps with buttons instead. Left in
+place rather than deleted because they are covered by the shared fixture and cost nothing; if that
+stops being true, delete them rather than inventing a caller.
 
 🔵 **The tile-size control took three placements to land, and the last one was the maintainer's
 call.** Worth recording because the first two each fixed a real problem and each looked wrong:
