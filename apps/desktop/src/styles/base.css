@@ -54,7 +54,7 @@
  * the bar sits *over* the viewport rather than in the flow — so without this the top row of every
  * grid scrolls to exactly where the bar covers it.
  *
- * 🔴 This belongs on the focusable element itself, not its `<li>`/`<figure>` wrapper: the scroll
+ * This belongs on the focusable element itself, not its `<li>`/`<figure>` wrapper: the scroll
  * is requested on the element the focus model registered, which is the button inside.
  */
 button,

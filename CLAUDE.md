@@ -164,7 +164,7 @@ Full plan: `C:\Users\jeff\.claude\plans\i-want-to-start-valiant-shamir.md`
 > Newly recorded on `10856968`: `LogoPosition` 78057 · `SliderField` 64608 ·
 > `ArtworkApi` 80818, 81659, 87498.
 | `[VERIFIED-SOURCE]` | Read in someone's actual source (Valve's bundle, SGDBoop, decky-steamgriddb). Quote it. |
-| `[VERIFIED-DOCS]` | The project's own docs. Weaker — docs lie. |
+| `[VERIFIED-DOCS]` | Someone's published documentation. Weakest of the three — docs lie, and this project has been bitten by that. **Currently used zero times**, which is the right number: everything load-bearing here was measured instead. |
 | `[INFERRED]` | Reasoning, analogy, or a third-party blog. **Must be promoted before it becomes load-bearing.** |
 
 This is not bookkeeping. During the design pass, **the single most widely-repeated fact about
@@ -176,6 +176,36 @@ looked like "Steam ignores custom art" rather than "we computed the wrong number
 
 **Additionally: record the *finder predicate*, not just the conclusion**, for anything read out
 of `steamui/`. When a Steam update breaks something, the predicate is what you edit.
+
+### 🔴 The tags were never the problem. The untagged sentences were.
+
+Audited in full on 2026-08-02, after four claims here had already changed the code for the worse.
+**Not one of them was a mis-measurement.** Every tagged fact that could be re-checked held. All
+four failures were *untagged inferences written in the same confident voice as the measurements
+beside them*:
+
+| It said | It was | It cost |
+|---|---|---|
+| *"writing [an icon] still has no route… stays disabled for Steam apps"* | an inference from decky writing into `librarycache` | a working feature replaced with a paragraph calling it impossible |
+| *"icons need… Steam must be shut down; then restart"* | true of the *file*, not of Steam's API | a shutdown/relaunch flow for a problem `SetShortcutIcon` does not have |
+| *"four [MPL crates] are proc-macro-only"* | `cargo tree -i`'s first path, mistaken for its only one | a licence audit called clean on a crate that ships |
+| *"`librarycache`… contains no write at all"* | true when written, false within weeks | nothing yet — caught by this audit |
+
+🔑 **So the rule to actually follow is narrower than "tag everything":** when you write a sentence
+that tells a future reader something is *impossible*, ask what you measured. If the answer is "I
+read that someone else does it differently", that is `[INFERRED]`, and this document has just
+demonstrated four times over that `[INFERRED]` in the voice of a fact is how good code gets
+deleted.
+
+⚠️ **A document cannot verify itself.** All four survived repeated readings because each one was
+internally consistent with the paragraph around it. Check claims against the code, the machine,
+Steam or the API — never against CLAUDE.md.
+
+`scripts/check-claims.sh` now enforces the grep-able subset, and runs in the gate and in CI. It
+covers six invariants and nothing that needs Steam, the network or a key. **Its first run found
+two emoji markers in `styles/*.css` that a hand-written grep had missed**, and its CRC32 rule was
+itself broken on first writing — `\bcrc32\b` matches neither `crc32_of` nor `crc32_ieee`, so it
+passed vacuously until it was fired against a real violation. Fire every rule before trusting it.
 
 ---
 
@@ -193,7 +223,7 @@ of `steamui/`. When a Steam update breaks something, the predicate is what you e
 | Steam dir writable | **Without elevation.** The `.cef-enable-remote-debugging` sentinel needs no admin. |
 | `libraryfolders.vdf` | Exists in **both** `config\` and `steamapps\`, byte-identical. Prefer `config\`. Modern nested format. |
 | `appmanifest_*.acf` | 51 installed. `StateFlags & 4` = fully installed. |
-| `appcache\librarycache\` | **2248** per-appid dirs vs 51 appmanifests — a superset (owned/browsed, not installed). **The filename is not the predicate — `appinfo.vdf` indexes it**, see below. **Read-only. Never write here** — Steam re-downloads over it. |
+| `appcache\librarycache\` | **2249** per-appid dirs vs 51 appmanifests — a superset (owned/browsed, not installed). **The filename is not the predicate — `appinfo.vdf` indexes it**, see below. **Read-only. Never write here** — Steam re-downloads over it. |
 | `userdata\<id>\config\localconfig.vdf` | 200 KB text VDF. Its `apps` map holds **518** appids — the offline "all games" source. See below. |
 | `userdata\<id>\config\librarycache\<appid>.json` | **Achievement data, not art.** Same name, different thing. Do not confuse with the above. |
 | `userdata\<id>\config\licensecache` | Encrypted binary. Dead end for an owned-games list. |
@@ -206,7 +236,14 @@ An earlier version said the flat files are "all sha1-named". They are not. Measu
 **2248** appid directories `[VERIFIED-BOX 2026-07-30]`, **1945** hold semantically *named* files
 (`header.jpg` 1856, `library_600x900.jpg` 608, `library_hero.jpg` 594, `logo.png` 526,
 `library_hero_blur.jpg` 513, `library_header.jpg` 50) and **278** hold them one level down under
-a sha1 directory.
+a sha1 directory. Re-measured `[VERIFIED-BOX 2026-08-02]`: **2249** dirs, **1970** flat and
+**279** nested — one new app, and the split is unchanged in kind.
+
+⚠️ **`279` is not the same statistic as the `270` wide capsules in the table below**, and
+conflating them is an easy mistake to make while updating this section — it was made once during
+the 2026-08-02 audit and caught by re-measuring. This counts *directories that contain a
+subdirectory*; that counts *one slot resolved through one*. An app can be nested for one slot and
+flat for another.
 
 But correcting the census does not give a usable rule, because **the same slot has different
 filenames on different apps**. The durable finder lives in `appinfo.vdf`:
@@ -223,17 +260,23 @@ filenames on different apps**. The durable finder lives in `appinfo.vdf`:
 Corroborated structurally: `library_assets_full` occurs exactly **once** in `appinfo.vdf` (a v29
 string-table *key*) while `library_capsule` occurs **305×** (inline path *values*).
 
-**Measured resolution over all 2248 dirs**, via `cargo run -p griddle-core --example scan`:
+**Measured resolution**, via `cargo run -p griddle-core --example scan`. Re-run
+`[VERIFIED-BOX 2026-08-02]` over **2249** dirs, one more than the 2248 of 2026-07-30:
 
 | Slot | Resolved | of which reachable *only* via the sha1 layout |
 |---|---|---|
-| Capsule | 714 | **106** |
-| Wide Capsule | 2175 | **269** |
+| Capsule | 715 | **107** |
+| Wide Capsule | 2176 | **270** |
 | Hero | 702 | **108** |
 | Logo | 621 | **95** |
 | Icon | 804 | 0 |
 
-That middle column is the point: a basename-only resolver silently misses 106 capsules and 269
+⚠️ **These numbers move with the library and that is not a finding.** Every count that changed
+did so by exactly one, because one app was added between the two runs; Hero, Logo and Icon are
+unchanged. Re-run the harness and re-stamp rather than "correcting" them — treating ordinary
+drift as an error would make this table look unreliable when it is not.
+
+That middle column is the point: a basename-only resolver silently misses 107 capsules and 270
 wide capsules. It would have looked perfectly correct on whichever app you happened to test.
 
 Two consequences, both enforced in `steam::librarycache`:
@@ -417,6 +460,12 @@ generated id when *creating* a brand-new shortcut, where Steam honours whatever 
 
 ### Steam's JS surface `[VERIFIED-BOX @ CLSTAMP 10840511, 2026-07-27]`
 
+> 🟢 **Re-checked on `10856968`, 2026-08-02**, with `cargo run -p griddle-core --example
+> cdp_check`: `SharedJSContext` found, the apply API present, and the page and
+> `steamui/changelist.txt` agreeing on the stamp. The rows below still carry the `10840511`
+> stamp because that is the build their *literal chunk filenames* were read on — the facts hold,
+> the file names are the part that expires.
+
 | Fact | Finder / evidence |
 |---|---|
 | Build stamp is readable from **both** disk and the live page | `steamui\library.js` line 1 is `var CLSTAMP="10840511";` and `steamui\changelist.txt` contains exactly `10840511` |
@@ -427,11 +476,20 @@ generated id when *creating* a brand-new shortcut, where Steam honours whatever 
 
 ### Baseline environment `[VERIFIED-BOX 2026-07-27]`
 
+🔴 **This is the "before" snapshot and two of its lines are now false *because this app made them
+false*.** Read it as history, not as the current machine.
+
 - Port 8080: **no listener**. `.cef-enable-remote-debugging`: **absent**. No proxy `user32.dll`
   → Millennium genuinely not installed. Clean slate.
 - Toolchain: Rust 1.97.0 (MSVC only), Python 3.11, git 2.54, **bun 1.3.14** (installed by this
   project — was absent). No Node/npm.
 - Steam running as pid 15844 with 7 `steamwebhelper` children.
+
+**Now** `[VERIFIED-BOX 2026-08-02]`: the sentinel is **present** and 8080 **has a listener**, both
+created by Griddle at startup — that inversion is the feature working, and the two lines above
+are what it looked like beforehand. The toolchain is unchanged: `rustc 1.97.0`, `bun 1.3.14`,
+`git 2.54.0`, `Python 3.11.0`, still no Node. Steam's pid moves every restart and was never worth
+recording; it is kept only so the shape of the process tree is on file.
 
 ---
 
@@ -579,11 +637,10 @@ architecture.
 | **M2** | **Offline layer done**, including the `shortcuts.vdf` writer. Verified against the real install with `cargo run -p griddle-core --example scan`. |
 | **M3** | 🟢 **The app runs.** Library list with current art, five asset tabs, SteamGridDB browsing with infinite scroll, apply with the live→file ladder, first-run key flow, and a diagnostics screen. |
 | **M4** | 🟢 **Default art, library scope, and filter parity.** Steam's own artwork behind the custom art (local cache → CDN → placeholder); an Installed / All games toggle with sorting; the full SteamGridDB filter set wired through; and the "wrong game?" picker. The asset tabs now render only inside a game. |
+| **M5** | 🟢 **Controller navigation, and the three M4 leftovers.** Spatial focus grid + native gamepad read; the **asset details modal** (right-click or **Y** for full-size art, author, size, format, style, votes, and a link to its SteamGridDB page); the **tile-size control** on all seven grids, persisted per grid; and the **logo positioner** (Current tab → right-click the logo). Applying from the grid is unchanged — the modal applies nothing until asked. |
 | **M6** | 🔵 **Cut.** The Big Picture UI is not being built — see the header. `apps/bpm`, `cdp::modules` and the eleven finders are deleted; the research stays. |
-| **M5** | 🟢 **Controller navigation** (spatial focus grid + native gamepad read) and the **asset details modal** — right-click or **Y** on a candidate for full-size art, author, size, format, style, votes and a link to its SteamGridDB page. Opening it applies nothing; left-click and **A** still apply straight from the grid, which is the fast path and the documented walkthrough. |
-| **M5** | 🟢 …plus the **tile-size control** on all seven grids — five browsing tabs, the Current overview and the library list — persisted per grid. Buttons, not a slider, and no numeric readout; both deliberate, see below. |
-| **M5** | 🟢 …plus the **logo positioner**. Current tab → right-click the logo → *Adjust position…*: the hero with the logo laid over it, five anchors, width/height steppers, applied on Save through the same live→file ladder as artwork. |
-| **Next** | The rest of M4 — the non-Steam icon flow. |
+| **M7** | 🟢 **The non-Steam icon flow**, which closed the last M4 item. Icons for Steam games were always an ordinary file write and still are; a *shortcut* additionally needs its `shortcuts.vdf` entry repointed, done through `SteamClient.Apps.SetShortcutIcon` with Steam up and by editing the file with Steam down. Griddle never closes Steam. Every icon needs a restart to show, whichever route ran. |
+| **Next** | No feature work outstanding. What remains is release mechanics — a real `v0.1.0-rc.1` tag run, installing the NSIS bundle, and the clean-machine docs walkthrough — plus the undecided **Experimental library tweaks**, which would need the module discovery that went with M6. |
 
 **The M4 changes worth remembering**, all detailed above: `librarycache` is indexed by
 `appinfo.vdf`, not by filename; the CDN has its own name table that is *not* the disk name;
@@ -752,8 +809,10 @@ the hazards stayed.
 | `steam::locate` | Registry cascade with the lowercase/forward-slash normalisation. `locate_with()` takes the override as a parameter so tests need no `unsafe` env mutation. |
 | `steam::account` | `ActiveUser` → `loginusers.vdf` → sole `userdata/` dir. **Refuses to guess** between several accounts. |
 | `steam::library` | `libraryfolders.vdf` + `appmanifest_*.acf`. One corrupt manifest never empties the library. |
-| `steam::librarycache` | Steam's own default artwork, resolved through `appinfo.vdf`'s index rather than by filename. **Read-only, structurally** — contains no write at all, so it needs no `boundary-ok` and must never acquire one. `safe_join` refuses a path that would escape the app directory. |
+| `steam::librarycache` | Steam's own default artwork, resolved through `appinfo.vdf`'s index rather than by filename. **Read-only in shipping code** — the only write is a test fixture into a tempdir, annotated `boundary-ok`; nothing here writes into Steam's cache. `safe_join` refuses a path that would escape the app directory, lexically rather than through `Path`, so the guard means one thing on every host. |
 | `steam::localconfig` | The `apps` map in `localconfig.vdf` — the offline "all games" source, and where playtimes come from. Read-only; reuses `vdf::text`. |
+| `steam::process` | ToolHelp process enumeration; `-shutdown` → poll → relaunch. **The only minter of `SteamStopped`.** Waits on *processes*, never on the registry pid. |
+| `steam::shortcuts` | Read/edit/write `shortcuts.vdf`. Round-trip verified on **load**; write needs a `SteamStopped` token *and* re-checks it. Mutation surface is `set_icon` / `clear_icon` only. |
 | `vdf::appinfo` | `appcache/appinfo.vdf` reader. **Not the same format as `vdf::binary`** — v29 keys are u32 string-table indices. Extracts only `common/{type,name,clienticon}`. |
 | `steam::apptype` | `common/type` → "does this belong in the library list". Every unknown resolves toward **showing** the app. |
 | `focusgrid` (TS, `@griddle/shared`) | Spatial `(section, row, col)` navigation maths, DOM-free so it is exhaustively unit-tested. Modelled on z13gui's `internal/focusgrid`. See below. |
@@ -779,8 +838,14 @@ the hazards stayed.
 |---|---|
 | `error` | `UiError { kind, message, action }`. The **`kind` is what keeps "Steam is running" and "network timeout" distinguishable** across the boundary; `action` is what the user should actually do. |
 | `state` | Loaded once at startup. **Nothing here may stop the window opening** — no Steam, no key and an unreadable `appinfo.vdf` are all ordinary first-run states. |
-| `commands` | The `invoke` surface, one module per group: `status`, `apikey`, `prefs`, `library`, `search`, `apply`, `reset`, `diagnostics`. Thin; every decision belongs to `griddle-core`. 🔴 Re-exported with globs, not by name — `#[tauri::command]` generates hidden `__cmd__*` siblings that a named re-export drops, and the failure reads as a missing command. |
+| `commands` | The `invoke` surface, one module per group: `status`, `apikey`, `prefs`, `library`, `search`, `apply`, `icon`, `logo`, `reset`, `diagnostics`. Thin; every decision belongs to `griddle-core`. 🔴 Re-exported with globs, not by name — `#[tauri::command]` generates hidden `__cmd__*` siblings that a named re-export drops, and the failure reads as a missing command. |
 | `fatal` | A `MessageBoxW` for a startup failure with no window to report it in. `eprintln!` under `windows_subsystem = "windows"` reaches nobody, so a missing WebView2 runtime made the app simply not appear. |
+
+🔴 **`commands::icon` and `commands::logo` are the two that are not thin**, and they are the ones
+to check first when this table looks out of date. Both walk a ladder of their own — see the icon
+and logo sections below — and both were added after this table was first written, which is
+exactly how the row above came to list eight modules while ten existed. `scripts/check-claims.sh`
+now fails the build on that particular drift.
 
 **The apply ladder lives in `commands::apply_asset`:** live first, file-write as the floor. The
 result says which path ran, so the UI can say whether a restart is needed rather than leaving
@@ -793,18 +858,16 @@ and the account id and so cannot be set in `tauri.conf.json`. Two directories:
 | Directory | Recursive | Why |
 |---|---|---|
 | the account's `grid/` | **no** | custom artwork; flat by construction |
-| `appcache/librarycache/` | **yes** | Steam's default art. 278 of 2248 apps store theirs one level down under a sha1 directory, and a non-recursive grant would 403 exactly those |
+| `appcache/librarycache/` | **yes** | Steam's default art. 279 of 2249 apps store theirs one level down under a sha1 directory, and a non-recursive grant would 403 exactly those |
 
 🔴 **The recursive flag is the trap.** Copying the `grid/` grant's `false` looks right and fails
 only for the nested minority — which reads as "some games have no art", indistinguishable from
 the cache genuinely not having it. It is not unit-testable; verify by launching the app and
 confirming **1030300** renders. 620 rendering proves nothing, because it is flat.
 
-This is a real widening — ~2248 directories of Steam-owned store artwork — accepted because it
+This is a real widening — ~2249 directories of Steam-owned store artwork — accepted because it
 is still far narrower than the Steam root and contains nothing but public images. A grant
 failure is a `warn!`, not fatal: the UI then falls through to the CDN and still shows art.
-| `steam::process` | ToolHelp process enumeration; `-shutdown` → poll → relaunch. **The only minter of `SteamStopped`.** Waits on *processes*, never on the registry pid. |
-| `steam::shortcuts` | Read/edit/write `shortcuts.vdf`. Round-trip verified on **load**; write needs a `SteamStopped` token *and* re-checks it. Mutation surface is `set_icon` / `clear_icon` only. |
 
 **Verified on this machine 2026-07-27:** Steam found via HKCU, account `16274804` via `ActiveUser`,
 1 library, 51 manifests → 51 fully installed → 50 after dropping `228980`, the one shortcut
@@ -1644,7 +1707,11 @@ Module `36437` export `L` is the modal **host** component, taking
 `{ModalManager, bRegisterModalManager, DialogWrapper, bUseDialogElement, rctActiveContextMenus}`
 — it renders a manager, it is not the manager. `ShowPortalModal` is the interesting one for
 BPM: a portal is how you render into a different window's tree while staying inside the React
-tree that owns the focus contexts. `[INFERRED — VERIFY]`
+tree that owns the focus contexts. `[INFERRED — ARCHIVED, never verified]`
+
+🔵 That `VERIFY` was outstanding when M6 was cut, and it stays outstanding: the deliverable it
+belonged to no longer exists, so there is nothing to verify it *for*. Left in place, relabelled,
+because reviving M6 would start here — but it must not be read as a fact. It never was one.
 
 ---
 

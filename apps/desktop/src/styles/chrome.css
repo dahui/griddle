@@ -11,7 +11,7 @@
 }
 
 /*
- * 🔴 Every box property here is deliberately the same in both states, so `.stuck` below changes
+ * Every box property here is deliberately the same in both states, so `.stuck` below changes
  * paint and nothing else.
  *
  * A sticky element still occupies its place in the flow. Growing one when it pins — an extra

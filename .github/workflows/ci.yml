@@ -45,6 +45,11 @@ jobs:
       # written to temp directories, which trains people to ignore the check.
       - name: architecture boundaries
         run: sh scripts/check-boundaries.sh
+      # CLAUDE.md is what a future session reads *instead of* re-deriving the environment, so a
+      # claim in it that has quietly gone false is worse than a stale comment. This checks the
+      # subset a machine can settle; the rest is a human re-reading the measurements.
+      - name: claims
+        run: sh scripts/check-claims.sh
       # Byte-level, with the bad sequences written as hex escapes -- an inline
       # pattern containing literal mojibake was itself corrupted once.
       - name: encoding

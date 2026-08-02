@@ -1,7 +1,7 @@
 /*
  * The stylesheet, as an index.
  *
- * 🔴 **The order of these imports is the cascade.** Several rules further down deliberately
+ * **The order of these imports is the cascade.** Several rules further down deliberately
  * override earlier ones — the focus ring in `base.css` is re-specified for tiles, and the
  * overlays raise `z-index` against the sticky bar in `chrome.css`. Reordering this list is a
  * behaviour change even though nothing in any individual file moved.

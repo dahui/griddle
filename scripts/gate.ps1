@@ -45,6 +45,9 @@ $sh = Get-Sh
 
 Step "secret scan"             { & $sh scripts/check-secrets.sh --all }
 Step "architecture boundaries" { & $sh scripts/check-boundaries.sh }
+# CLAUDE.md is read instead of re-deriving the environment, so a stale claim in it costs
+# more than a stale comment. These are the ones grep can settle.
+Step "claims" { & $sh scripts/check-claims.sh }
 Step "encoding"                { python scripts/check-encoding.py }
 # Skips itself if cargo-about is absent rather than failing, so a fresh clone can run the gate.
 # CI installs it, so the check is never actually optional where it matters.
