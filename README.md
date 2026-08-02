@@ -55,7 +55,7 @@ Grab the [latest release](https://github.com/dahui/griddle/releases/latest):
 
 - Windows 10 or 11
 - Steam
-- Microsoft Edge WebView2 — already present on essentially every Windows 11 machine and almost
+- Microsoft Edge WebView2 -- already present on essentially every Windows 11 machine and almost
   every Windows 10 one. The installer adds it if missing.
 
 ## Status
