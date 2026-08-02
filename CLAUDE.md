@@ -631,18 +631,33 @@ The sibling of the trap above, from the other direction: `cargo build` will happ
 **stale** dist, and `cargo clippy` will not run at all without **some** dist. CI now builds the
 frontend before either.
 
-#### 🟡 The third-party notices check runs on Windows, and that is not arbitrary
+#### 🔴 The notices check failed on every platform, and it was `core.autocrlf` the whole time
 
-`cargo about generate` produced a different file on an ubuntu runner than on this machine —
-same `cargo-about` 0.9.1, same `Cargo.lock`, same `targets = ["x86_64-pc-windows-msvc"]` pin in
-`about.toml`, and byte-stable across repeated local runs. The cause was not chased down; the
-check was moved to `windows-latest` instead, because a guard whose expected value no maintainer
-can reproduce is unfixable by whoever it fails on. `THIRD-PARTY-NOTICES.txt` describes what is
-linked into a Windows binary and is regenerated on Windows, so that is where it is verified.
+**This section first said the cause "was not chased down" and blamed the runner's OS. That was
+wrong**, and the wrong diagnosis was load-bearing: it moved the job to `windows-latest`, where it
+promptly failed again with completely different numbers, which is what forced a real look.
 
-`scripts/notices.ps1 -Check` now prints the differing lines rather than only "out of date", and
-the CI pin is `cargo-about@0.9.1` — an upstream reformat would otherwise fail looking exactly
-like an unattributed dependency.
+`THIRD-PARTY-NOTICES.txt` is a generated artifact compared **byte-for-byte**, and Git for Windows
+ships `core.autocrlf = true`. Two independent consequences, neither of which names line endings
+when it fires:
+
+| | Effect |
+|---|---|
+| The generated file carries **65 literal CR bytes** — inside the licence texts of crates whose own `LICENSE` files are CRLF | Git strips them on commit, so the committed file is 65 bytes shorter than anything `cargo about` can produce. **No platform could ever pass.** |
+| A fresh checkout on a *Windows* runner re-expands every LF | The same file arrives ~9000 bytes **longer**, and `about.hbs` becomes CRLF too, so the template emits CRLF and the generated side moves ~1000 bytes as well |
+
+So the two failures had mismatched sizes in opposite directions and looked unrelated. Fixed with
+`.gitattributes` marking both files `-text`; the committed blob is now byte-identical to the
+generator's output, 65 CRs and all, verified with `git hash-object -w --path`.
+
+🔑 **The signature to recognise: byte counts differ, and the line diff is empty.** That is an EOL
+problem and nothing else. It only became visible because `-Check` was made to print the diff —
+before that the message was "out of date", which says nothing about which of these it is.
+
+The check still runs on `windows-latest`, now for a much smaller reason: `notices.ps1` is what
+regenerates the file and a maintainer always runs it on Windows, so that is where a failure is
+reproducible. CI pins `cargo-about@0.9.1`, since an upstream reformat would otherwise fail looking
+exactly like an unattributed dependency.
 
 #### 🔴 Three separate traps produced the same "connection refused" page
 
@@ -1275,6 +1290,19 @@ the caller already has should be passed, not re-read from shared state.
 **🔴 `<details open={…}>` is controlled by React.** Binding `open` to "are the filters modified"
 slammed the panel shut the instant the user clicked "Reset filters", with their cursor still
 inside it. Seed from the derived value once, then let the user own it.
+
+**🔴 A path-traversal guard built on `Path::components()` means different things on different
+hosts.** `librarycache::safe_join` walked the components and refused anything that was not
+`Normal`, which is correct on Windows — `C:\windows\system32\evil.jpg` is a `Prefix` and is
+refused. On Linux a backslash is an ordinary filename character, so the whole string is **one
+`Normal` component** and the guard accepted it, joining it under the app directory.
+
+Harmless in the shipped product, which is Windows-only, and that is exactly why it is worth
+recording: the test asserting the refusal **passed on every machine anyone ran it on**, and only
+the Linux CI leg — whose stated job is catching platform-dependent behaviour — could see it. The
+rejection is now lexical (`contains('\\')`, plus a `<letter>:` drive-relative check) *before*
+`Path` is consulted, so it means one thing everywhere. Nothing legitimate is lost: Steam writes
+`name.jpg` or `<sha1>/name.jpg`, always forward-slashed.
 
 **`Path::ends_with` matches whole components, not string suffixes.** `p.ends_with("_icon.ico")`
 is always false for `4048848997_icon.ico`. Compare `file_name()` instead.

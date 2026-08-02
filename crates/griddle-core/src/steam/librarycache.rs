@@ -209,6 +209,28 @@ fn safe_join(dir: &Path, relative: &str) -> Option<PathBuf> {
     if relative.is_empty() {
         return None;
     }
+
+    // Checked on the raw string, ahead of `Path`, because `Path`'s idea of a separator is the
+    // *host's*. On Linux a backslash is an ordinary filename character, so
+    // `C:\windows\system32\evil.jpg` parses as a single innocent-looking component and the walk
+    // below waves it through; on Windows the same string is refused as absolute. The product only
+    // ships on Windows, but a guard that means two different things on two platforms is not a
+    // guard — and the CI leg that caught this exists for precisely that class of bug.
+    //
+    // Nothing legitimate is lost: Steam writes `name.jpg` or `<sha1>/name.jpg`, always with a
+    // forward slash.
+    if relative.contains('\\') {
+        return None;
+    }
+    // A drive-relative path (`C:evil.jpg`) has no separator at all, and is a `Prefix` component
+    // on Windows but a `Normal` one everywhere else.
+    if let Some((head, _)) = relative.split_once(':')
+        && head.len() == 1
+        && head.starts_with(|c: char| c.is_ascii_alphabetic())
+    {
+        return None;
+    }
+
     let rel = Path::new(relative);
     for component in rel.components() {
         match component {
@@ -304,7 +326,9 @@ mod tests {
     fn safe_join_refuses_anything_that_could_leave_the_app_directory() {
         let dir = Path::new("C:\\Steam\\appcache\\librarycache\\620");
 
-        // The escapes.
+        // The escapes. The three Windows-flavoured ones are the reason this function does not
+        // simply walk `Path::components()`: on a Linux host a backslash is an ordinary character,
+        // so each of them is one `Normal` component and the walk alone accepts all three.
         for bad in [
             "../../../../windows/system32/evil.jpg",
             "..",
@@ -312,6 +336,7 @@ mod tests {
             "/etc/passwd",
             "C:\\windows\\system32\\evil.jpg",
             "\\\\server\\share\\evil.jpg",
+            "C:evil.jpg",
             "",
         ] {
             assert_eq!(safe_join(dir, bad), None, "{bad:?} must be refused");
