@@ -23,8 +23,9 @@ losing anything.
 ## Windows will warn you the first time
 
 Griddle is not code-signed, so Windows SmartScreen shows **"Windows protected your PC"** the first
-time you run it. This is expected and it is not a virus warning — SmartScreen flags any program it
-has not seen many people run before, and signing certificates require a registered company.
+time you run it. Expect it, and don't read it as a virus warning. SmartScreen flags any program it
+has not seen many people run before, and a signing certificate needs a registered company behind
+it.
 
 To run it anyway:
 
@@ -40,14 +41,13 @@ Get-FileHash .\Griddle-1.0.0-portable.zip -Algorithm SHA256
 
 ## WebView2
 
-Griddle draws its interface with Microsoft Edge WebView2, which is **already installed on
-essentially every Windows 11 machine and almost every Windows 10 one** — it ships with Windows and
-with Edge.
+Griddle draws its interface with Microsoft Edge WebView2. This ships with Windows and with Edge, so
+**every Windows 11 machine already has it, and almost every Windows 10 one does too.**
 
 If it is missing, Griddle says so and links to Microsoft's installer rather than failing silently.
 The installer bundle handles this for you.
 
 ## Next
 
-[Get your SteamGridDB API key](/griddle/start/your-api-key/) — Griddle cannot fetch artwork
-without one.
+[Get your SteamGridDB API key](/griddle/start/your-api-key/). Griddle cannot fetch artwork without
+one.

@@ -107,7 +107,7 @@ impl From<griddle_core::sgdb::client::Error> for UiError {
             E::Timeout | E::Network(_) => UiError::new(Kind::Network, e.to_string())
                 .with_action("Check your connection and try again."),
             E::RateLimited => UiError::new(Kind::Network, e.to_string())
-                .with_action("SteamGridDB is busy — wait a moment and try again."),
+                .with_action("SteamGridDB is busy. Wait a moment and try again."),
             _ => UiError::unexpected(e),
         }
     }

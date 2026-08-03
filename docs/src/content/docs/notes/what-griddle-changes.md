@@ -17,11 +17,11 @@ C:\Program Files (x86)\Steam\userdata\<your account id>\config\grid\
 ```
 
 Every piece of artwork you apply lands here, named after the game's app ID. This is Steam's own
-folder for custom artwork — the same one Steam Art Manager, SGDBoop and Steam itself use.
+folder for custom artwork, the same one Steam Art Manager, SGDBoop and Steam itself use.
 
-Applying artwork **deletes the files it replaces**: if a slot already has an image, its old file
-goes, including the same image saved under a different extension. Only one file per slot can
-exist, and leaving two behind makes Steam's choice between them unpredictable.
+Applying artwork **deletes the files it replaces**. If a slot already has an image, the old file
+goes, including the same image saved under a different extension. Only one file per slot can exist;
+leave two behind and Steam's choice between them is anyone's guess.
 
 ### Non-Steam shortcut icons
 
@@ -29,9 +29,10 @@ exist, and leaving two behind makes Steam's choice between them unpredictable.
 C:\Program Files (x86)\Steam\userdata\<your account id>\config\shortcuts.vdf
 ```
 
-Only when you set an icon for a non-Steam game, and only with Steam closed. Griddle keeps a
-one-time copy of the original as `shortcuts.vdf.sgdb-orig` before its first change, reads back
-what it wrote, and aborts if anything does not match.
+Only when you set an icon for a non-Steam game, and only with Steam closed. While Steam is running
+Griddle asks Steam to make the change and lets Steam write the file itself, so it never edits this
+behind Steam's back. Before its first direct change it keeps a one-time copy of the original as
+`shortcuts.vdf.sgdb-orig`, then reads back what it wrote and aborts if anything does not match.
 
 ### Its own settings and cache
 
@@ -40,7 +41,7 @@ what it wrote, and aborts if anything does not match.
 %LOCALAPPDATA%\Griddle\cache\            downloaded thumbnails and search results
 ```
 
-The cache is disposable — deleting it costs nothing but a re-download.
+The cache is disposable. Deleting it costs nothing but a re-download.
 
 ### One flag in Steam's folder
 
@@ -48,13 +49,13 @@ The cache is disposable — deleting it costs nothing but a re-download.
 C:\Program Files (x86)\Steam\.cef-enable-remote-debugging
 ```
 
-An empty file, created at startup. It is **Valve's own setting**, not a modification to Steam: it
+An empty file, created at startup. It is **Valve's own setting**, not a modification to Steam. It
 asks Steam to open a local debugging port, which is how Griddle applies artwork without a restart.
 CSS Loader and Decky Loader use the identical file.
 
-It has a real cost, so it is worth stating: with the flag in place, Steam listens on a local port
-that any program already running as you could connect to. Deleting the file undoes this
-completely, and Griddle falls back to writing artwork files.
+There is a real cost and it is worth stating plainly. With the flag in place, Steam listens on a
+local port that any program already running as you could connect to. Delete the file and that
+undoes it completely; Griddle falls back to writing artwork files.
 
 ## What it never touches
 

@@ -137,7 +137,7 @@ export function AssetTile({
           e.preventDefault();
           onDetails();
         }}
-        title={`Apply this ${label} — right-click for details`}
+        title={`Apply this ${label}. Right-click for details`}
       >
         <AssetPreview asset={asset} />
         {applying && <span className="applying">Applying…</span>}

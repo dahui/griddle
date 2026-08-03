@@ -30,8 +30,8 @@ everything removes that too.
 Griddle lists exactly what it is about to delete and asks you to confirm before touching anything.
 :::
 
-There is no undo. If you have artwork you curated by hand, copy the folder somewhere first — it is
-named on [What Griddle changes](/griddle/notes/what-griddle-changes/).
+There is no undo. If you have artwork you curated by hand, copy the folder somewhere safe first.
+[What Griddle changes](/griddle/notes/what-griddle-changes/) names it.
 
 ## What a reset does not do
 

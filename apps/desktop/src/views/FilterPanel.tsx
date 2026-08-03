@@ -161,7 +161,7 @@ export function FilterPanel({
               the control away, and matches how Size and Format behave right beside it. */}
           {checkedMimes === 0 && <p className="hint filter-hint">Any file format.</p>}
           {!filters.animated && !filters.static && (
-            <p className="hint filter-hint">Any type — animated and static both shown.</p>
+            <p className="hint filter-hint">Any type. Animated and static both shown.</p>
           )}
         </Group>
 
@@ -199,7 +199,7 @@ export function FilterPanel({
           <p className="hint filter-hint">
             {filters.untagged
               ? 'Untagged artwork, plus anything ticked above.'
-              : 'Only artwork carrying one of the ticked tags — untagged art is hidden.'}
+              : 'Only artwork carrying one of the ticked tags. Untagged art is hidden.'}
           </p>
         </Group>
 

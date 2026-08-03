@@ -111,7 +111,7 @@ export function LogoPositioner({
       >
         <div className="modal logo-modal" role="dialog" aria-modal="true" aria-label="Logo position">
           <div className="modal-head">
-            <h2>Logo position — {gameName}</h2>
+            <h2>Logo position: {gameName}</h2>
           </div>
 
           {/*

@@ -131,16 +131,16 @@ function ConfirmReset({
         </div>
 
         <p>
-          This deletes your custom artwork for <strong>{games}</strong> — {files} in
-          Steam&rsquo;s <code>grid</code> folder — and puts Steam&rsquo;s own artwork back.
+          This deletes your custom artwork for <strong>{games}</strong>, {files} in
+          Steam&rsquo;s <code>grid</code> folder, and puts Steam&rsquo;s own artwork back.
         </p>
+        {/* The two things a reader needs before a destructive action: that it is final, and that
+            it reaches further than "artwork Griddle applied". The reassurance that used to sit
+            below this said Steam's own art is untouched, which the sentence above already covers
+            with "puts Steam's own artwork back". */}
         <p className="note note-bad">
           <strong>This can&rsquo;t be undone.</strong> Artwork applied by other tools lives in the
           same folder, so it goes too.
-        </p>
-        <p className="hint">
-          Steam&rsquo;s own artwork is stored separately and isn&rsquo;t touched, so every game
-          keeps a picture.
         </p>
 
         <div className="row modal-actions">

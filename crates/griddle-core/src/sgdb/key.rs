@@ -34,7 +34,7 @@ pub enum KeyError {
     #[error("the API key is empty")]
     Empty,
 
-    #[error("the API key contains whitespace — check for a stray line break or a copied label")]
+    #[error("the API key contains whitespace. Check for a stray line break or a copied label")]
     ContainsWhitespace,
 
     #[error("the API key contains control characters")]

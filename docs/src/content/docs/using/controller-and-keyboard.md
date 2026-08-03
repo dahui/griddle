@@ -5,17 +5,16 @@ sidebar:
   order: 4
 ---
 
-Griddle can be driven entirely by a controller or by the keyboard. This is what makes it usable
-from the couch, which is the one thing the Decky plugin it replaces had over a desktop app.
+Griddle can be driven entirely by a controller or by the keyboard, so it works from the couch.
 
 ## Controller
 
 | Button | Does |
 |---|---|
 | **Left stick / D-pad** | Move between tiles and controls |
-| **A** | Select — apply the artwork, press the button |
-| **B** | Back — close a dialog, or return to the previous screen |
-| **Y** | Open the menu for whatever is selected (the same as right-clicking it) — an artwork slot's reset menu, or a search result's details |
+| **A** | Select: apply the artwork, press the button |
+| **B** | Back: close a dialog, or return to the previous screen |
+| **Y** | Open the menu for whatever is selected, the same as right-clicking it. An artwork slot's reset menu, or a search result's details |
 | **LB / RB** | Move between tabs |
 
 Holding a direction repeats, accelerating as you hold it, so a long library scrolls quickly.
@@ -43,15 +42,8 @@ Griddle is a normal Windows app, so Steam can launch it like any other:
 2. Browse to `Griddle.exe` and add it.
 3. Launch it from Big Picture like a game.
 
-Your controller works there because Griddle reads it natively rather than through the web browser
-its interface is drawn in. That distinction matters: the browser's own controller support breaks
-whenever the Steam Overlay is attached, which is exactly the case here.
+Your controller keeps working with the Steam Overlay attached, which is where most apps drawn this
+way fall over. Steam Input works too, so you can remap Griddle's controls the way you would for any
+game.
 
-You also get Steam Input for free — remap Griddle's controls the way you would for any game, and
-Griddle sees the result.
-
-## Every control is reachable
-
-There is nothing in Griddle a controller cannot operate. **Sort** was the one exception — a native
-Windows dropdown whose popup is drawn outside the page and receives no controller input — and it is
-now three ordinary buttons beside the scope tabs.
+There is nothing in Griddle a controller cannot reach.

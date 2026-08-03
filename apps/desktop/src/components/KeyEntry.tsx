@@ -71,7 +71,7 @@ export function KeyEntry({
       </div>
       {odd && !error && (
         <p className="hint">
-          That doesn’t look like a SteamGridDB key — they are 32 letters and numbers. Save it
+          That doesn’t look like a SteamGridDB key. They are 32 letters and numbers. Save it
           anyway if you’re sure.
         </p>
       )}

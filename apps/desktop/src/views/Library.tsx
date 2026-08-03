@@ -135,7 +135,7 @@ export function Library({ onPick }: { onPick: (entry: LibraryEntry) => void }) {
             col={1}
             active={scope === 'all'}
             onClick={() => view('all', sort)}
-            title="Everything Steam has a record of on this PC — not everything you own."
+            title="Everything Steam has a record of on this PC. Not everything you own."
           >
             All games
           </ScopeTab>

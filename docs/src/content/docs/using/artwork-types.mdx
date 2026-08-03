@@ -12,7 +12,7 @@ Steam shows a game through five separate images. Griddle gives each one a tab.
 
 | Tab | Where you see it | Shape |
 |---|---|---|
-| **Capsule** | The library grid — the tall tile you scroll past | Portrait, 600×900 |
+| **Capsule** | The library grid. The tall tile you scroll past | Portrait, 600×900 |
 | **Wide Capsule** | The horizontal shelves: recent games, collections, search | Landscape, 920×430 |
 | **Hero** | The wide banner across the top of a game's page | Very wide, 1920×620 |
 | **Logo** | The game's name, laid over the hero banner | Transparent PNG |
@@ -27,69 +27,64 @@ The **Current** tab shows all of them at once, with anything you have not custom
 
 ## Capsule and Wide Capsule come from the same place
 
-Both are "grids" on SteamGridDB, separated only by shape. That matters when you use
-[filters](/griddle/using/filters/): a size that makes sense for one is meaningless for the other,
-and Griddle narrows your filter set to whatever the current tab can actually use.
+Both are "grids" on SteamGridDB, separated only by shape. That is why a size you pick on one tab
+may not apply on the other. Griddle narrows your [filters](/griddle/using/filters/) to whatever the
+current tab can use.
 
 ## Logos have a position
 
-A logo is drawn on top of the hero banner, so Steam also stores *where*. When you apply a logo to
-a game that has never had one, Griddle writes a sensible default position alongside it — bottom
-left, at half size. Without that, some games render no logo at all.
+A logo is drawn on top of the hero banner, so Steam also stores *where*. Apply a logo to a game
+that has never had one and Griddle writes a sensible position alongside it: bottom left, at half
+size. Skip that and some games render no logo at all.
 
 To change it, go to the **Current** tab, right-click the logo and choose **Adjust position…**.
-That opens a preview of your logo over your hero banner, with:
+That opens a preview of your logo over your hero banner, with two controls:
 
-- **Anchor** — one of Steam's five positions. There is no bottom-right or top-right; Steam does
-  not have them.
-- **Width** and **Height** — the logo's size as a percentage of the banner.
+- **Anchor**, one of Steam's five positions. There is no bottom-right or top-right, because Steam
+  does not have them.
+- **Width** and **Height**, the logo's size as a percentage of the banner.
 
-Nothing is applied until you press **Save**, so you can try anchors freely. **Reset to default**
-puts it back to bottom left at half size. If Steam is running the change appears immediately;
-otherwise Griddle writes the position to disk and tells you a restart is needed.
+Nothing is applied until you press **Save**, so try the anchors freely. **Reset to default** puts
+it back to bottom left at half size. If Steam is running the change shows up straight away.
+Otherwise Griddle writes the position to disk and tells you a restart is needed.
 
 ## Icons always need a Steam restart
 
-Icons are the one slot Steam cannot change while it is running — every other kind of artwork
-appears instantly, and an icon never does. That is not a limitation of Griddle; the same is true
-of the Decky plugin and every other tool.
+Icons are the one slot Steam cannot change while it is running. Every other kind of artwork appears
+instantly; an icon never does. This is not a limitation of Griddle. The Decky plugin and every
+other tool are in the same position.
 
-Apply an icon like any other artwork. Griddle writes it and tells you to restart Steam, and it is
+Apply an icon like any other artwork. Griddle writes it, tells you to restart Steam, and it is
 there when Steam comes back. Non-Steam shortcuts need one extra step behind the scenes, which
-Griddle handles without closing anything — see
+Griddle handles without closing anything. See
 [Non-Steam shortcuts](/griddle/notes/non-steam-shortcuts/).
 
 ## Animated artwork
 
-SteamGridDB has animated capsules and heroes, and they work — Steam plays them in both the desktop
-library and Big Picture. Griddle marks them in the browser so you can tell before you apply one.
+SteamGridDB has animated capsules and heroes, and they do work: Steam plays them in the desktop
+library and in Big Picture. Griddle marks them in the browser so you know before you apply one.
 
 ## Tile size
 
 **Size −/+** at the top right, opposite the Library and Settings tabs, makes the tiles bigger or
 smaller, and the grid re-flows to fit.
 
-It is on every grid of artwork — each of the five browsing tabs, the **Current** overview, and
-your [library list](/griddle/using/finding-your-games/). Each remembers its own setting, so heroes
-can stay large while capsules stay dense, and the choice is kept between sessions.
-
-Two deliberate details: it is a pair of buttons rather than a slider, because a slider cannot be
-driven with a controller — left and right are how you move between things. And there is no
-percentage readout, because a number there would have no meaning outside the control; the grid
-resizing under your click is the feedback.
+You get it on every grid of artwork: each of the five browsing tabs, the **Current** overview, and
+your [library list](/griddle/using/finding-your-games/). Each one remembers its own setting, so
+heroes can stay large while capsules stay dense, and your choice survives between sessions.
 
 ## Looking closer before you apply
 
-A grid of thumbnails is not much to choose from when two capsules look alike. **Right-click any
-result** — or press the menu button on a controller — to see it at full size along with:
+A grid of thumbnails is not much to go on when two capsules look alike. **Right-click any result**,
+or press the menu button on a controller, to see it at full size along with:
 
 - who made it, and how it has been voted on
 - its exact dimensions and file format
 - its style, language, and any notes the author left
 - content flags, if it carries any
 
-**View on SteamGridDB** opens the artwork's own page in your browser, which is where to go to
-upvote it, report it, or find more by the same author.
+**View on SteamGridDB** opens the artwork's own page in your browser. That is where to upvote it,
+report it, or find more by the same author.
 
-Opening the details never applies anything — there is an **Apply** button in there when you have
+Opening the details applies nothing. There is an **Apply** button in there for when you have
 decided.

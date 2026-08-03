@@ -11,20 +11,20 @@ breaking changes.
 
 First release in preparation. Griddle can:
 
-- List your Steam library — installed games, or everything Steam has a record of on this PC — with
-  each game's current artwork.
+- List your Steam library, either installed games or everything Steam has a record of on this PC,
+  with each game's current artwork.
 - Browse SteamGridDB for all five artwork slots, with the full filter set.
-- Apply artwork **instantly**, with no Steam restart, by calling Steam's own artwork API. Falls
-  back to writing files when Steam is closed, and says which happened.
-- Set icons for non-Steam shortcuts, including the shutdown/write/relaunch sequence Steam
-  requires for them.
+- Apply artwork **instantly**, with no Steam restart, by calling Steam's own artwork API. It falls
+  back to writing files when Steam is closed, and says which of the two happened.
+- Set icons for non-Steam shortcuts. Griddle never closes Steam to do it: with Steam running it
+  asks Steam to make the change, and with Steam closed it edits the file directly.
 - Be driven entirely by a controller or the keyboard, so it can be launched from Big Picture.
 - Report its environment in Settings → Diagnostics, because most failures here are environmental.
 
 Known limitations:
 
 - **Icons never appear until Steam restarts**, whichever way they were applied. That is true of
-  every route into Steam's icons, the Decky plugin's included; Griddle says so when it applies one
+  every route into Steam's icons, the Decky plugin's included. Griddle says so when it applies one
   rather than pretending otherwise.
 - **Griddle cannot be told where Steam is from inside the app.** It reads the registry, and the
   `SGDB_STEAM_PATH` environment variable is the only override.

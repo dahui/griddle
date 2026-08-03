@@ -63,7 +63,7 @@ pub enum Error {
         names: String,
     },
 
-    #[error("Steam restarted after it was checked — the write was not attempted")]
+    #[error("Steam restarted after it was checked, so the write was not attempted")]
     Restarted,
 
     #[error("could not run {path}: {source}")]

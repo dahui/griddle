@@ -22,40 +22,32 @@ that opens the right page for you.
 3. Generate a key and copy it.
 4. Paste it into Griddle when it asks, or later under **Settings → API key**.
 
-Griddle checks the key with SteamGridDB before saving it, so you find out immediately if it is
-wrong rather than at the first game you open. If what you pasted does not look like a key — a
-half-copied string, or a label that came along with it — the screen says so, but it will still
-let you try: the check is a hint, not a rule.
+Griddle checks the key with SteamGridDB before saving it, so a bad one shows up right away. If what
+you pasted doesn't look like a key, it says so but still lets you save: that check is a hint, not a
+rule.
 
 Afterwards the key lives under **Settings → SteamGridDB API key**, where you can replace or remove
-it. Removing it puts Griddle back on the welcome screen above.
+it.
 
 <Image src={settings} alt="Griddle's settings screen, showing the API key panel" />
 
 ## Why yours and not one built in
 
-Shipping a shared key inside a downloaded app does not work, for a reason that is easy to observe:
-the Decky plugin Griddle replaces has one hardcoded, and it now returns **401** for everyone. A
-secret inside a distributed binary gets extracted, over-used, and revoked — and when it is
-revoked, every installation stops working at the same moment.
+A key inside a downloaded app gets extracted, over-used and then revoked, taking every installation
+down at once. That is not hypothetical: the Decky plugin Griddle replaces has one hardcoded, and it
+returns **401** for everyone today.
 
-A key you generated is yours, is rate-limited to your own use, and cannot be taken away by
-somebody else's behaviour.
+Your own key is rate-limited to your own use, and nobody else's behaviour can break it.
 
 ## How Griddle stores it
 
-Your key is encrypted with **Windows DPAPI**, scoped to your Windows user account, with
-app-specific entropy. In practice:
+Your key is encrypted with **Windows DPAPI**, scoped to your Windows account. So it is never on
+disk in plain text, another account on the same PC cannot read it, and it is only ever sent to
+SteamGridDB, never with image downloads.
 
-- It is never written to disk in plain text.
-- Another Windows account on the same PC cannot decrypt it.
-- It is never sent anywhere except SteamGridDB's own API — in particular it is never attached to
-  image downloads from their CDN.
-
-If you copy your settings file to a different machine or a different Windows account, the key will
-not decrypt there. Griddle opens on the welcome screen again and says so — *"Griddle found a saved
-SteamGridDB key but could not read it"* — and keeps the rest of your settings, so you only need to
-paste the key again.
+One consequence: a settings file copied to another machine or another Windows account will not
+decrypt. Griddle says so on the welcome screen and keeps the rest of your settings, so you just
+paste the key back.
 
 ## Next
 

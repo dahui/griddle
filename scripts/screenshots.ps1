@@ -172,14 +172,58 @@ $client = New-Object Win+POINT
 
 Write-Host "  window at $originX,$originY size ${width}x${height}; client origin $($client.X),$($client.Y)" -ForegroundColor DarkGray
 
-function Capture([string]$name) {
+function Capture([string]$name, [switch]$CropAboveLastPanel) {
     $bmp = New-Object Drawing.Bitmap $width, $height
     $g = [Drawing.Graphics]::FromImage($bmp)
     $g.CopyFromScreen($originX, $originY, 0, 0, $bmp.Size)
+    $g.Dispose()
+
+    if ($CropAboveLastPanel) { $bmp = CropAboveLastPanel $bmp $name }
+
     $path = Join-Path $outDir "$name.png"
     $bmp.Save($path, [Drawing.Imaging.ImageFormat]::Png)
-    $g.Dispose(); $bmp.Dispose()
+    $bmp.Dispose()
     Write-Host ("  {0,-12} {1}" -f $name, $path) -ForegroundColor Green
+}
+
+# Cut the image off above the last panel that starts in frame.
+#
+# This exists for exactly one image and one reason: the Settings screen's bottom panel is
+# Diagnostics, and its Account row is the Steam account id. Whether that row lands above or below
+# the window's bottom edge depends on how long the copy in the panels ABOVE it happens to be --
+# so trimming a sentence anywhere on that screen can push a private value into a published
+# screenshot, silently.
+#
+# It has already come within 13px: shortening the API-key paragraph pulled two Diagnostics rows
+# into frame, leaving the account id about 10px below the cut. That is an accident, not a
+# guarantee, and the previous guarantee was a `Write-Host` warning asking a human to look.
+#
+# Panels are `<section>`s with a 1px `--line` border (#2c2f3d), so the last one is findable by
+# colour. Scanning bottom-up, the first row that is mostly border colour is that panel's top edge.
+# Failing loudly matters more than cropping well: a miss here publishes the id.
+function CropAboveLastPanel([Drawing.Bitmap]$bmp, [string]$name) {
+    $edge = -1
+    for ($y = $bmp.Height - 1; $y -gt 200; $y--) {
+        $hits = 0
+        for ($x = 200; $x -lt 1000; $x += 4) {
+            $p = $bmp.GetPixel($x, $y)
+            # --line is #2c2f3d. Allow a little slack for subpixel blending at the border.
+            if ([Math]::Abs($p.R - 0x2c) -le 6 -and [Math]::Abs($p.G - 0x2f) -le 6 -and
+                [Math]::Abs($p.B - 0x3d) -le 6) { $hits++ }
+        }
+        if ($hits -gt 180) { $edge = $y; break }
+    }
+    if ($edge -lt 300) {
+        throw "${name}: could not find the last panel's top border (got $edge). Refusing to save, because the crop is what keeps the Steam account id out of this image."
+    }
+    $keep = $edge - 12
+    Write-Host ("    cropped {0} to {1}px, above the last panel at y={2}" -f $name, $keep, $edge) -ForegroundColor DarkGray
+    $out = New-Object Drawing.Bitmap $bmp.Width, $keep
+    $g2 = [Drawing.Graphics]::FromImage($out)
+    $g2.DrawImage($bmp, 0, 0)
+    $g2.Dispose()
+    $bmp.Dispose()
+    return $out
 }
 
 function Click([int]$x, [int]$y) {
@@ -244,16 +288,17 @@ Capture 'current'
 # `selected` is set, so only the view's own "<- Library" button clears it.
 Click 184 216      # the Settings tab
 Start-Sleep -Seconds 3
-# The top of the screen, not the Diagnostics rows below the fold. Two ways of reaching those
-# failed *silently* and are worth recording: synthesised `mouse_event` wheel messages never
-# reached the WebView2 child, and resizing the window between captures did not change what was
-# captured. Both produced an image identical to the previous one rather than an error, so check
-# that successive captures actually differ before believing a navigation step worked.
+# Cropped above the Diagnostics panel, which carries the Steam account id. That is enforced by
+# `CropAboveLastPanel` rather than left to the window happening to cut in the right place -- see
+# its comment for why the window is not a reliable boundary.
 #
-# It is also the right frame to publish: the Diagnostics rows carry the Steam account id.
-Capture 'settings'
+# Two ways of scrolling to those rows failed *silently* and are worth recording: synthesised
+# `mouse_event` wheel messages never reached the WebView2 child, and resizing the window between
+# captures did not change what was captured. Both produced an image identical to the previous one
+# rather than an error, so check that successive captures actually differ before believing a
+# navigation step worked.
+Capture 'settings' -CropAboveLastPanel
 
 Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
 Write-Host "done. Check each image before committing -- the click targets are positional." -ForegroundColor Yellow
-Write-Host "in particular: 'browse' must show an EXPANDED filter panel, and 'settings' must NOT" -ForegroundColor Yellow
-Write-Host "show any Diagnostics row -- the account id lives there." -ForegroundColor Yellow
+Write-Host "in particular: 'browse' must show an EXPANDED filter panel." -ForegroundColor Yellow

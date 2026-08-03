@@ -36,11 +36,8 @@ export function ApiKeyPanel({
     <section>
       <h2>SteamGridDB API key</h2>
       <p>
-        This app uses <strong>your own</strong> API key rather than shipping a shared one. It is
-        stored encrypted for your Windows account and only ever sent to SteamGridDB.
-      </p>
-      <p>
-        Grab one from{' '}
+        Stored encrypted for your Windows account, and only ever sent to SteamGridDB. Grab one
+        from{' '}
         <ExternalLink href={KEY_PAGE} onError={setError}>
           your SteamGridDB preferences
         </ExternalLink>
@@ -49,8 +46,7 @@ export function ApiKeyPanel({
 
       {status.key_unreadable && (
         <p className="note note-bad">
-          The saved key could not be decrypted on this Windows account, so Griddle cannot use it.
-          Paste it again to fix this.
+          The saved key could not be decrypted on this Windows account. Paste it again.
         </p>
       )}
 

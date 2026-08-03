@@ -2443,6 +2443,33 @@ The styles list is now written out per asset type, since it varies and the page 
 saying how. Also added: **Reset filters** only appears once something is modified — a reader who
 goes looking for it in the default state would otherwise report it missing.
 
+#### 🔴 "Use **Wrong game?**" — four pages naming a control by the label it only wears when it fails
+
+Found by the maintainer, and it is a third distinct class. Not stale, not overclaimed: **wrong from
+the day it was written**, and wrong in the one situation the instruction exists for.
+
+`FilterPanel.tsx` renders `{gameLabel ? \`Game: ${gameLabel}\` : 'Wrong game?'}`. So the button says
+**"Wrong game?"** only when SteamGridDB matched *nothing*. A **wrong** match is still a match, so
+the button reads **"Game: Portal 2"** — and the docs told the reader to look for a label that, in
+that exact case, is not on screen.
+
+Two things made it worse, and both were also stated wrongly:
+
+- **"at the top" / "above the results".** The button is inside the `<details>` filter panel, which
+  is **collapsed by default**. There is nothing to see until you expand Filters.
+- **"If the header names a different game".** The heading is the *Steam* game's name and never
+  changes. A wrong match is invisible there by construction, so the one check the page offered
+  could not detect the thing it was checking for.
+
+🔑 **The lesson is about labels that vary.** Documenting a control by the text it displays is fine
+until the text is conditional, and then the docs are guaranteed to name the wrong one for whichever
+branch the reader is in. Four pages had copied the same sentence. All four now describe the
+*location* first and give both labels.
+
+⚠️ **A screenshot would have caught this too**: `browse.png` shows the button reading **"Game: 007
+First Light"**, directly contradicting the page that embeds it. Same as the `filters.mdx` finding
+above — the image and the prose were never read against each other.
+
 ---
 
 ## Deliberate divergences from the Decky plugin

@@ -11,8 +11,9 @@ import browse from '../../../assets/browse.png';
 The **Filters** panel above the results narrows what SteamGridDB returns.
 
 Almost everything starts **ticked**, so unticking a box narrows the results. Two things are off to
-begin with: **Adult Content**, and the **512×512** and **1024×1024** sizes — those are valid for
-capsules but match very little and are not the shape Steam renders, so they are opt-in.
+begin with. **Adult Content** is one. The other is the **512×512** and **1024×1024** sizes, which
+are valid for capsules but match very little and are not the shape Steam renders, so you opt into
+them.
 
 An empty result usually means the filters are too tight, not that the game has no artwork.
 
@@ -22,10 +23,10 @@ An empty result usually means the filters are too tight, not that the game has n
 
 SteamGridDB's own categories. Which ones exist depends on the artwork type:
 
-- **Capsule** and **Wide Capsule** — Alternate, White Logo, No Logo, Blurred, Minimal
-- **Hero** — Alternate, Blurred, Minimal
-- **Logo** — Official, White, Black, Custom
-- **Icon** — Official, Custom
+- **Capsule** and **Wide Capsule**: Alternate, White Logo, No Logo, Blurred, Minimal
+- **Hero**: Alternate, Blurred, Minimal
+- **Logo**: Official, White, Black, Custom
+- **Icon**: Official, Custom
 
 **Minimal** is SteamGridDB's `material` style. Griddle shows it under the name the site's own
 interface uses, so the two agree.
@@ -35,39 +36,39 @@ interface uses, so the two agree.
 Restricts results to specific dimensions. Sizes are per artwork type, and some combinations simply
 do not exist:
 
-- **Icons take no size filter at all** — the API rejects every value, so Griddle offers none.
-- **Hero at 1600×650** is valid but currently matches nothing.
+- **Icons take no size filter at all.** The API rejects every value, so Griddle offers none.
+- **Hero at 1600×650** is a valid size that currently matches nothing.
 
 ## Formats
 
-Two independent things in one column, which is worth knowing before you untick anything:
+This column holds two independent things, which is worth knowing before you untick anything:
 
-- **The file type** — PNG, JPEG and WebP for capsules and heroes; PNG and WebP for logos; PNG and
+- **The file type.** PNG, JPEG and WebP for capsules and heroes; PNG and WebP for logos; PNG and
   ICO for icons.
-- **Animated / Static** — untick **Animated** if you only want still images. Animated artwork is
+- **Animated / Static.** Untick **Animated** if you only want still images. Animated artwork is
   usually WebP or APNG, so this is not the same as unticking WebP.
 
 ## Content tags
 
 **Adult Content**, **Humor** and **Epilepsy Warning**, plus **Untagged**.
 
-These behave differently from the others and it is worth knowing which way round:
+These work differently from the other columns, and which way round matters:
 
-- With **Untagged** ticked, the three tags act as *exclusions*. Untick Humor and humorous artwork
-  disappears; everything untagged still shows.
-- With **Untagged** unticked, they become *requirements*. Results are limited to artwork carrying
-  at least one of the tags you left ticked, and untagged artwork is excluded entirely.
+- With **Untagged** ticked, the three tags *exclude*. Untick Humor and humorous artwork disappears,
+  while everything untagged still shows.
+- With **Untagged** unticked, they *require*. You get only artwork carrying at least one of the
+  tags you left ticked, and untagged artwork drops out entirely.
 
 Adult Content is the only one off by default.
 
 ## One set, shared across tabs
 
-Your filters are shared by all five tabs rather than kept separately per tab, so you set "no adult
-content" once.
+All five tabs share one set of filters rather than keeping their own, so you set "no adult content"
+once and it sticks everywhere.
 
-Where a tab cannot use one of your choices — a size that only applies to capsules, say — Griddle
+Sometimes a tab cannot use one of your choices, say a size that only applies to capsules. Griddle
 ignores it for that tab and keeps it for the others. Nothing is greyed out and nothing is quietly
-discarded, so switching back restores what you picked.
+thrown away, so switching back restores what you picked.
 
 **Reset filters** returns everything to the defaults. It appears only once you have changed
-something — if you cannot see it, nothing is filtered out that would not be by default.
+something, so if you cannot see it, nothing is being filtered out that would not be by default.

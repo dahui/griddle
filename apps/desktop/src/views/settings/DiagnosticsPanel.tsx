@@ -67,7 +67,7 @@ export function DiagnosticsPanel({ status }: { status: Status }) {
               wrong Steam of two installs — so it rides along with the path rather than taking a
               row and reading as internals. */}
           {status.steam_root && status.steam_source && (
-            <span className="hint"> — found via {status.steam_source}</span>
+            <span className="hint"> (found via {status.steam_source})</span>
           )}
         </dd>
         <dt>Account</dt>
@@ -84,7 +84,7 @@ export function DiagnosticsPanel({ status }: { status: Status }) {
         {status.app_types_loaded === null && (
           <>
             <dt>Steam&rsquo;s app list</dt>
-            <dd className="bad">Unreadable — falling back to the built-in list</dd>
+            <dd className="bad">Unreadable. Falling back to the built-in list.</dd>
           </>
         )}
       </dl>
@@ -115,8 +115,8 @@ export function DiagnosticsPanel({ status }: { status: Status }) {
             Live apply
             <span className="hint">
               {check.can_apply
-                ? ' — artwork changes immediately, with no Steam restart'
-                : " — Steam's artwork API isn't available; artwork will be written to disk and needs a Steam restart to show"}
+                ? '. Artwork changes immediately.'
+                : '. Artwork will be written to disk and needs a Steam restart to show.'}
             </span>
           </li>
           {/* Not a capability, and deliberately not a ✓/✕ row: it is the build number to quote in
