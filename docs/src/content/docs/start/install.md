@@ -23,9 +23,8 @@ losing anything.
 ## Windows will warn you the first time
 
 Griddle is not code-signed, so Windows SmartScreen shows **"Windows protected your PC"** the first
-time you run it. Expect it, and don't read it as a virus warning. SmartScreen flags any program it
-has not seen many people run before, and a signing certificate needs a registered company behind
-it.
+time you run it. Expect it, and don't read it as a virus warning: SmartScreen flags any program it
+has not seen many people run before.
 
 To run it anyway:
 
@@ -36,7 +35,7 @@ Windows remembers the choice, so it only happens once. If you would rather verif
 first, every release publishes `SHA256SUMS.txt`; compare it with:
 
 ```powershell
-Get-FileHash .\Griddle-1.0.0-portable.zip -Algorithm SHA256
+Get-FileHash .\Griddle-<version>-portable.zip -Algorithm SHA256
 ```
 
 ## WebView2

@@ -33,8 +33,8 @@ Grab the [latest release](https://github.com/dahui/griddle/releases/latest):
 
 > [!NOTE]
 > **Windows will show "Windows protected your PC" on first run.** Griddle is unsigned, and
-> SmartScreen flags anything it has not seen widely run. A signing certificate needs a registered
-> company behind it. Click **More info → Run anyway**, and Windows remembers.
+> SmartScreen flags anything it has not seen widely run. Click **More info → Run anyway**, and
+> Windows remembers.
 >
 > Every release publishes `SHA256SUMS.txt` if you want to verify the download.
 
@@ -58,16 +58,14 @@ Grab the [latest release](https://github.com/dahui/griddle/releases/latest):
 - Microsoft Edge WebView2. This is already on essentially every Windows 11 machine and almost every
   Windows 10 one, and the installer adds it if missing.
 
-## Status
+## Careful with your files
 
-**Pre-release.** Griddle works and gets used daily on the developer's machine, but it has not been
-tested widely. Expect rough edges, and please
-[report what you find](https://github.com/dahui/griddle/issues).
-
-It is deliberately careful with your files. Artwork writes are atomic, `shortcuts.vdf` is backed up
-before its first change and verified after every write, and Steam's own artwork cache is never
-written to at all.
+Artwork writes are atomic, `shortcuts.vdf` is backed up before its first change and verified after
+every write, and Steam's own artwork cache is never written to at all.
 [Every path it touches is listed.](https://dahui.github.io/griddle/notes/what-griddle-changes/)
+
+Found a bug, or something missing?
+[Open an issue](https://github.com/dahui/griddle/issues).
 
 ## Documentation
 

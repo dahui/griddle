@@ -4,12 +4,11 @@ Notable changes, written by hand. The per-release list of merged pull requests i
 GitHub on each [release](https://github.com/dahui/griddle/releases); this file is for the things
 that need a sentence rather than a line.
 
-Versions follow [semantic versioning](https://semver.org/). Until 1.0 the minor version may carry
-breaking changes.
+Versions follow [semantic versioning](https://semver.org/).
 
-## Unreleased
+## 1.0.0 — 2026-08-03
 
-First release in preparation. Griddle can:
+First release. Griddle can:
 
 - List your Steam library, either installed games or everything in it. With Steam running Griddle
   asks the client directly, so games you own but have never launched here are included too.

@@ -764,7 +764,8 @@ architecture.
 | **M8** | 🟢 **The first-run screen** — `views/Welcome.tsx`, replacing twelve lines inlined in `App.tsx` that showed the *Settings* key panel under a second heading. Task before policy: what the app is, then the four steps for getting a key (word-for-word the ones in `docs/start/your-api-key.mdx`), then an **Open SteamGridDB** button, then the field. Deliberately **not** a wizard — see below. |
 | **M9** | 🟢 **The live library merge.** All-games was a `localconfig.vdf` proxy that missed every game owned and never launched here; with Steam up, `collectionStore` fills them in. **479 → 683 games**, one shared type policy, and silent degradation to the offline list when Steam is closed. |
 | **M10** | 🟢 **The startup Steam offer, and Settings → Startup.** With Steam closed a dialog offers to launch it; two switches control that — start it without asking (off), and otherwise offer (on). See below. |
-| **Next** | No feature work outstanding. What remains is release mechanics — a real `v0.1.0-rc.1` tag run, installing the NSIS bundle, and the clean-machine docs walkthrough — plus the undecided **Experimental library tweaks**, which would need the module discovery that went with M6. |
+| **v1.0.0** | 🟢 **Tagged and shipped, 2026-08-03.** The first tag run exposed the `Get-ChildItem -Exclude` bug below — the build was clean and assembling the artifacts was not. The **NSIS installer has been installed and run by the maintainer and works.** |
+| **Next** | No feature work outstanding. What remains is the clean-machine docs walkthrough, the **signing** decision (SignPath Foundation is the free route; see S10), and the undecided **Experimental library tweaks**, which would need the module discovery that went with M6. |
 
 **The M4 changes worth remembering**, all detailed above: `librarycache` is indexed by
 `appinfo.vdf`, not by filename; the CDN has its own name table that is *not* the disk name;
@@ -2604,6 +2605,14 @@ version) are documentation that stopped tracking a change *in the product's favo
 a limitation was lifted, a row was never added — and nothing failed, because prose does not compile.
 `check-claims.sh` cannot reach any of them: they are claims about behaviour, not grep-able facts.
 **Before a release, read the limitations list against the code, not against its own last version.**
+
+🔴 **A fifth, and it is the one that generalises: correcting this file is not correcting the docs.**
+`README.md` and `start/install.md` both told the reader *"a signing certificate needs a registered
+company behind it"* — the exact requirement the S10 section had already recorded as **dropped**, on
+2026-08-02, in the same session. The research landed here and nowhere else, so two user-facing pages
+went on stating a rule that no longer existed. When a `[VERIFIED-*]` claim here changes, grep the
+docs for it before closing the tab; this file is where facts are *recorded*, not where users read
+them.
 
 #### 🟡 And three in `using/filters.mdx`, caught by the screenshot rather than by reading
 
