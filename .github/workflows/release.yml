@@ -90,7 +90,19 @@ jobs:
           # Written with names relative to the artifacts directory so `sha256sum -c` works after
           # downloading them into one folder.
           Push-Location artifacts
-          Get-ChildItem -File -Exclude SHA256SUMS.txt | ForEach-Object {
+          # `Get-ChildItem -Exclude` is silently EMPTY unless the path carries a contents
+          # wildcard (`.\*`) -- it is documented as "effective only when the command includes
+          # the contents of an item", and returning nothing is how that ineffectiveness shows
+          # up. This is what broke the first release: the loop ran over no files, `Set-Content`
+          # with an empty pipeline does not create a file at all, and the failure surfaced two
+          # lines later as a missing SHA256SUMS.txt with nothing pointing at the real cause.
+          # `Where-Object` has no such rule and cannot be half-written.
+          $files = Get-ChildItem -File | Where-Object Name -ne 'SHA256SUMS.txt'
+          # The build steps above already throw if they produce nothing, so this is the last
+          # line of defence rather than the first -- but an empty artifacts directory must fail
+          # here, loudly, and not go on to publish a release advertising files that do not exist.
+          if (-not $files) { throw "no artifacts to checksum" }
+          $files | ForEach-Object {
               $h = (Get-FileHash $_.Name -Algorithm SHA256).Hash.ToLower()
               "$h  $($_.Name)"
           } | Set-Content -Encoding ascii SHA256SUMS.txt

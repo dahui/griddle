@@ -1663,7 +1663,7 @@ WebView2 child does not take keyboard focus from `SetForegroundWindow` or `AppAc
 page never sees the keydown. Screenshot-driven runs are reliable *only* immediately after
 `Start-Process`, while the window still holds genuine focus. The keyboard pass is a manual step.
 
-#### Twenty-one bugs worth remembering
+#### Twenty-two bugs worth remembering
 
 **🔴 A dismiss-on-click listener in the *capture* phase eats the menu's own clicks.** The
 right-click menu closed on `window.addEventListener('click', close, true)`. Capture runs before
@@ -1868,6 +1868,28 @@ checked that the malformed sibling it was supposed to skip actually existed. It 
 premise — two children, one of them a scalar — before asserting the behaviour. Same lesson as the
 focus-tree probes: **a test that cannot fail when its fixture is wrong is not testing anything.**
 Write `\x00` in binary fixtures.
+
+**🔴 `Get-ChildItem -Exclude` is silently EMPTY without a contents wildcard, and it broke the first
+release.** `[VERIFIED-BOX 2026-08-03]` The v1.0.0 tag built cleanly and then failed assembling
+artifacts: `Get-ChildItem -File -Exclude SHA256SUMS.txt` in the artifacts directory matched
+**nothing**, where the same command without `-Exclude` matched both files. It is documented as
+"effective only when the command includes the contents of an item, such as `C:\Windows\*`" —
+returning zero results is how that ineffectiveness manifests, which reads as "the directory is
+empty" rather than "the filter is inert". Reproduced locally before changing anything: 2 files
+plain, 0 with `-Exclude`, 2 with `-Path .\*  -Exclude`, 2 with `Where-Object`.
+
+🔑 **It failed loudly only by luck, and that is the more useful half.** `Set-Content` with an
+**empty pipeline does not create a file at all** (verified), so the run died two lines later on
+`Get-Content SHA256SUMS.txt` — pointing at a missing file rather than at the filter that produced
+no input. Had `Set-Content` written an empty file, the release would have published a
+`SHA256SUMS.txt` containing nothing, and a checksum file that verifies nothing is worse than a
+failed release. The fix uses `Where-Object`, which has no wildcard rule to half-remember, plus an
+explicit `throw` so an empty artifacts directory says so itself.
+
+⚠️ **Nothing could have caught this before a tag.** The release job runs only on `v*`, so its
+steps are unexercised by every gate and CI run; the first execution of that code was the first
+release. Extracting the step into a script CI could run against a fixture directory is the obvious
+answer and has not been done.
 
 ### M1 spike — all resolved
 
