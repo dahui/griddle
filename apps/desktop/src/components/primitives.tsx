@@ -238,6 +238,51 @@ export function FocusButton({
   );
 }
 
+/**
+ * An on/off switch for a setting that takes effect the moment it moves.
+ *
+ * A switch, not a checkbox, and the difference is not decoration: a checkbox is a choice that
+ * something *else* will act on when you press OK, and a switch is the action. Griddle's settings
+ * write on change, so every preference here is the second kind. The one checkbox left in this
+ * area — "don't ask again", inside the start-Steam dialog — is genuinely the first kind, since
+ * nothing is written until a button is pressed.
+ *
+ * Still a real `<input type="checkbox">` underneath, with `role="switch"` over the top, so the
+ * keyboard, the pad and a screen reader all get the behaviour they already know.
+ */
+export function Switch({
+  section,
+  row,
+  col = 0,
+  checked,
+  disabled,
+  onChange,
+  children,
+}: {
+  section: string;
+  row: number;
+  col?: number;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: () => void;
+  children: ReactNode;
+}) {
+  const { ref, focused } = useFocusItem<HTMLInputElement>(section, row, col);
+  return (
+    <label className={`switch${focused ? ' focused' : ''}`}>
+      <input
+        ref={ref}
+        type="checkbox"
+        role="switch"
+        checked={checked}
+        disabled={disabled}
+        onChange={onChange}
+      />
+      <span>{children}</span>
+    </label>
+  );
+}
+
 /** Content-warning chips. Shown because a user filtering for them wants to see which is which. */
 export function Flags({ asset }: { asset: { nsfw: boolean; humor: boolean; epilepsy: boolean } }) {
   const flags = [

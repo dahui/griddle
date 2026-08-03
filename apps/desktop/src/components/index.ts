@@ -20,5 +20,6 @@ export {
   FocusButton,
   Spinner,
   StickyBar,
+  Switch,
   ZoomControl,
 } from './primitives';

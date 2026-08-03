@@ -164,6 +164,19 @@ pub struct Settings {
     /// hit when its shape changed.
     #[serde(default = "default_true")]
     pub offer_to_start_steam: bool,
+
+    /// Start Steam automatically when Griddle opens and Steam is not running.
+    ///
+    /// Off by default, and that is not the usual "false is what `serde` gives us" accident —
+    /// launching another program is a side effect nobody asked for, so it has to be chosen. A
+    /// plain `#[serde(default)]` is therefore correct here, unlike on the field above.
+    ///
+    /// **This supersedes [`Settings::offer_to_start_steam`] rather than replacing it.** With this
+    /// on there is nothing left to ask, so no prompt appears; the offer's own setting is kept as
+    /// the user left it, so turning this back off restores whatever they had. Clamping the two
+    /// into one value on save would quietly discard a choice — the same reasoning as filters,
+    /// which are narrowed at query time and never on the way to disk.
+    pub auto_start_steam: bool,
 }
 
 /// `#[serde(default)]` for a `bool` is `false`. Every flag here that should survive an older
@@ -213,6 +226,7 @@ impl Default for Settings {
             library_scope: LibraryScope::default(),
             library_sort: LibrarySort::default(),
             offer_to_start_steam: default_true(),
+            auto_start_steam: false,
         }
     }
 }

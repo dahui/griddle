@@ -18,6 +18,9 @@ First release in preparation. Griddle can:
   back to writing files when Steam is closed, and says which of the two happened.
 - Set icons for non-Steam shortcuts. Griddle never closes Steam to do it: with Steam running it
   asks Steam to make the change, and with Steam closed it edits the file directly.
+- Offer to start Steam when it is closed, since artwork applies instantly with Steam open and the
+  game list is fuller. **Settings → Startup** can make it start Steam without asking, or stop it
+  asking at all.
 - Be driven entirely by a controller or the keyboard, so it can be launched from Big Picture.
 - Report its environment in Settings → Diagnostics, because most failures here are environmental.
 

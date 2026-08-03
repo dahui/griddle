@@ -8,10 +8,10 @@
  * showing. That is what makes every game open on the Capsule tab: the reset is structural, not
  * something this component has to remember to do when a game is picked.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import logo from './assets/logo.png';
 import { api, asUiError, type LibraryEntry, type Status, type UiError } from './api';
-import { ErrorNote, Spinner, ToastProvider } from './components';
+import { ErrorNote, Spinner, ToastProvider, useErrorToast, useToast } from './components';
 import { SCREEN_DEPTH, useFocusItem, useScreenActions } from './focus';
 import { NavSlotCtx } from './navSlot';
 
@@ -32,10 +32,12 @@ export function App() {
   // Held in state rather than a ref: the views portal into this node, and a ref would not
   // re-render them once it was populated, so the first paint would have an empty nav row.
   const [navSlot, setNavSlot] = useState<HTMLDivElement | null>(null);
-  // Dismissed for *this session*. Separate from the stored preference so "Not now" silences the
+  // The startup question about Steam, settled for *this session* -- by dismissing the offer, or by
+  // starting Steam automatically. Separate from the stored preferences so "Not now" silences the
   // prompt until the next launch without writing anything, and a later `refresh()` -- which
-  // re-reads a status that still says Steam is closed -- cannot bring it back mid-session.
-  const [steamPromptDone, setSteamPromptDone] = useState(false);
+  // re-reads a status that still says Steam is closed, because starting it takes tens of seconds
+  // -- cannot bring the question back mid-session.
+  const [steamStartupDone, setSteamStartupDone] = useState(false);
 
   const refresh = useCallback(() => {
     api
@@ -84,26 +86,29 @@ export function App() {
     );
   }
 
-  // The offer to start Steam. Every condition here earns its place:
+  // Steam is not running and something should happen about it. Every condition earns its place:
   //
-  // - `!steam_running` — the only reason to say anything at all.
-  // - `offer_to_start_steam` — the stored "don't ask again".
-  // - `!steamPromptDone` — dismissed for this session.
+  // - `!steam_running` — the only reason to do anything at all.
+  // - `!steamStartupDone` — already settled this session.
   // - `!steam_error` — with Steam not *found*, the welcome screen and the empty library already
-  //   explain the situation, and offering to launch something we cannot locate would be absurd.
+  //   explain the situation, and launching something we cannot locate would be absurd.
   //
   // Placed after the first-run gate on purpose: a new user meets one screen, not a dialog stacked
   // on top of the screen asking for their API key.
-  const offerSteam =
-    !status.steam_running &&
-    status.offer_to_start_steam &&
-    !steamPromptDone &&
-    !status.steam_error;
+  const steamAbsent = !status.steam_running && !steamStartupDone && !status.steam_error;
+  // Starting it outright supersedes offering to, so the two are exclusive here rather than in the
+  // settings that feed them. `offer_to_start_steam` keeps whatever the user chose, and turning
+  // automatic start off restores it.
+  const autoStartSteam = steamAbsent && status.auto_start_steam;
+  const offerSteam = steamAbsent && !status.auto_start_steam && status.offer_to_start_steam;
 
   return (
     <Shell>
+      {autoStartSteam && (
+        <AutoStartSteam onDone={() => setSteamStartupDone(true)} onStatus={setStatus} />
+      )}
       {offerSteam && (
-        <StartSteamPrompt onClose={() => setSteamPromptDone(true)} onStatus={setStatus} />
+        <StartSteamPrompt onClose={() => setSteamStartupDone(true)} onStatus={setStatus} />
       )}
       <NavSlotCtx.Provider value={navSlot}>
         <nav className="tabs">
@@ -137,6 +142,56 @@ export function App() {
       </NavSlotCtx.Provider>
     </Shell>
   );
+}
+
+/**
+ * Starts Steam without asking, when the user has said to.
+ *
+ * Renders nothing. It is a component rather than an effect in `App` for one reason: the toast
+ * host lives inside `Shell`, so only something rendered under it can raise a message — and this
+ * must raise one. A program launching another program silently is the sort of thing that reads
+ * as a bug when you notice it in Task Manager.
+ *
+ * The ref guard, not the mount, is what makes it fire once. A status refresh while Steam is still
+ * coming up leaves this mounted, and React's development double-effect would otherwise launch
+ * Steam twice.
+ */
+function AutoStartSteam({
+  onDone,
+  onStatus,
+}: {
+  /** Settle the question for this session, whatever the outcome. */
+  onDone: () => void;
+  onStatus: (s: Status) => void;
+}) {
+  const toast = useToast();
+  const errorToast = useErrorToast();
+  const fired = useRef(false);
+
+  useEffect(() => {
+    if (fired.current) return;
+    fired.current = true;
+    void (async () => {
+      try {
+        await api.startSteam();
+        toast({
+          kind: 'info',
+          message: 'Steam wasn’t running, so Griddle started it. Your full library appears once ' +
+            'it has finished loading.',
+        });
+        // Re-read so the rest of the app stops believing Steam is closed.
+        onStatus(await api.status());
+      } catch (e: unknown) {
+        // A toast, not a blocking error: everything on screen still works, it just works in the
+        // Steam-closed way.
+        errorToast(e);
+      } finally {
+        onDone();
+      }
+    })();
+  }, [toast, errorToast, onDone, onStatus]);
+
+  return null;
 }
 
 /** The Library/Settings switch — the app's top navigation section, so `row 0` of `nav`. */

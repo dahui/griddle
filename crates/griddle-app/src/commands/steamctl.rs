@@ -63,3 +63,17 @@ pub async fn set_offer_to_start_steam(state: State<'_, AppState>, offer: bool) -
     state.store.save(&settings)?;
     Ok(())
 }
+
+/// Remember whether to start Steam without asking.
+///
+/// Writes only its own field. Turning it on makes the offer moot but does **not** clear
+/// [`set_offer_to_start_steam`]'s value, so switching it off again restores whatever the user had
+/// chosen there rather than leaving them with a prompt they had previously silenced — or without
+/// one they wanted.
+#[tauri::command]
+pub async fn set_auto_start_steam(state: State<'_, AppState>, auto: bool) -> Res<()> {
+    let mut settings = state.settings.lock().await;
+    settings.auto_start_steam = auto;
+    state.store.save(&settings)?;
+    Ok(())
+}

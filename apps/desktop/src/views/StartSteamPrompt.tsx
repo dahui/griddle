@@ -123,7 +123,13 @@ export function StartSteamPrompt({
   );
 }
 
-/** Its own section, so the pad reaches it above the buttons rather than beside them. */
+/**
+ * Its own section, so the pad reaches it above the buttons rather than beside them.
+ *
+ * A checkbox rather than the `Switch` the settings screen uses, and the distinction is the point:
+ * nothing is written until a button is pressed, so this is a choice something else acts on. A
+ * switch that has not switched anything yet would be a lie about when it takes effect.
+ */
 function DontAskAgain({ checked, onChange }: { checked: boolean; onChange: () => void }) {
   const { ref, focused } = useFocusItem<HTMLInputElement>('dont-ask', 0, 0);
   return (

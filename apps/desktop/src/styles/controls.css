@@ -68,6 +68,77 @@ button.danger:hover:not(:disabled) {
   font-size: 0.88rem;
 }
 
+/*
+ * An on/off switch for a setting that applies as it moves. Filters stay `.toggle` checkboxes
+ * deliberately: a list of twenty of these would read as twenty separate decisions rather than one
+ * set being narrowed.
+ *
+ * The track is the checkbox itself with `appearance: none`, and the knob is its `::after`. That
+ * keeps a real input in the DOM for the focus model, the keyboard and assistive tech, with no
+ * wrapper element to keep in step with it.
+ */
+.switch {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  /* Its own row, but only as wide as its label: the focus ring is drawn on the label, and a
+     full-width one would stretch across the panel to nothing. */
+  width: fit-content;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.switch input {
+  appearance: none;
+  flex: none;
+  position: relative;
+  width: 2.15rem;
+  height: 1.2rem;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-hi);
+  cursor: inherit;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
+}
+
+.switch input::after {
+  content: '';
+  position: absolute;
+  top: 0.15rem;
+  left: 0.15rem;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+  background: var(--muted);
+  transition:
+    transform 120ms ease,
+    background 120ms ease;
+}
+
+.switch input:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.switch input:checked::after {
+  background: #0e0f16;
+  transform: translateX(0.95rem);
+}
+
+.switch input:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Stacked switches are separate decisions and have to read as separate rows. Without this the
+   tracks sit close enough to look like one control with two labels. */
+.switch + .switch {
+  margin-top: 0.6rem;
+}
+
 /* -- tabs ----------------------------------------------------------------------------- */
 
 .tabs {

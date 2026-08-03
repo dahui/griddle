@@ -30,6 +30,9 @@ pub struct Status {
     /// Whether the user wants to be offered a Steam launch. See
     /// [`griddle_core::settings::Settings::offer_to_start_steam`].
     pub offer_to_start_steam: bool,
+    /// Whether to start Steam without asking. Supersedes [`Status::offer_to_start_steam`] — see
+    /// [`griddle_core::settings::Settings::auto_start_steam`].
+    pub auto_start_steam: bool,
     /// Which registry key (or override) produced [`Status::steam_root`].
     ///
     /// Kept for the one failure it explains — the wrong Steam of two installs — and rendered
@@ -101,6 +104,7 @@ pub async fn status(state: State<'_, AppState>) -> Res<Status> {
         steam_root: root,
         steam_running: griddle_core::steam::process::is_running(),
         offer_to_start_steam: settings.offer_to_start_steam,
+        auto_start_steam: settings.auto_start_steam,
         steam_source: source,
         account_id: account,
         has_api_key: settings.has_api_key(),

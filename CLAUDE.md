@@ -763,6 +763,7 @@ architecture.
 | **M7** | 🟢 **The non-Steam icon flow**, which closed the last M4 item. Icons for Steam games were always an ordinary file write and still are; a *shortcut* additionally needs its `shortcuts.vdf` entry repointed, done through `SteamClient.Apps.SetShortcutIcon` with Steam up and by editing the file with Steam down. Griddle never closes Steam. Every icon needs a restart to show, whichever route ran. |
 | **M8** | 🟢 **The first-run screen** — `views/Welcome.tsx`, replacing twelve lines inlined in `App.tsx` that showed the *Settings* key panel under a second heading. Task before policy: what the app is, then the four steps for getting a key (word-for-word the ones in `docs/start/your-api-key.mdx`), then an **Open SteamGridDB** button, then the field. Deliberately **not** a wizard — see below. |
 | **M9** | 🟢 **The live library merge.** All-games was a `localconfig.vdf` proxy that missed every game owned and never launched here; with Steam up, `collectionStore` fills them in. **479 → 683 games**, one shared type policy, and silent degradation to the offline list when Steam is closed. |
+| **M10** | 🟢 **The startup Steam offer, and Settings → Startup.** With Steam closed a dialog offers to launch it; two switches control that — start it without asking (off), and otherwise offer (on). See below. |
 | **Next** | No feature work outstanding. What remains is release mechanics — a real `v0.1.0-rc.1` tag run, installing the NSIS bundle, and the clean-machine docs walkthrough — plus the undecided **Experimental library tweaks**, which would need the module discovery that went with M6. |
 
 **The M4 changes worth remembering**, all detailed above: `librarycache` is indexed by
@@ -2624,6 +2625,43 @@ branch the reader is in. Four pages had copied the same sentence. All four now d
 ⚠️ **A screenshot would have caught this too**: `browse.png` shows the button reading **"Game: 007
 First Light"**, directly contradicting the page that embeds it. Same as the `filters.mdx` finding
 above — the image and the prose were never read against each other.
+
+---
+
+### 🟢 Settings → Startup, and four decisions inside it
+
+Two settings, both about what Griddle does when it opens and Steam is closed:
+`auto_start_steam` (**off**, start it without asking) and `offer_to_start_steam` (**on**, show the
+dialog). The first supersedes the second.
+
+🔴 **The two defaults are written differently and that asymmetry is the point.**
+`offer_to_start_steam` uses `#[serde(default = "default_true")]`, because a plain `bool` reads back
+`false` for anyone whose settings file predates the field and would silently disable the feature
+for every existing user — the `filters` trap again. `auto_start_steam` uses the plain default,
+because launching another program is a side effect nobody asked for and `false` is genuinely what
+an older file should mean.
+
+🔑 **Supersede, do not clamp.** Turning automatic start on leaves `offer_to_start_steam` exactly as
+the user left it and the exclusion happens where the two are *read*, in `App.tsx`. Writing the
+implication into the file would discard a choice the user made — the same reasoning as
+`pruneToType`, which narrows filters at query time and never on the way to disk.
+
+🔴 **The offer row is hidden while automatic start is on, not disabled.** The focus model has no
+notion of a skipped item, so a disabled control still takes a cursor stop it cannot accept DOM
+focus for — the swallowed-press failure already recorded above. Hiding it also has precedent in
+this app: "Reset filters" appears only when there is something to reset.
+
+**`Switch` is for a setting that applies as it moves; a checkbox is a choice something else acts
+on.** Every preference in Settings writes on change, so they are switches. The one checkbox left in
+this area is "Don't ask again" *inside* the dialog, where nothing is written until a button is
+pressed — a switch there would be a lie about when it takes effect. Filters stay checkboxes too:
+twenty switches would read as twenty separate decisions rather than one set being narrowed.
+
+⚠️ **Verified by shutting Steam down**, `[VERIFIED-BOX 2026-08-02]`: with the setting on, Griddle
+launched Steam by itself with no dialog and no synthesised click, and raised the toast that says
+so. The toast had to be caught by grabbing a frame every 900 ms — `TOAST_LIFE` is 4 s, and the
+first attempt captured at ~9 s and showed nothing, which reads as "no toast" rather than "too
+late".
 
 ---
 

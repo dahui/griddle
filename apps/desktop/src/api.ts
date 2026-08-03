@@ -56,6 +56,8 @@ export interface Status {
   steam_running: boolean;
   /** Whether the user still wants to be offered a Steam launch. */
   offer_to_start_steam: boolean;
+  /** Start Steam without asking. When true there is no offer, whatever the field above says. */
+  auto_start_steam: boolean;
   /** Which registry key found `steam_root`. Shown beside the path, not as a row of its own. */
   steam_source: string | null;
   account_id: number | null;
@@ -340,4 +342,6 @@ export const api = {
   startSteam: () => invoke<void>('start_steam'),
   /** Remember whether to offer a Steam launch on future startups. */
   setOfferToStartSteam: (offer: boolean) => invoke<void>('set_offer_to_start_steam', { offer }),
+  /** Remember whether to start Steam on future startups without asking. */
+  setAutoStartSteam: (auto: boolean) => invoke<void>('set_auto_start_steam', { auto }),
 };
