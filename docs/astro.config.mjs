@@ -79,7 +79,6 @@ export default defineConfig({
           label: 'Under the hood',
           collapsed: true,
           items: [
-            { label: 'Architecture', slug: 'internals/architecture' },
             { label: 'How live apply works', slug: 'internals/how-live-apply-works' },
             { label: 'The write boundary', slug: 'internals/the-write-boundary' },
             { label: 'Testing', slug: 'internals/testing' },
