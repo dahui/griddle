@@ -16,6 +16,9 @@ sidebar:
 games you own but have never launched on this PC. With Steam closed it falls back to what Steam's
 files remember, which is a few hundred games short. Nothing else changes, and you do not have to
 do anything.
+
+Start Steam while Griddle is open and the list fills itself in a few seconds later, without you
+reloading anything.
 :::
 
 

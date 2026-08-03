@@ -57,7 +57,7 @@ export function StartupPanel({
         disabled={busy}
         onChange={() => void write(() => api.setAutoStartSteam(!status.auto_start_steam))}
       >
-        Start Steam automatically if it isn&rsquo;t running
+        Start Steam automatically if it isn&rsquo;t running when Griddle launches
       </Switch>
 
       {!status.auto_start_steam && (
@@ -68,7 +68,7 @@ export function StartupPanel({
           disabled={busy}
           onChange={() => void write(() => api.setOfferToStartSteam(!status.offer_to_start_steam))}
         >
-          Otherwise, ask before starting it
+          Ask to start Steam if it is not running when Griddle launches
         </Switch>
       )}
 

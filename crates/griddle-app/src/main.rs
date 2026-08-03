@@ -152,6 +152,7 @@ fn main() {
             commands::start_steam,
             commands::set_offer_to_start_steam,
             commands::set_auto_start_steam,
+            commands::steam_library_ready,
         ])
         .run(tauri::generate_context!())
         // The one place a hard exit is right: if the webview cannot start there is no UI in

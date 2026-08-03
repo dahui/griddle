@@ -39,7 +39,17 @@ const SORT_LABEL: Record<LibrarySort, string> = {
   most_played: 'Most played',
 };
 
-export function Library({ onPick }: { onPick: (entry: LibraryEntry) => void }) {
+export function Library({
+  onPick,
+  reloadToken = 0,
+}: {
+  onPick: (entry: LibraryEntry) => void;
+  /**
+   * Bumped when Steam's own app list arrives after the first load. Reloads the list *quietly* —
+   * see the effect below.
+   */
+  reloadToken?: number;
+}) {
   const [entries, setEntries] = useState<LibraryEntry[] | null>(null);
   const [error, setError] = useState<UiError | null>(null);
   const [filter, setFilter] = useState('');
@@ -85,6 +95,33 @@ export function Library({ onPick }: { onPick: (entry: LibraryEntry) => void }) {
       cancelled = true;
     };
   }, [scope, sort, reloadKey]);
+
+  /*
+   * The same fetch as above, minus everything that makes it visible: no spinner, no error state,
+   * and the old list stays on screen until the new one is in hand.
+   *
+   * It is a second effect rather than another entry in `reloadKey` because the two are different
+   * events. A scope or sort change is something the user just asked for and should show progress;
+   * this one nobody asked for, so a spinner would read as the app losing its place. A background
+   * refresh that fails is also not worth replacing a working list with an error message.
+   *
+   * `scope` and `sort` are deliberately not dependencies: they are read from the closure at the
+   * moment the token changes, which is exactly the current view, and listing them would refire
+   * this on every change they already drive above.
+   */
+  useEffect(() => {
+    if (!scope || reloadToken === 0) return undefined;
+    let cancelled = false;
+    api
+      .library(LIST_ASSET, scope, sort)
+      .then((list) => {
+        if (!cancelled) setEntries(list);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadToken]);
 
   function view(nextScope: LibraryScope, nextSort: LibrarySort) {
     setScope(nextScope);

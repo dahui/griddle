@@ -38,6 +38,10 @@ export function App() {
   // re-reads a status that still says Steam is closed, because starting it takes tens of seconds
   // -- cannot bring the question back mid-session.
   const [steamStartupDone, setSteamStartupDone] = useState(false);
+  // Bumped once, when Steam's library list turns up after the app had already loaded without it.
+  // The library reloads on a change; see `SteamListWatcher` for why this is not just a status
+  // refresh.
+  const [steamListToken, setSteamListToken] = useState(0);
 
   const refresh = useCallback(() => {
     api
@@ -50,6 +54,12 @@ export function App() {
   }, []);
 
   useEffect(refresh, [refresh]);
+
+  const steamListArrived = useCallback(() => {
+    setSteamListToken((t) => t + 1);
+    // So the rest of the app stops describing Steam as closed.
+    refresh();
+  }, [refresh]);
 
   // The outermost screen, so it answers the bumpers only when nothing more specific does — and B
   // only once every dialog and every inner screen has had its turn.
@@ -104,6 +114,7 @@ export function App() {
 
   return (
     <Shell>
+      <SteamListWatcher onArrived={steamListArrived} />
       {autoStartSteam && (
         <AutoStartSteam onDone={() => setSteamStartupDone(true)} onStatus={setStatus} />
       )}
@@ -137,11 +148,72 @@ export function App() {
             }}
           />
         ) : (
-          <Library onPick={setSelected} />
+          <Library onPick={setSelected} reloadToken={steamListToken} />
         )}
       </NavSlotCtx.Provider>
     </Shell>
   );
+}
+
+/**
+ * Notices when Steam's library list turns up after Griddle has already loaded without it.
+ *
+ * Without this the count never changes: the library loads once, and starting Steam — whether
+ * Griddle did it or the user did — leaves a list that is a few hundred games short with nothing
+ * on screen to say so. The offer to start Steam made that worse rather than better, because it
+ * promises a fuller library and then does not deliver one until the next launch.
+ *
+ * Three things about it are load-bearing:
+ *
+ * - **It waits for the app list, not for Steam.** The realm answers at about 3 s on a cold start
+ *   and `collectionStore` is not populated until about 7 s, measured. Reloading on the earlier
+ *   signal would quietly produce the offline list again.
+ * - **Only a transition reloads.** If the very first poll succeeds, Steam was already up when the
+ *   library loaded, the list is already the full one, and reloading would be a spinner for
+ *   nothing. `sawAbsent` is what makes this a transition rather than a state.
+ * - **It gives up on nothing and slows down instead.** Somebody may start Steam long after
+ *   opening Griddle, so there is no deadline; the interval just stretches once the interesting
+ *   window has passed.
+ */
+function SteamListWatcher({ onArrived }: { onArrived: () => void }) {
+  const toast = useToast();
+
+  useEffect(() => {
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let sawAbsent = false;
+    let polls = 0;
+
+    async function tick() {
+      if (stopped) return;
+      polls += 1;
+      // `steam_library_ready` never rejects, but a Tauri call can still fail on its own terms
+      // and "not ready" is the right reading of that.
+      const ready = await api.steamLibraryReady().catch(() => false);
+      if (stopped) return;
+      if (!ready) {
+        sawAbsent = true;
+        // Tight while the list is plausibly on its way, then lazy: the first two minutes cover
+        // "Griddle just launched Steam", and after that this is only waiting on a person.
+        timer = setTimeout(() => void tick(), polls < 40 ? 3000 : 15000);
+        return;
+      }
+      // Ready. Nothing left to watch either way — the list does not need re-checking once it is
+      // the full one, and a later Steam shutdown must not shrink what is on screen.
+      if (sawAbsent) {
+        onArrived();
+        toast({ kind: 'info', message: 'Steam is ready — showing your full library.' });
+      }
+    }
+
+    void tick();
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [onArrived, toast]);
+
+  return null;
 }
 
 /**

@@ -2663,6 +2663,45 @@ so. The toast had to be caught by grabbing a frame every 900 ms — `TOAST_LIFE`
 first attempt captured at ~9 s and showed nothing, which reads as "no toast" rather than "too
 late".
 
+#### 🔴 Starting Steam was half the feature — the library never reloaded, so the count never moved
+
+Reported by the maintainer against the working auto-start: Steam came up and **All games** stayed
+at 479. `Library` loads on mount and on a scope/sort change, and nothing else, so starting Steam —
+by either route — left a list a few hundred games short with nothing on screen to say so. The
+offer made this *worse* than having no feature: it promises a fuller library and then does not
+deliver one until the next launch.
+
+🔑 **The signal to wait on is the app list, not Steam.** Measured on a cold start
+`[VERIFIED-BOX 2026-08-02]`, polling every 2 s from the moment `steam.exe` was launched:
+
+| At | What became true |
+|---|---|
+| **3 s** | `SharedJSContext` exists **and** `SetCustomArtworkForApp` is bound |
+| **7 s** | `collectionStore.allAppsCollection.allApps` holds its 869 apps |
+
+So `live_apply_check` — the obvious thing to poll, and the one already written — goes true a full
+four seconds before the list exists. Reloading on it lands in that gap and silently rebuilds the
+**offline** list, which looks exactly like the bug it was meant to fix. `steam_library_ready` polls
+the count instead, sharing its expression with `library_apps` so the two cannot disagree about
+whether the store is there.
+
+Three properties of `SteamListWatcher` worth keeping:
+
+- **Only a transition reloads.** If the first poll succeeds, Steam was already up when the library
+  loaded and the list is already the merged one; reloading would be a spinner for nothing.
+  `sawAbsent` is what makes it a transition rather than a state.
+- **The reload is quiet** — its own effect, which does not null `entries` and swallows failures.
+  The visible path is right for a scope change the user just asked for and wrong for a refresh
+  nobody did, where a spinner reads as the app losing its place.
+- **No deadline, just a slower interval** after two minutes. Somebody may start Steam long after
+  opening Griddle, and it costs one loopback poll to still be right when they do.
+
+It also fixes the case nobody reported: starting Steam **yourself** while Griddle is open now
+updates the list too, because the watcher keys on the list appearing rather than on who caused it.
+
+**Measured end to end** `[VERIFIED-BOX 2026-08-02]`: Steam down, auto-start on, no clicks
+synthesised at all — 479 games at the first capture, 677 by the next one ten seconds later.
+
 ---
 
 ## Deliberate divergences from the Decky plugin

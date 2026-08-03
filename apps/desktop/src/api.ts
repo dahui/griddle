@@ -344,4 +344,9 @@ export const api = {
   setOfferToStartSteam: (offer: boolean) => invoke<void>('set_offer_to_start_steam', { offer }),
   /** Remember whether to start Steam on future startups without asking. */
   setAutoStartSteam: (auto: boolean) => invoke<void>('set_auto_start_steam', { auto }),
+  /**
+   * Steam is up *and* its app list has arrived — several seconds apart, so this is not the same
+   * question as `steam_running`. Never rejects; not-ready is `false`.
+   */
+  steamLibraryReady: () => invoke<boolean>('steam_library_ready'),
 };

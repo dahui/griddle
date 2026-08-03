@@ -308,6 +308,26 @@ impl SteamJs {
             .await?)
     }
 
+    /// How many apps Steam's library currently lists, without transferring any of them.
+    ///
+    /// This exists because **the app list arrives several seconds after the realm does**, so
+    /// "can we reach Steam" is the wrong question to ask before reloading the library. Measured
+    /// on a cold start `[VERIFIED-BOX 2026-08-02]`: `SharedJSContext` existed and
+    /// `SetCustomArtworkForApp` was already bound at **3 s**, while `collectionStore` did not
+    /// hold its 869 apps until **7 s**. Reloading on the earlier signal lands in that gap and
+    /// silently produces the offline list again — the exact bug this is here to avoid.
+    ///
+    /// Same expression as [`SteamJs::library_apps`] up to the `.length`, so the two cannot come
+    /// to different conclusions about whether the store is there. `None` still means "not the
+    /// shape we know", never "empty".
+    pub async fn library_app_count(&mut self) -> Result<Option<usize>, Error> {
+        let expr = "(() => { \
+             const all = window.collectionStore?.allAppsCollection?.allApps; \
+             return Array.isArray(all) ? all.length : null; \
+         })()";
+        Ok(self.connection.evaluate::<Option<usize>>(expr).await?)
+    }
+
     /// Whether Steam knows this appid, and what it calls it. Useful for confirming a shortcut
     /// id resolves before applying anything to it.
     pub async fn app_name(&mut self, app: AppId) -> Result<Option<String>, Error> {

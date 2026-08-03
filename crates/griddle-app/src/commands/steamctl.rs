@@ -28,6 +28,7 @@
 use super::Res;
 use crate::error::UiError;
 use crate::state::AppState;
+use griddle_core::cdp::{Endpoint, SteamJs};
 use griddle_core::steam::process;
 use tauri::State;
 
@@ -62,6 +63,26 @@ pub async fn set_offer_to_start_steam(state: State<'_, AppState>, offer: bool) -
     settings.offer_to_start_steam = offer;
     state.store.save(&settings)?;
     Ok(())
+}
+
+/// Whether Steam is up **and** its library list has arrived.
+///
+/// The reason this is not `steam_running` is timing. Steam's process appears within a second and
+/// its JS realm answers at about three, but the app list is not populated until several seconds
+/// after that — measured at 3 s and 7 s respectively on a cold start
+/// `[VERIFIED-BOX 2026-08-02]`. A caller that reloads the library on the earlier signal gets the
+/// offline list and no indication anything is missing, which is precisely the failure this
+/// answers.
+///
+/// **Never an error.** Steam not running is the ordinary case while something waits for it, and
+/// a caller polling this would otherwise have to treat the expected state as a failure. Anything
+/// that is not a positive count is `false`.
+#[tauri::command]
+pub async fn steam_library_ready(state: State<'_, AppState>) -> Res<bool> {
+    let Ok((mut steam, _)) = SteamJs::connect(&state.http, &Endpoint::default()).await else {
+        return Ok(false);
+    };
+    Ok(matches!(steam.library_app_count().await, Ok(Some(n)) if n > 0))
 }
 
 /// Remember whether to start Steam without asking.
