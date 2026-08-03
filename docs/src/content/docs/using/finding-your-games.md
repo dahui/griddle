@@ -9,13 +9,13 @@ sidebar:
 
 **Installed**, the default, is games with files on this PC.
 
-**All games** adds everything else in your Steam library, usually about ten times as many.
+**All games** adds the rest of your Steam library.
 
 :::note
 **With Steam running you get the fuller list.** Griddle asks Steam directly, which knows about
 games you own but have never launched on this PC. With Steam closed it falls back to what Steam's
-files remember, which is a few hundred games short. Nothing else changes, and you do not have to
-do anything.
+files remember, which leaves out anything you have never launched here. Nothing else changes, and
+you do not have to do anything.
 
 Start Steam while Griddle is open and the list fills itself in a few seconds later, without you
 reloading anything.
