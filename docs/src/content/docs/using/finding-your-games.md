@@ -9,7 +9,14 @@ sidebar:
 
 **Installed**, the default, is games with files on this PC.
 
-**All games** adds everything else Steam has a record of here, usually about ten times as many.
+**All games** adds everything else in your Steam library, usually about ten times as many.
+
+:::note
+**With Steam running you get the fuller list.** Griddle asks Steam directly, which knows about
+games you own but have never launched on this PC. With Steam closed it falls back to what Steam's
+files remember, which is a few hundred games short. Nothing else changes, and you do not have to
+do anything.
+:::
 
 
 ## Filter and sort

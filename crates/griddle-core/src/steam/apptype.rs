@@ -73,6 +73,59 @@ pub enum AppType {
 }
 
 impl AppType {
+    /// Steam's own `EAppType` bitfield, as `collectionStore` reports it in the JS realm.
+    ///
+    /// The live library list carries a **numeric** type rather than `appinfo.vdf`'s
+    /// inconsistently-cased `common/type` string. Mapping it into the same enum is what keeps
+    /// [`AppType::belongs_in_library`] the single policy: the offline and live paths must not be
+    /// able to disagree about whether a dedicated server is a game.
+    ///
+    /// Seven values were **measured on a real library** `[VERIFIED-BOX 2026-08-02]`, each
+    /// confirmed by the names carrying them rather than by reading a table:
+    ///
+    /// | Value | Type | Confirmed by |
+    /// |---|---|---|
+    /// | 1 | Game | Portal 2, Team Fortress 2, Hollow Knight: Silksong |
+    /// | 2 | Application | 3DMark, EVGA Precision X1, Lossless Scaling |
+    /// | 4 | Tool | Proton Next, Legacy Steam Runtime, a dedicated server |
+    /// | 2048 | Video | "Tales of Berseria Special Chapter Skit" |
+    /// | 8192 | Music | four soundtracks, and the count matched Steam's own Soundtracks shelf |
+    /// | 65536 | Beta | DayZ Experimental, Rust - Staging Branch |
+    /// | 1073741824 | Shortcut | the one non-Steam shortcut on the box |
+    ///
+    /// The rest are the documented `EAppType` values and are **not** verified here, because no
+    /// app on that library carried them. They are still mapped: every one maps to a kind
+    /// `belongs_in_library` already hides, so a wrong guess would hide something — the bad
+    /// direction. If a category ever goes missing from the list, suspect this table first.
+    ///
+    /// Anything unrecognised becomes [`AppType::Other`] and is therefore **shown**, which is the
+    /// same failure direction the rest of this module takes.
+    pub fn from_steam_enum(raw: u32) -> Self {
+        match raw {
+            1 => AppType::Game,
+            2 => AppType::Application,
+            4 => AppType::Tool,
+            8 => AppType::Demo,
+            2048 => AppType::Video,
+            8192 => AppType::Music,
+            65536 => AppType::Beta,
+
+            // Not seen on the measured library; documented values, mapped to kinds that are
+            // already hidden.
+            16 => AppType::Media,
+            32 => AppType::Dlc,
+            256 => AppType::Config,
+            512 => AppType::Hardware,
+            16384 => AppType::Series,
+
+            // Shortcuts come from `shortcuts.vdf`, which owns their name and icon. Typing them
+            // is what lets the live path skip them rather than produce a second row.
+            1073741824 => AppType::Other("Shortcut".to_owned()),
+
+            other => AppType::Other(format!("EAppType {other}")),
+        }
+    }
+
     pub fn parse(raw: &str) -> Self {
         match raw.trim().to_ascii_lowercase().as_str() {
             "game" => AppType::Game,

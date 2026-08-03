@@ -82,8 +82,11 @@ This happens most with remasters and re-releases, and always with non-Steam shor
 
 ## Some of my games are missing
 
-The library shows **Installed** games by default. Switch to **All games** for everything Steam
-knows about on this PC.
+The library shows **Installed** games by default. Switch to **All games** for your whole library.
+
+**Start Steam if it is closed.** Griddle asks the running client for your library, which is how it
+finds games you own but have never launched on this PC. With Steam closed it can only use what
+Steam's files remember, and that is a few hundred games short.
 
 Games that have left your account are left out on purpose: refunded purchases, and withdrawn demos
 and betas. Steam keeps nothing about them but a playtime, so they would show up as blank, nameless

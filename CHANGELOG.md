@@ -11,8 +11,8 @@ breaking changes.
 
 First release in preparation. Griddle can:
 
-- List your Steam library, either installed games or everything Steam has a record of on this PC,
-  with each game's current artwork.
+- List your Steam library, either installed games or everything in it. With Steam running Griddle
+  asks the client directly, so games you own but have never launched here are included too.
 - Browse SteamGridDB for all five artwork slots, with the full filter set.
 - Apply artwork **instantly**, with no Steam restart, by calling Steam's own artwork API. It falls
   back to writing files when Steam is closed, and says which of the two happened.

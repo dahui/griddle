@@ -126,3 +126,52 @@ fn the_blocklist_still_applies_even_when_appinfo_calls_it_a_game() {
     let t = types_for(&[(228_980, "Game")]);
     assert!(!include_in_library(Some(&t), AppId::new(228_980)));
 }
+
+#[test]
+fn steams_numeric_app_types_map_onto_the_same_policy_as_the_string_ones() {
+    // The point of `from_steam_enum` is that the live list and the offline list cannot disagree
+    // about what a thing is. Each of these ordinals was confirmed on a real library by the names
+    // carrying it -- see the function's doc comment for which app proved which.
+    assert_eq!(AppType::from_steam_enum(1), AppType::Game);
+    assert_eq!(AppType::from_steam_enum(2), AppType::Application);
+    assert_eq!(AppType::from_steam_enum(4), AppType::Tool);
+    assert_eq!(AppType::from_steam_enum(2048), AppType::Video);
+    assert_eq!(AppType::from_steam_enum(8192), AppType::Music);
+    assert_eq!(AppType::from_steam_enum(65536), AppType::Beta);
+
+    // And the decisions match what the string path already produces, which is the property that
+    // actually matters. Asserting the enum alone would pass against a mapping that hid games.
+    for (numeric, text) in [
+        (1u32, "Game"),
+        (2, "Application"),
+        (4, "Tool"),
+        (2048, "Video"),
+        (8192, "Music"),
+        (65536, "Beta"),
+    ] {
+        assert_eq!(
+            AppType::from_steam_enum(numeric).belongs_in_library(),
+            AppType::parse(text).belongs_in_library(),
+            "numeric {numeric} and textual {text} must reach the same verdict"
+        );
+    }
+}
+
+#[test]
+fn an_unrecognised_numeric_type_is_shown_not_hidden() {
+    // Same failure direction as the rest of this module: a Steam release that invents a new
+    // EAppType must not make those apps vanish from the library.
+    let unknown = AppType::from_steam_enum(1 << 20);
+    assert!(unknown.belongs_in_library());
+    assert!(
+        unknown.label().contains("1048576"),
+        "an unknown value must survive verbatim into diagnostics, not collapse to a boolean"
+    );
+}
+
+#[test]
+fn shortcuts_are_typed_so_the_live_list_can_skip_them() {
+    // `shortcuts.vdf` owns non-Steam shortcuts -- their name, their icon, and their signed
+    // appid. Without this the live merge would add a second row under Steam's unsigned form.
+    assert_eq!(AppType::from_steam_enum(1_073_741_824).label(), "Shortcut");
+}

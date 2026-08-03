@@ -35,6 +35,22 @@ pub use target::{Endpoint, Target};
 use crate::appid::AppId;
 use crate::base64;
 use crate::grid::names::AssetType;
+use serde::Deserialize;
+
+/// One row of Steam's own library list, as [`SteamJs::library_apps`] returns it.
+#[derive(Debug, Clone, Deserialize)]
+pub struct LiveApp {
+    /// Unsigned, like every appid crossing the CDP boundary. A non-Steam shortcut arrives here
+    /// as `4048848997`, not the signed form `shortcuts.vdf` stores.
+    pub app_id: u32,
+    /// Steam's `display_name`. Present for every one of the 869 measured, so an empty string
+    /// means something changed rather than "this app has no name".
+    pub name: String,
+    /// Steam's `EAppType` bitfield. Turn it into a decision with
+    /// [`crate::steam::apptype::AppType::from_steam_enum`] rather than comparing numbers here —
+    /// the offline and live paths must share one policy.
+    pub app_type: u32,
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -248,6 +264,48 @@ impl SteamJs {
             app.get()
         );
         Ok(self.connection.evaluate_unit(&expr).await?)
+    }
+
+    /// Every app Steam's own library shows, which is far more than `localconfig.vdf` remembers.
+    ///
+    /// **Measured on a real library `[VERIFIED-BOX 2026-08-02]`: 869 apps here against 519 in
+    /// `localconfig.vdf`**, and 667 of them typed Game against roughly 469 after the offline
+    /// path's filtering. The 391 extra are exactly the gap `localconfig` was always documented as
+    /// having — games owned but never launched on this PC.
+    ///
+    /// The control that says this reads the right thing: `localGamesCollection` returns 51 on
+    /// that box, matching its 51 `appmanifest` files exactly.
+    ///
+    /// # This is an upgrade, never a replacement
+    ///
+    /// Steam being closed is the **ordinary** case, not a failure, so a caller must fall back to
+    /// `localconfig` rather than treat `None` or an error as empty. `None` means the store was
+    /// not there — a Steam build that moved it — and is deliberately distinct from a connection
+    /// error, which means Steam is not running.
+    ///
+    /// `collectionStore` is Steam's own global rather than a CEF-host binding like
+    /// `SetCustomArtworkForApp`, so it sits further up the fragility scale than the apply path:
+    /// not a minified module internal, but not renameable-only-by-breaking-their-own-client
+    /// either. That is the whole reason the offline list stays.
+    ///
+    /// Read-only. It enumerates and returns; it sets nothing.
+    pub async fn library_apps(&mut self) -> Result<Option<Vec<LiveApp>>, Error> {
+        // `?.` throughout, and an `Array.isArray` gate: if a future build renames or reshapes
+        // any of this, the expression returns null rather than throwing, and the caller degrades
+        // to the offline list instead of surfacing an error for something the user cannot act on.
+        let expr = "(() => { \
+             const all = window.collectionStore?.allAppsCollection?.allApps; \
+             if (!Array.isArray(all)) return null; \
+             return all.map(a => ({ \
+                 app_id: a.appid, \
+                 name: String(a.display_name ?? ''), \
+                 app_type: a.app_type ?? 0 \
+             })); \
+         })()";
+        Ok(self
+            .connection
+            .evaluate::<Option<Vec<LiveApp>>>(expr)
+            .await?)
     }
 
     /// Whether Steam knows this appid, and what it calls it. Useful for confirming a shortcut

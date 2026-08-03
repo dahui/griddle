@@ -345,9 +345,116 @@ codec. Key path `UserLocalConfigStore` → `Software` → `Valve` → `Steam` �
 > **Predicate: a child is a Steam app iff its key parses as `u32` and its value is a map.**
 > 519 children, **0 scalar siblings**.
 
-**518 appids against 51 `appmanifest` files.** There is still no *ownership* list — `licensecache`
-is encrypted — so this is a proxy, not a license check: it misses games owned and never launched.
-The UI says "All games", never "owned".
+**518 appids against 51 `appmanifest` files.** There is still no *offline* ownership list —
+`licensecache` is encrypted — so this is a proxy, not a license check: it misses games owned and
+never launched. The UI says "All games", never "owned".
+
+#### 🟢 How much it misses, measured — and the live list that fixes it `[VERIFIED-BOX 2026-08-02]`
+
+*"Misses games owned and never launched"* went unquantified for a milestone. It is **391 apps**,
+about **200 of them real games**. Read-only over CDP against the running client:
+
+| Source | Apps | of which `app_type` Game |
+|---|---|---|
+| `localconfig.vdf` `apps` map | 519 | ~469 after filtering |
+| `collectionStore.allAppsCollection.allApps` | **869** | **667** |
+| `appStore.allApps` | 869 | — |
+| `collectionStore.localGamesCollection` | **51** | — |
+
+That last row is the control: 51 exactly matches the 51 `appmanifest` files, so the probe is
+reading what it claims to.
+
+**The 391 the live list adds are precisely the predicted gap** — owned, never launched here:
+Psychonauts, Crysis Wars, Vermintide, Star Trek: Bridge Crew, Quantum Break.
+
+🔑 **The 41 going the other way are not losses, and one of them is a measurement artifact.** The
+EmulationStationDE shortcut is in *both*; `localconfig` stores the signed `-246118299` and the JS
+realm the unsigned `4048848997`, so a naive diff counts it as missing from each.
+
+🔴 **What this section said about the remaining 40 was wrong, and wrong in the way this file exists
+to prevent.** It read: *"The rest are the refunded-and-withdrawn apps `is_disowned` already drops —
+that inference now has independent corroboration."* **Nothing was checked.** The 40 were never
+opened; "the same apps we already drop" was an assumption dressed as a result, written in the same
+paragraph as four real measurements and borrowing their credibility.
+
+It was falsified within the hour, by the library's owner rather than by a probe: **six** of those
+40 were apps `is_disowned` does *not* drop, Assassin's Creed Shadows among them. Far from
+corroborating the appinfo heuristic, the live list **disagrees with it** — which is precisely what
+makes it worth having.
+
+⚠️ The lesson is the one already at the top of this file, and it still caught me: *an inference
+sitting next to a proven fact borrows its credibility.* The tell was available — "the rest are X"
+names a set nobody enumerated. **If a sentence describes a set, print the set.**
+
+`app_type` arrives as Steam's `EAppType` bitfield rather than `appinfo`'s inconsistently-cased
+`common/type` string: Game 667 · Tool 181 · Music 10 · Application 6 · Beta 3 · Video 1 ·
+Shortcut 1.
+
+🔴 **There is still no licence list anywhere.** No `LicenseStore` global, and `SteamClient.Apps`
+exposes nothing matching owned/licence/library beyond `ReportLibraryAssetCacheMiss`. 869 is "what
+Steam's library shows", which is much closer to ownership than `localconfig` and still is not it.
+**The UI must keep saying "All games".**
+
+⚠️ **These are Steam's own globals, not a CEF-host binding**, so they sit in the middle of the
+risk scale this project cares about: not minified module internals, but not `SetCustomArtworkForApp`
+either.
+
+#### 🟢 Shipped as a fourth rung, 2026-08-02 — **479 → 683 games**
+
+`commands::library` is now a ladder, and the order is the point: the three file-based rungs run
+first because they are cheap and always available, then `merge_live_apps` fills the gaps.
+
+| Rung | Source | Needs Steam running |
+|---|---|---|
+| 1 | `appmanifest_*.acf` | no |
+| 2 | `localconfig.vdf` — and the **only** source of playtimes | no |
+| 3 | `shortcuts.vdf` | no |
+| 4 | `collectionStore` over CDP, All-games scope only | **yes** |
+
+Measured on the real client: `live=869 added=204 skipped_type=192`, and the list went from **479
+to 683**. That `192` is the arithmetic checking out — 181 Tools + 10 Music + 1 Video, exactly the
+type census above. Cost is **33 ms** end to end, from the log timestamps either side of it.
+
+🔑 **`AppType::from_steam_enum` exists so there is one policy, not two.** The live list carries a
+numeric `EAppType` and `appinfo.vdf` carries an inconsistently-cased string; both map into the same
+enum and through the same `belongs_in_library`. Two filters would eventually disagree about whether
+a dedicated server is a game, and only one of them would be tested.
+
+🔴 **Every failure in rung 4 is silent, deliberately.** Steam being closed is the *ordinary* case,
+so a connection error, an absent store, or a moved global all leave the list exactly as rungs 1–3
+built it. Only the middle case warns: reaching Steam and not finding `collectionStore` means a
+build moved something, which is worth a log line. "Steam is not running" is `debug`, because
+warning about it on every library load would be noise about a thing nobody asked for.
+
+#### 🟢 It prunes as well as adds — **683 → 677**, and the six are named in the log
+
+Adding was only half of it. The same fetch answers "what does this account hold?", so a row
+`localconfig` remembers that Steam does **not** list is one the account no longer holds. Measured:
+`pruned=6`, and every one is recognisable as such — **Assassin's Creed Shadows** (the refund that
+started this), Marvel Heroes Omega (delisted), two withdrawn demos, a withdrawn beta, and an
+unreleased pre-order.
+
+🔴 **`installed` wins outright and is never pruned.** Files on disk are a fact; Steam listing
+everything the account holds is an assumption. If those ever disagree — mid-sync, offline mode, a
+family-sharing quirk — showing a game the user can launch beats hiding it. `keep_after_live_reconcile`
+is the predicate, deliberately extracted from the async path so both directions are unit-testable,
+each with a control.
+
+⚠️ **The prune keys on the *unfiltered* live ids**, before the type filter. A Tool the account owns
+is still owned; keying on the filtered set would drop rows for the wrong reason and the log would
+blame ownership.
+
+🔑 **The log names the titles, it does not just count them.** This removes rows the user can see,
+so "which ones?" has to be answerable without re-deriving it — and a name is how anyone spots the
+day it starts eating games that are genuinely owned.
+
+Three things it deliberately does not do, each of which would be a bug:
+
+- **Never replaces a row.** Rungs 1–2 carry installed state and playtimes that this list does not;
+  clobbering them to gain a `display_name` trades information for nothing.
+- **Never adds a shortcut.** Steam types those `1073741824` and `shortcuts.vdf` owns them. Adding
+  one here produces a duplicate row under the *unsigned* appid.
+- **Never relaxes the blocklist.** `is_known_non_game` is still the floor under both paths.
 
 🔴 **The 519th key is `-246118299`** — the signed form of `0xF1548865`, the EmulationStationDE
 shortcut. `shortcuts.vdf` owns those, so it is skipped; taking it too would duplicate the row
@@ -371,8 +478,22 @@ out — a refunded Mortal Kombat 1 and Black Ops III, three Resident Evil demos,
 
 `localconfig.vdf` records what was *configured*, never what is *owned* — there is no offline
 ownership list at all, `licensecache` being encrypted — so an app it remembers that `appinfo.vdf`
-has never heard of is the closest thing to a "no longer yours" signal available. Steam drops an
-app from appinfo once it stops being yours.
+has never heard of is the closest thing to a "no longer yours" signal available **offline**.
+
+🔴 **This section used to end "Steam drops an app from appinfo once it stops being yours." That is
+false, and it was never measured.** `[VERIFIED-BOX 2026-08-02]` The library's owner spotted a
+refunded **Assassin's Creed Shadows** back in the list. It is in `localconfig.vdf`, and
+`appinfo.vdf` **carries its name**, so `is_disowned` keeps it — it had been showing the whole time.
+`appinfo.vdf` is a *global metadata cache*, not a per-account one, and nothing obliges Steam to
+evict from it.
+
+So `is_disowned` is a **weak heuristic that catches some of them**, not a rule. It stays, because
+offline it is all there is. What it is not is correct.
+
+🔑 **The live list settles it properly, and that is now the primary predicate.** Steam does not
+list a refunded game in your library, so when `library_apps` succeeds, *absence from it* is the
+ownership signal — see the reconcile below, which caught six on this box including the one that
+started this.
 
 **This reverses the usual "unknown means show it" direction, deliberately.** These are not games
 missing from the list; they are games no longer in the account, and every one is unnamed and
@@ -641,6 +762,7 @@ architecture.
 | **M6** | 🔵 **Cut.** The Big Picture UI is not being built — see the header. `apps/bpm`, `cdp::modules` and the eleven finders are deleted; the research stays. |
 | **M7** | 🟢 **The non-Steam icon flow**, which closed the last M4 item. Icons for Steam games were always an ordinary file write and still are; a *shortcut* additionally needs its `shortcuts.vdf` entry repointed, done through `SteamClient.Apps.SetShortcutIcon` with Steam up and by editing the file with Steam down. Griddle never closes Steam. Every icon needs a restart to show, whichever route ran. |
 | **M8** | 🟢 **The first-run screen** — `views/Welcome.tsx`, replacing twelve lines inlined in `App.tsx` that showed the *Settings* key panel under a second heading. Task before policy: what the app is, then the four steps for getting a key (word-for-word the ones in `docs/start/your-api-key.mdx`), then an **Open SteamGridDB** button, then the field. Deliberately **not** a wizard — see below. |
+| **M9** | 🟢 **The live library merge.** All-games was a `localconfig.vdf` proxy that missed every game owned and never launched here; with Steam up, `collectionStore` fills them in. **479 → 683 games**, one shared type policy, and silent degradation to the offline list when Steam is closed. |
 | **Next** | No feature work outstanding. What remains is release mechanics — a real `v0.1.0-rc.1` tag run, installing the NSIS bundle, and the clean-machine docs walkthrough — plus the undecided **Experimental library tweaks**, which would need the module discovery that went with M6. |
 
 **The M4 changes worth remembering**, all detailed above: `librarycache` is indexed by
