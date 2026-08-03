@@ -24,6 +24,11 @@ asks Steam itself to change it, rather than writing files and hoping you restart
 
 It is a Windows-native replacement for the SteamGridDB plugin for Decky Loader.
 
+## Documentation
+
+**[dahui.github.io/griddle](https://dahui.github.io/griddle/)** covers installing, getting an API
+key, a walkthrough, and what the app changes on your system.
+
 ## Download
 
 Grab the [latest release](https://github.com/dahui/griddle/releases/latest):
@@ -67,10 +72,6 @@ every write, and Steam's own artwork cache is never written to at all.
 Found a bug, or something missing?
 [Open an issue](https://github.com/dahui/griddle/issues).
 
-## Documentation
-
-**[dahui.github.io/griddle](https://dahui.github.io/griddle/)** covers installing, getting an API
-key, a walkthrough, and what the app changes on your system.
 
 ## Building
 
