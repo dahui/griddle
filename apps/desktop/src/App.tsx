@@ -19,6 +19,7 @@ const TABS: Tab[] = ['library', 'settings'];
 import { Library } from './views/Library';
 import { AssetBrowser } from './views/AssetBrowser';
 import { Settings } from './views/Settings';
+import { StartSteamPrompt } from './views/StartSteamPrompt';
 import { Welcome } from './views/Welcome';
 
 type Tab = 'library' | 'settings';
@@ -31,6 +32,10 @@ export function App() {
   // Held in state rather than a ref: the views portal into this node, and a ref would not
   // re-render them once it was populated, so the first paint would have an empty nav row.
   const [navSlot, setNavSlot] = useState<HTMLDivElement | null>(null);
+  // Dismissed for *this session*. Separate from the stored preference so "Not now" silences the
+  // prompt until the next launch without writing anything, and a later `refresh()` -- which
+  // re-reads a status that still says Steam is closed -- cannot bring it back mid-session.
+  const [steamPromptDone, setSteamPromptDone] = useState(false);
 
   const refresh = useCallback(() => {
     api
@@ -79,8 +84,27 @@ export function App() {
     );
   }
 
+  // The offer to start Steam. Every condition here earns its place:
+  //
+  // - `!steam_running` — the only reason to say anything at all.
+  // - `offer_to_start_steam` — the stored "don't ask again".
+  // - `!steamPromptDone` — dismissed for this session.
+  // - `!steam_error` — with Steam not *found*, the welcome screen and the empty library already
+  //   explain the situation, and offering to launch something we cannot locate would be absurd.
+  //
+  // Placed after the first-run gate on purpose: a new user meets one screen, not a dialog stacked
+  // on top of the screen asking for their API key.
+  const offerSteam =
+    !status.steam_running &&
+    status.offer_to_start_steam &&
+    !steamPromptDone &&
+    !status.steam_error;
+
   return (
     <Shell>
+      {offerSteam && (
+        <StartSteamPrompt onClose={() => setSteamPromptDone(true)} onStatus={setStatus} />
+      )}
       <NavSlotCtx.Provider value={navSlot}>
         <nav className="tabs">
           <div className="tab-group">

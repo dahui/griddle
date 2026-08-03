@@ -17,6 +17,19 @@ pub struct Status {
     /// not built from a tag".
     pub app_version: &'static str,
     pub steam_root: Option<String>,
+    /// Whether `steam.exe` is up right now.
+    ///
+    /// This was removed from `Status` during the diagnostics cleanup, correctly: it was a
+    /// startup snapshot rendered as though it were current, and `sentinel_explanation` already
+    /// said the same thing in a more useful form. It is back because it now has a consumer that
+    /// genuinely wants the value *at startup* — the offer to start Steam — rather than a row
+    /// pretending to be live.
+    ///
+    /// It is still not rendered as a Diagnostics row, and should not be.
+    pub steam_running: bool,
+    /// Whether the user wants to be offered a Steam launch. See
+    /// [`griddle_core::settings::Settings::offer_to_start_steam`].
+    pub offer_to_start_steam: bool,
     /// Which registry key (or override) produced [`Status::steam_root`].
     ///
     /// Kept for the one failure it explains — the wrong Steam of two installs — and rendered
@@ -86,6 +99,8 @@ pub async fn status(state: State<'_, AppState>) -> Res<Status> {
     Ok(Status {
         app_version: env!("CARGO_PKG_VERSION"),
         steam_root: root,
+        steam_running: griddle_core::steam::process::is_running(),
+        offer_to_start_steam: settings.offer_to_start_steam,
         steam_source: source,
         account_id: account,
         has_api_key: settings.has_api_key(),

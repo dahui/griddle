@@ -34,6 +34,7 @@ mod prefs;
 mod reset;
 mod search;
 mod status;
+mod steamctl;
 
 // Glob re-exports, and they cannot be narrowed to the command names.
 //
@@ -52,6 +53,7 @@ pub use prefs::*;
 pub use reset::*;
 pub use search::*;
 pub use status::*;
+pub use steamctl::*;
 
 use crate::error::{Kind, UiError};
 use griddle_core::appid::AppId;

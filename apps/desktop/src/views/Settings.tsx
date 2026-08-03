@@ -9,6 +9,7 @@ import type { Status } from '../api';
 import { ApiKeyPanel } from './settings/ApiKeyPanel';
 import { DiagnosticsPanel } from './settings/DiagnosticsPanel';
 import { ResetAllPanel } from './settings/ResetPanel';
+import { StartupPanel } from './settings/StartupPanel';
 
 // Re-exported because the first-run flow in `App` shows the key panel on its own, before the
 // settings screen exists as somewhere to navigate to.
@@ -18,6 +19,7 @@ export function Settings({ status, onStatus }: { status: Status; onStatus: (s: S
   return (
     <>
       <ApiKeyPanel status={status} onStatus={onStatus} />
+      <StartupPanel status={status} onStatus={onStatus} />
       <ResetAllPanel />
       <DiagnosticsPanel status={status} />
     </>

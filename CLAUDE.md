@@ -1161,7 +1161,7 @@ the hazards stayed.
 |---|---|
 | `error` | `UiError { kind, message, action }`. The **`kind` is what keeps "Steam is running" and "network timeout" distinguishable** across the boundary; `action` is what the user should actually do. |
 | `state` | Loaded once at startup. **Nothing here may stop the window opening** — no Steam, no key and an unreadable `appinfo.vdf` are all ordinary first-run states. |
-| `commands` | The `invoke` surface, one module per group: `status`, `apikey`, `prefs`, `library`, `search`, `apply`, `icon`, `logo`, `reset`, `diagnostics`. Thin; every decision belongs to `griddle-core`. 🔴 Re-exported with globs, not by name — `#[tauri::command]` generates hidden `__cmd__*` siblings that a named re-export drops, and the failure reads as a missing command. |
+| `commands` | The `invoke` surface, one module per group: `status`, `apikey`, `prefs`, `library`, `search`, `apply`, `icon`, `logo`, `reset`, `diagnostics`, `steamctl`. Thin; every decision belongs to `griddle-core`. 🔴 Re-exported with globs, not by name — `#[tauri::command]` generates hidden `__cmd__*` siblings that a named re-export drops, and the failure reads as a missing command. |
 | `fatal` | A `MessageBoxW` for a startup failure with no window to report it in. `eprintln!` under `windows_subsystem = "windows"` reaches nobody, so a missing WebView2 runtime made the app simply not appear. |
 
 🔴 **`commands::icon` and `commands::logo` are the two that are not thin**, and they are the ones

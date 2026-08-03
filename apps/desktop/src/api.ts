@@ -52,6 +52,10 @@ export interface Status {
    */
   app_version: string;
   steam_root: string | null;
+  /** Whether `steam.exe` was up when this status was read. Used at startup, not rendered live. */
+  steam_running: boolean;
+  /** Whether the user still wants to be offered a Steam launch. */
+  offer_to_start_steam: boolean;
   /** Which registry key found `steam_root`. Shown beside the path, not as a row of its own. */
   steam_source: string | null;
   account_id: number | null;
@@ -332,4 +336,8 @@ export const api = {
   currentGameMatch: (appId: number) => invoke<GameMatch | null>('current_game_match', { appId }),
   /** Connects to Steam and reports whether artwork applies without a restart. */
   liveApplyCheck: () => invoke<LiveApplyCheck>('live_apply_check'),
+  /** Launch Steam. Returns as soon as it is spawned, not when Steam is ready. */
+  startSteam: () => invoke<void>('start_steam'),
+  /** Remember whether to offer a Steam launch on future startups. */
+  setOfferToStartSteam: (offer: boolean) => invoke<void>('set_offer_to_start_steam', { offer }),
 };

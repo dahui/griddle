@@ -149,6 +149,27 @@ pub struct Settings {
 
     /// How the library list is ordered.
     pub library_sort: LibrarySort,
+
+    /// Offer to start Steam when Griddle opens and Steam is not running.
+    ///
+    /// This exists so the offer **cannot become a nag**. Griddle is genuinely usable with Steam
+    /// closed — artwork is written to disk and appears at the next start — so somebody who
+    /// deliberately works that way must be able to make the prompt stop, and a dialog they have
+    /// to dismiss on every launch is exactly the kind of startup furniture this project has
+    /// deleted before.
+    ///
+    /// Defaults to **true** via `default_true`, not `Default::default()`. A plain `bool` field
+    /// reads back `false` for anyone whose settings file predates it, which would silently turn
+    /// the feature off for every existing user — the same silent-default trap that `filters`
+    /// hit when its shape changed.
+    #[serde(default = "default_true")]
+    pub offer_to_start_steam: bool,
+}
+
+/// `#[serde(default)]` for a `bool` is `false`. Every flag here that should survive an older
+/// settings file as *on* needs this instead.
+const fn default_true() -> bool {
+    true
 }
 
 /// Which apps the library list shows.
@@ -191,6 +212,7 @@ impl Default for Settings {
             game_overrides: BTreeMap::new(),
             library_scope: LibraryScope::default(),
             library_sort: LibrarySort::default(),
+            offer_to_start_steam: default_true(),
         }
     }
 }
