@@ -2244,8 +2244,41 @@ debugger is Valve's own opt-in mechanism.
 ⚠️ **SmartScreen is NOT covered by this test.** It triggers on Mark-of-the-Web, which a locally
 built exe does not carry (`Zone.Identifier` absent, confirmed). A *downloaded* unsigned
 installer with no reputation will very likely warn. Re-test with a real download at M8, and
-document the click-through. Signing is a v1.1 problem — Trusted Signing wants a 3-year-old
-legal entity.
+document the click-through.
+
+#### 🔵 The signing landscape moved, and both halves of what this said are now wrong
+
+This used to end *"Signing is a v1.1 problem — Trusted Signing wants a 3-year-old legal entity."*
+Checked 2026-08-02, and that requirement is **gone**: Microsoft dropped it when the service left
+public preview, and self-employed individuals can now sign up. It has also been renamed **Azure
+Artifact Signing**.
+
+🔴 **The second wrong half is the one that matters more, because it is the assumption the whole
+"get a certificate" plan rests on: signing no longer silences SmartScreen.** Microsoft's own
+comparison table, revised 2026-04-21, gives *"Reputation builds over time; initial warnings
+expected"* for Artifact Signing **and** for OV **and** for EV, and states plainly that **EV's
+instant bypass was removed in 2024**. Every tutorial still recommending EV for this is describing
+a behaviour that no longer exists. The only row in that table with "no warnings" is publishing an
+**MSIX through the Microsoft Store**, where Microsoft re-signs the package.
+
+⚠️ **Two sources disagree, and this is recorded rather than resolved.** Microsoft says reputation
+builds over time; a practitioner blog reports *"instant reputation on all executables signed"* and
+no SmartScreen popups on first release. Both are `[VERIFIED-DOCS]` at best — the weakest tag, and
+this file's own header notes it had been used zero times, which was the right number. **Do not
+spend money on the strength of either.** The cheap resolution is empirical: sign one release and
+download it on a clean machine, which is the same test M8 already owes for the unsigned case.
+
+What is worth knowing regardless of who is right: **reputation accrues per certificate, not per
+file.** Unsigned, every release starts from zero because the hash changes. Signed with a stable
+certificate, reputation carries across releases. That argument holds under either account of the
+first-download behaviour, and it is the real reason to sign.
+
+🔑 **For this project specifically, the cheapest path is free: SignPath Foundation.** It gives
+qualifying open-source projects OV-level signing through a managed HSM pipeline at no cost, and
+Griddle fits the criteria as stated — public repository, OSI licence (Apache-2.0), CI-built.
+Microsoft's own page links to it. Artifact Signing at ~$9.99/month is the fallback, with one new
+catch to check first: **individuals are limited to the USA and Canada** (organisations get the
+USA, Canada, EU and UK).
 
 ---
 

@@ -11,11 +11,6 @@ sidebar:
 
 **All games** adds everything else Steam has a record of here, usually about ten times as many.
 
-:::note
-That is not the same as everything you own. Steam keeps no readable list of what you own, so
-**All games** means what Steam has seen on this PC. A game you own but have never launched here
-will not appear.
-:::
 
 ## Filter and sort
 
