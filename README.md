@@ -58,7 +58,7 @@ Grab the [latest release](https://github.com/dahui/griddle/releases/latest):
 - Microsoft Edge WebView2. This is already on essentially every Windows 11 machine and almost every
   Windows 10 one, and the installer adds it if missing.
 
-## Careful with your files
+## Your files are safe
 
 Artwork writes are atomic, `shortcuts.vdf` is backed up before its first change and verified after
 every write, and Steam's own artwork cache is never written to at all.
