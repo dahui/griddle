@@ -7,7 +7,7 @@
  */
 import { describe, expect, mock, test } from 'bun:test';
 import { act, cleanup, render } from '@testing-library/react';
-import { useContext, useEffect } from 'react';
+import { useContext, useEffect, useMemo, useRef } from 'react';
 import { FocusCtx, FocusProvider } from './provider';
 import { useFocusGrid, useFocusItem, useScreenActions } from './hooks';
 import { SCREEN_DEPTH } from './model';
@@ -119,14 +119,32 @@ describe('grid column measurement', () => {
    *
    * The real provider is what wires the observers, so the spy sits between it and the grid rather
    * than standing in for it — a hand-built fake context would test the fake.
+   *
+   * **The `useMemo` is not tidiness, it is the test.** This built the wrapped object inline, so it
+   * had a new identity on every render — which is precisely the instability the real provider is
+   * built to avoid, and which `useFocusGrid` used to depend on to recover from a null ref. Against
+   * that spy the late-mount test below passed happily on the *broken* hook: the churn re-ran its
+   * effect for it. A spy must reproduce the provider's stability guarantee or it hides the class of
+   * bug that guarantee exists for.
    */
   function Spy({ onMeasure, children }: { onMeasure: () => void; children: React.ReactNode }) {
     const real = useContext(FocusCtx);
-    if (!real) return null;
-    const wrapped = { ...real, setColumns: (s: string, n: number) => {
-      onMeasure();
-      real.setColumns(s, n);
-    } };
+    // Refreshed every render and read through the ref, so the callback can be captured without
+    // making the context value depend on it.
+    const notify = useRef(onMeasure);
+    notify.current = onMeasure;
+    const wrapped = useMemo(
+      () =>
+        real && {
+          ...real,
+          setColumns: (s: string, n: number) => {
+            notify.current();
+            real.setColumns(s, n);
+          },
+        },
+      [real],
+    );
+    if (!wrapped) return null;
     return <FocusCtx.Provider value={wrapped}>{children}</FocusCtx.Provider>;
   }
 
@@ -158,6 +176,84 @@ describe('grid column measurement', () => {
     });
 
     expect(onMeasure.mock.calls.length).toBeGreaterThan(atMount);
+    cleanup();
+  });
+
+  /**
+   * The shape every real consumer has, and the one `Grid` above does not.
+   *
+   * `Library` and `CurrentAssets` both return a `<Spinner>` on their first commit and only render
+   * the grid once their data arrives. `Show` reproduces exactly that: nothing, then the container.
+   */
+  function Show({ visible }: { visible: boolean }) {
+    const ref = useFocusGrid<HTMLDivElement>('assets');
+    if (!visible) return null;
+    return <div ref={ref} data-testid="late-grid" />;
+  }
+
+  test('a container that mounts after the first commit is still measured', async () => {
+    // The bug: `useFocusGrid` measured from an effect whose dependencies were both permanently
+    // stable, so it ran exactly once -- with `ref.current` still null, because the view was
+    // showing a spinner. It bailed and was never invoked again, the column count stayed unset,
+    // and `buildLayout`'s `?? 1` made every tile its own row. Up and down then stepped one tile
+    // sideways, which is how the library grid was reported as broken.
+    //
+    // Confirmed to fail against the `useRef` + `useEffect` version: zero measurements, ever.
+    const onMeasure = mock(() => {});
+    const { rerender } = render(
+      <FocusProvider>
+        <Spy onMeasure={onMeasure}>
+          <Show visible={false} />
+        </Spy>
+      </FocusProvider>,
+    );
+
+    expect(onMeasure.mock.calls.length).toBe(0);
+
+    await act(async () => {
+      rerender(
+        <FocusProvider>
+          <Spy onMeasure={onMeasure}>
+            <Show visible />
+          </Spy>
+        </FocusProvider>,
+      );
+    });
+
+    expect(onMeasure.mock.calls.length).toBeGreaterThan(0);
+    cleanup();
+  });
+
+  test('a container replaced by a new element is re-measured', async () => {
+    // The second half, which survives even a fixed first mount. The library swaps its `<ul>` for
+    // a spinner on every scope or sort change, and for an empty state when the filter matches
+    // nothing -- so the returning `<ul>` is a *different element*. A ref object never says so,
+    // and the observers would stay attached to the detached one.
+    const onMeasure = mock(() => {});
+    const tree = (visible: boolean) => (
+      <FocusProvider>
+        <Spy onMeasure={onMeasure}>
+          <Show visible={visible} />
+        </Spy>
+      </FocusProvider>
+    );
+    const { rerender } = render(tree(true));
+
+    const first = document.querySelector('[data-testid="late-grid"]');
+    const afterMount = onMeasure.mock.calls.length;
+    expect(afterMount).toBeGreaterThan(0);
+
+    await act(async () => {
+      rerender(tree(false));
+    });
+    await act(async () => {
+      rerender(tree(true));
+    });
+
+    // A genuinely new node, so the assertion below is about re-attachment and not about a
+    // re-render of the same element.
+    expect(document.querySelector('[data-testid="late-grid"]')).not.toBe(first);
+    expect(onMeasure.mock.calls.length).toBeGreaterThan(afterMount);
     cleanup();
   });
 });

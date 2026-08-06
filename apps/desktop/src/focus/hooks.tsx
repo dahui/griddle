@@ -5,7 +5,7 @@
  * registers when it mounts and not again. Being focused is read from `FocusedIdCtx` separately;
  * see [`./provider`] for why those are two contexts.
  */
-import { useContext, useEffect, useId, useRef, type ReactNode } from 'react';
+import { useCallback, useContext, useEffect, useId, useRef, type ReactNode } from 'react';
 import { FocusCtx, FocusedIdCtx, ScopeCtx } from './provider';
 import { measureColumns, type ScreenActions } from './model';
 
@@ -75,29 +75,51 @@ export function useFocusGridItem<T extends HTMLElement = HTMLElement>(
  * render perfectly and only *navigation* is wrong, so pressing down moves two rows or lands in a
  * different column, which reads as the focus model being broken rather than as a measurement
  * that was never retaken.
+ *
+ * # It is a callback ref, and that is the fix for a real bug rather than a style choice
+ *
+ * This was a `useRef` object read from inside an effect with `[ctx, section]` dependencies —
+ * **both permanently stable**, `ctx` deliberately so. Every consumer of this hook shows a
+ * spinner while it loads, so on the one commit that effect ever ran, `ref.current` was `null`;
+ * it bailed and was never invoked again. The grid was therefore never measured at all, and
+ * `buildLayout`'s `?? 1` fallback made every tile its own row — so *up* and *down* stepped one
+ * tile sideways, which is how it was reported.
+ *
+ * A callback ref cannot miss it: React invokes it with the node whenever the node appears,
+ * changes, or goes away. That also covers the second half, which the effect version got wrong
+ * even after the container existed — the library swaps its `<ul>` for a spinner on every scope
+ * or sort change and for an empty state when the filter matches nothing, and each returning
+ * `<ul>` is a **new element**. A ref object never says so, and the observers stayed attached to
+ * a detached node.
+ *
+ * The cleanup returned here is React 19's callback-ref cleanup, which runs on detach.
  */
 export function useFocusGrid<T extends HTMLElement = HTMLElement>(section: string) {
-  const ref = useRef<T | null>(null);
   const ctx = useContext(FocusCtx);
 
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || !ctx) return undefined;
-    const measure = () => ctx.setColumns(section, measureColumns(el));
-    measure();
-    const resize = new ResizeObserver(measure);
-    resize.observe(el);
-    const mutation = new MutationObserver(measure);
-    // `setColumns` ignores a count it already holds, so the extra callbacks this brings in cost
-    // a `measureColumns` and stop there — no render, no observer feedback loop.
-    mutation.observe(el, { childList: true, attributes: true, attributeFilter: ['style', 'class'] });
-    return () => {
-      resize.disconnect();
-      mutation.disconnect();
-    };
-  }, [ctx, section]);
-
-  return ref;
+  return useCallback(
+    (el: T | null) => {
+      if (!el || !ctx) return undefined;
+      const measure = () => ctx.setColumns(section, measureColumns(el));
+      measure();
+      const resize = new ResizeObserver(measure);
+      resize.observe(el);
+      const mutation = new MutationObserver(measure);
+      // `setColumns` ignores a count it already holds, so the extra callbacks this brings in cost
+      // a `measureColumns` and stop there — no render, no observer feedback loop.
+      mutation.observe(el, {
+        childList: true,
+        attributes: true,
+        attributeFilter: ['style', 'class'],
+      });
+      return () => {
+        resize.disconnect();
+        mutation.disconnect();
+      };
+    },
+    // Both stable, so the ref does not detach and reattach on every render.
+    [ctx, section],
+  );
 }
 
 /**

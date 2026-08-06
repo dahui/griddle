@@ -60,8 +60,10 @@ export function Library({
   const [sort, setSort] = useState<LibrarySort>('name');
   const [zoom, setZoom] = useState<Partial<Record<ZoomTarget, number>>>({});
   const tile = zoomFor('library', zoom);
-  // Unconditional, above the early returns below: `useFocusGrid` is a hook, and the list has two
-  // states (error, loading) that return before the grid renders.
+  // Unconditional, above the early returns below, because it is a hook. Note that hoisting the
+  // *call* is not the whole story and used to be mistaken for it: the list has two states (error,
+  // loading) that return before the `<ul>` exists, and a third (no matches) that removes it again,
+  // so the grid is measured through a callback ref rather than an effect. See `useFocusGrid`.
   const grid = useFocusGrid<HTMLUListElement>('library');
 
   useEffect(() => {

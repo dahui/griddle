@@ -33,6 +33,14 @@ pub struct Status {
     /// Whether to start Steam without asking. Supersedes [`Status::offer_to_start_steam`] — see
     /// [`griddle_core::settings::Settings::auto_start_steam`].
     pub auto_start_steam: bool,
+    /// Whether the user wants to be offered a Steam *restart* when Steam is up but its debugging
+    /// port is not. See [`griddle_core::settings::Settings::offer_to_restart_steam`].
+    ///
+    /// Note what is deliberately **not** here: whether the port is actually reachable. That
+    /// answer needs a loopback round trip, and `status` is re-read on every navigation — so it
+    /// belongs in `steam_debug_ready`, which the caller polls, rather than in a snapshot that
+    /// would be stale by the time anything looked at it.
+    pub offer_to_restart_steam: bool,
     /// Which registry key (or override) produced [`Status::steam_root`].
     ///
     /// Kept for the one failure it explains — the wrong Steam of two installs — and rendered
@@ -105,6 +113,7 @@ pub async fn status(state: State<'_, AppState>) -> Res<Status> {
         steam_running: griddle_core::steam::process::is_running(),
         offer_to_start_steam: settings.offer_to_start_steam,
         auto_start_steam: settings.auto_start_steam,
+        offer_to_restart_steam: settings.offer_to_restart_steam,
         steam_source: source,
         account_id: account,
         has_api_key: settings.has_api_key(),

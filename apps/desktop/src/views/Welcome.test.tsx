@@ -19,6 +19,7 @@ function statusWith(over: Partial<Status> = {}): Status {
     steam_running: true,
     offer_to_start_steam: true,
     auto_start_steam: false,
+    offer_to_restart_steam: true,
     steam_source: 'HKCU',
     account_id: 1,
     has_api_key: false,

@@ -55,9 +55,13 @@ registry key it came from, and `SGDB_STEAM_PATH` overrides both.
 Griddle tells you which of two things happened. If it says the artwork was **written to disk**
 rather than applied live, Steam will pick it up when it next starts.
 
-Instant apply needs Steam running *and* the debugging flag in place. Diagnostics reports both. The
-flag is created at startup, so if it has gone missing, something removed it. Millennium is known
-to.
+Instant apply needs Steam running *and* the debugging flag in place **before Steam started**. Steam
+only reads the flag when it launches, so the commonest cause by far is that the flag is there and
+Steam has not restarted since. Griddle offers to restart it for you shortly after opening; you can
+also just restart Steam yourself, or turn the offer on again in **Settings → Startup** if you
+dismissed it for good.
+
+If the flag has gone missing altogether, something removed it. Millennium is known to.
 
 ## No results, or fewer than expected
 
@@ -88,6 +92,14 @@ The library shows **Installed** games by default. Switch to **All games** for yo
 finds games you own but have never launched on this PC. With Steam closed it can only use what
 Steam's files remember, which leaves those out. Griddle offers to start Steam when it opens;
 **Settings → Startup** can make it do so without asking.
+
+**If Steam *is* open and the list is still short, restart Steam.** Griddle reaches the running
+client through a debugging flag that Steam only reads when it launches, so on the first run after
+Griddle set that flag up, a Steam that was already open cannot be reached — and the list falls back
+to the shorter offline one with nothing saying why. Griddle offers the restart itself about a minute
+after opening — it waits, because a Steam that is still starting up looks the same and does not need
+restarting. **Settings → Diagnostics → Test live apply** is the quick way to check without waiting:
+if it does not report a tick, that is the same cause.
 
 Games that have left your account are left out on purpose: refunded purchases, and withdrawn demos
 and betas. Steam keeps nothing about them but a playtime, so they would show up as blank, nameless

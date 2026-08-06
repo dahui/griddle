@@ -19,6 +19,7 @@ const TABS: Tab[] = ['library', 'settings'];
 import { Library } from './views/Library';
 import { AssetBrowser } from './views/AssetBrowser';
 import { Settings } from './views/Settings';
+import { RestartSteamPrompt } from './views/RestartSteamPrompt';
 import { StartSteamPrompt } from './views/StartSteamPrompt';
 import { Welcome } from './views/Welcome';
 
@@ -38,15 +39,30 @@ export function App() {
   // re-reads a status that still says Steam is closed, because starting it takes tens of seconds
   // -- cannot bring the question back mid-session.
   const [steamStartupDone, setSteamStartupDone] = useState(false);
+  // The startup question about Steam's *debugging port*, settled for this session. Separate from
+  // the one above because they are different questions with different answers: Steam can perfectly
+  // well be running and unreachable, which is the state creating the sentinel leaves behind.
+  const [steamRestartDone, setSteamRestartDone] = useState(false);
+  const [offerRestart, setOfferRestart] = useState(false);
   // Bumped once, when Steam's library list turns up after the app had already loaded without it.
   // The library reloads on a change; see `SteamListWatcher` for why this is not just a status
   // refresh.
   const [steamListToken, setSteamListToken] = useState(0);
 
+  // Whether Steam was up at the moment Griddle read its *first* status.
+  //
+  // The restart offer keys on this rather than on the live value, and the difference is the whole
+  // safety of the feature: `AutoStartSteam` and `StartSteamPrompt` both re-read the status seconds
+  // after launching Steam, so `steam_running` goes true while Steam is still booting and its port
+  // is legitimately closed. Offering to restart a Steam that was about to work by itself is the
+  // worst outcome this feature has, and no grace period is a reliable defence against it.
+  const steamWasUpAtLaunch = useRef<boolean | null>(null);
+
   const refresh = useCallback(() => {
     api
       .status()
       .then((s) => {
+        steamWasUpAtLaunch.current ??= s.steam_running;
         setStatus(s);
         setError(null);
       })
@@ -60,6 +76,10 @@ export function App() {
     // So the rest of the app stops describing Steam as closed.
     refresh();
   }, [refresh]);
+
+  // Stable, or `SteamDebugWatcher`'s effect restarts its poll on every render of this component
+  // and the count never reaches the threshold.
+  const offerToRestart = useCallback(() => setOfferRestart(true), []);
 
   // The outermost screen, so it answers the bumpers only when nothing more specific does — and B
   // only once every dialog and every inner screen has had its turn.
@@ -112,6 +132,24 @@ export function App() {
   const autoStartSteam = steamAbsent && status.auto_start_steam;
   const offerSteam = steamAbsent && !status.auto_start_steam && status.offer_to_start_steam;
 
+  // Steam is up but Griddle may not be able to reach it — the state creating the debugging
+  // sentinel leaves behind, because Steam reads that file only when it starts. Every condition
+  // earns its place:
+  //
+  // - `steamWasUpAtLaunch.current === true` — never ask about a Steam that Griddle or the user
+  //   started this session. That one opens its port on its own, given a moment.
+  // - `!steam_error` — with Steam not *found*, there is nothing to restart.
+  // - `offer_to_restart_steam` — the user's own off switch, so this cannot become a nag.
+  //
+  // Mutually exclusive with the two above by construction, not by luck: they all require
+  // `!steam_running` from the same status object this requires `steam_running` from.
+  const maybeRestartSteam =
+    steamWasUpAtLaunch.current === true &&
+    status.steam_running &&
+    !status.steam_error &&
+    !steamRestartDone &&
+    status.offer_to_restart_steam;
+
   return (
     <Shell>
       <SteamListWatcher onArrived={steamListArrived} />
@@ -120,6 +158,10 @@ export function App() {
       )}
       {offerSteam && (
         <StartSteamPrompt onClose={() => setSteamStartupDone(true)} onStatus={setStatus} />
+      )}
+      {maybeRestartSteam && !offerRestart && <SteamDebugWatcher onUnreachable={offerToRestart} />}
+      {maybeRestartSteam && offerRestart && (
+        <RestartSteamPrompt onClose={() => setSteamRestartDone(true)} onStatus={setStatus} />
       )}
       <NavSlotCtx.Provider value={navSlot}>
         <nav className="tabs">
@@ -212,6 +254,62 @@ function SteamListWatcher({ onArrived }: { onArrived: () => void }) {
       if (timer) clearTimeout(timer);
     };
   }, [onArrived, toast]);
+
+  return null;
+}
+
+/**
+ * Decides whether Steam is running without its debugging port, before anything is said about it.
+ *
+ * That state is entirely invisible and Griddle creates it: `.cef-enable-remote-debugging` is
+ * written at every launch and Steam reads it only when it *starts*, so until the next restart
+ * artwork can only be written to disk and **All games** is the offline list. Neither symptom
+ * mentions the flag, and the flag was never mentioned to the user.
+ *
+ * Two things are load-bearing:
+ *
+ * - **Reachable at any point ends it for good.** The port is open, a restart would achieve
+ *   nothing, and there is no question left to ask.
+ * - **It takes ten polls to conclude the opposite.** The port is not open for the first few
+ *   seconds of a Steam start (the realm answers at about 3 s, measured), so a single failed probe
+ *   proves nothing.
+ *
+ * Ten polls is **not** thirty seconds, which is what this said until it was timed. A probe against
+ * a port with nothing on it does not fail instantly, so the real figure measured end to end is
+ * 45-51 s from launch — about a minute. That is slower than intended and deliberately not tuned
+ * down: erring late costs a user half a minute of a list they were not looking at yet, and erring
+ * early asks them to restart a Steam that was going to work.
+ *
+ * The caller additionally refuses to mount this for a Steam that came up during this session —
+ * see `steamWasUpAtLaunch`. The grace period covers a Steam mid-boot; that check covers a Steam
+ * Griddle started itself, which no grace period could reliably cover.
+ */
+function SteamDebugWatcher({ onUnreachable }: { onUnreachable: () => void }) {
+  useEffect(() => {
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let polls = 0;
+
+    async function tick() {
+      if (stopped) return;
+      polls += 1;
+      // `steam_debug_ready` never rejects, but a Tauri call can still fail on its own terms and
+      // "not reachable" is the right reading of that.
+      const ready = await api.steamDebugReady().catch(() => false);
+      if (stopped || ready) return;
+      if (polls >= 10) {
+        onUnreachable();
+        return;
+      }
+      timer = setTimeout(() => void tick(), 3000);
+    }
+
+    void tick();
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [onUnreachable]);
 
   return null;
 }

@@ -54,5 +54,12 @@ proven to work, and then removed, because that whole fragile surface existed to 
 Instant apply needs Steam running with the flag in place. When either is missing, Griddle writes
 the file to disk instead and says so, and Steam picks it up at the next start.
 
+**The order matters, and it catches most people once.** Steam only reads the flag when it *starts*,
+so the flag being present is not enough — it has to have been there before Steam launched. On the
+first run that creates it, a Steam that was already open has no port, and both instant apply and the
+full **All games** list are quietly unavailable until Steam restarts. Griddle notices this and
+offers to restart Steam for you; **Settings → Startup** turns the offer off if you would rather do
+it yourself.
+
 That fallback is the floor of the design. It needs nothing from Steam at all, which is what makes
 Griddle shippable even if Valve moves the API.

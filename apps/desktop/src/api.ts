@@ -58,6 +58,15 @@ export interface Status {
   offer_to_start_steam: boolean;
   /** Start Steam without asking. When true there is no offer, whatever the field above says. */
   auto_start_steam: boolean;
+  /**
+   * Whether the user still wants to be offered a Steam *restart* when Steam is up but its
+   * debugging port is not.
+   *
+   * Note what is deliberately not here: whether the port is actually open. That needs a loopback
+   * round trip and `status` is re-read on every navigation, so it lives in `steamDebugReady`,
+   * which the caller polls.
+   */
+  offer_to_restart_steam: boolean;
   /** Which registry key found `steam_root`. Shown beside the path, not as a row of its own. */
   steam_source: string | null;
   account_id: number | null;
@@ -349,4 +358,23 @@ export const api = {
    * question as `steam_running`. Never rejects; not-ready is `false`.
    */
   steamLibraryReady: () => invoke<boolean>('steam_library_ready'),
+  /**
+   * Steam's debugging port is open and answering as Steam.
+   *
+   * A narrower question than `steamLibraryReady`, and not a weaker one: the port is what decides
+   * whether artwork applies live and whether the full library is reachable at all, and it only
+   * opens at the first Steam start *after* Griddle's flag file exists. Never rejects; a closed
+   * port is `false`.
+   */
+  steamDebugReady: () => invoke<boolean>('steam_debug_ready'),
+  /**
+   * Shut Steam down and start it again, so it picks up the debugging flag.
+   *
+   * Returns once Steam has been relaunched, not once it is usable — that is another minute, and
+   * `SteamListWatcher` is what reports the library arriving.
+   */
+  restartSteam: () => invoke<void>('restart_steam'),
+  /** Remember whether to offer a Steam restart on future startups. */
+  setOfferToRestartSteam: (offer: boolean) =>
+    invoke<void>('set_offer_to_restart_steam', { offer }),
 };

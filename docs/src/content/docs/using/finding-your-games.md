@@ -19,6 +19,10 @@ you do not have to do anything.
 
 Start Steam while Griddle is open and the list fills itself in a few seconds later, without you
 reloading anything.
+
+The one exception is the very first run, where Griddle sets up the connection Steam only reads at
+launch. If Steam was already open then, it has to be restarted once before the fuller list is
+available — Griddle offers to do that for you.
 :::
 
 

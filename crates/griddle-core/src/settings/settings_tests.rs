@@ -209,6 +209,27 @@ fn an_older_settings_file_without_the_m4_keys_still_loads() {
 }
 
 #[test]
+fn the_two_steam_offers_survive_an_older_file_as_on_and_auto_start_as_off() {
+    // The silent-default trap, twice over. A plain `bool` reads back `false` for a file written
+    // before the field existed, so both *offers* carry `default = "default_true"` -- otherwise
+    // every existing user would have them switched off with no error and nothing to notice.
+    //
+    // `auto_start_steam` is the control, and its `false` is deliberate rather than accidental:
+    // launching another program is a side effect that has to be chosen. A test asserting only the
+    // two `true`s would pass just as happily against a struct where every flag defaulted on.
+    let s: Settings = serde_json::from_str(r#"{"version":1}"#).unwrap();
+    assert!(s.offer_to_start_steam, "an older file must keep the offer");
+    assert!(
+        s.offer_to_restart_steam,
+        "an older file must keep the restart offer -- those users are the ones with the problem"
+    );
+    assert!(
+        !s.auto_start_steam,
+        "starting Steam unasked must be opted into"
+    );
+}
+
+#[test]
 fn save_leaves_no_temp_file_behind() {
     let dir = tempfile::tempdir().unwrap();
     let store = Store::at(dir.path().join("settings.json"));

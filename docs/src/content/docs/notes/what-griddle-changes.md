@@ -53,6 +53,9 @@ An empty file, created at startup. It is **Valve's own setting**, not a modifica
 asks Steam to open a local debugging port, which is how Griddle applies artwork without a restart.
 CSS Loader and Decky Loader use the identical file.
 
+Steam reads it when it starts, so it takes effect at Steam's *next* launch rather than immediately.
+If Steam was already running the first time Griddle set this up, Griddle offers to restart it.
+
 There is a real cost and it is worth stating plainly. With the flag in place, Steam listens on a
 local port that any program already running as you could connect to. Delete the file and that
 undoes it completely; Griddle falls back to writing artwork files.

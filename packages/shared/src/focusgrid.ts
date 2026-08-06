@@ -16,7 +16,7 @@
  * rather than something to discover with a gamepad in hand.
  *
  * The DOM half — measuring how many columns a wrapping grid actually has, ordering sections by
- * document position, and moving real focus — lives in `apps/desktop/src/focus.tsx`.
+ * document position, and moving real focus — lives in `apps/desktop/src/focus/`.
  */
 
 export type Direction = 'up' | 'down' | 'left' | 'right';

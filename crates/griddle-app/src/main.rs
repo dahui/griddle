@@ -68,6 +68,12 @@ fn main() {
             // is idempotent and never truncates, so this also repairs the file if something
             // removed it (Millennium is known to) — and it is never fatal, because the apply
             // ladder falls back to writing files, which needs no port at all.
+            //
+            // "live apply ready" means the *file* is in place, not that the port is open. Steam
+            // reads it only at startup, so on the launch that creates it a running Steam still has
+            // no port — which silently costs live apply and a few hundred games in All games.
+            // Nothing here can tell the difference, and deliberately does not try: the frontend
+            // asks the port itself (`steam_debug_ready`) and offers a restart.
             if let Ok(ctx) = state.steam() {
                 let sentinel = griddle_core::cdp::Sentinel::for_install(&ctx.install);
                 match sentinel.enable() {
@@ -153,6 +159,9 @@ fn main() {
             commands::set_offer_to_start_steam,
             commands::set_auto_start_steam,
             commands::steam_library_ready,
+            commands::steam_debug_ready,
+            commands::restart_steam,
+            commands::set_offer_to_restart_steam,
         ])
         .run(tauri::generate_context!())
         // The one place a hard exit is right: if the webview cannot start there is no UI in

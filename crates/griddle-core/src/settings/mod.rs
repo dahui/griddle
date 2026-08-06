@@ -177,6 +177,23 @@ pub struct Settings {
     /// into one value on save would quietly discard a choice — the same reasoning as filters,
     /// which are narrowed at query time and never on the way to disk.
     pub auto_start_steam: bool,
+
+    /// Offer to restart Steam when it is running but its debugging port is not answering.
+    ///
+    /// A different question from [`Settings::offer_to_start_steam`], and it needs its own switch
+    /// because the remedy is different and so is the cost: that one asks to *start* a program,
+    /// this one asks to *stop and restart* one, taking any running game with it.
+    ///
+    /// It exists at all because Griddle creates `.cef-enable-remote-debugging` silently at
+    /// startup and Steam only reads it at the *next* start. Until then artwork can only be
+    /// written to disk and **All games** is the offline list, a few hundred games short — and
+    /// nothing about either says so.
+    ///
+    /// `default_true` for the same reason as the field above: a plain `bool` reads back `false`
+    /// for every settings file written before this existed, which would ship the feature switched
+    /// off for exactly the users who already have the problem.
+    #[serde(default = "default_true")]
+    pub offer_to_restart_steam: bool,
 }
 
 /// `#[serde(default)]` for a `bool` is `false`. Every flag here that should survive an older
@@ -227,6 +244,7 @@ impl Default for Settings {
             library_sort: LibrarySort::default(),
             offer_to_start_steam: default_true(),
             auto_start_steam: false,
+            offer_to_restart_steam: default_true(),
         }
     }
 }

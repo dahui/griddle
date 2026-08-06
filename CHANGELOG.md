@@ -6,6 +6,21 @@ that need a sentence rather than a line.
 
 Versions follow [semantic versioning](https://semver.org/).
 
+## Unreleased
+
+Fixed:
+
+- **Up and down in the library moved sideways instead of by a row.** The grid's column count was
+  never measured at all — the measurement was set up in an effect that ran once, before the grid
+  existed, and never again — so the focus model believed every list was one tile wide and all four
+  directions stepped by one tile. The **Current artwork** slots had the same fault.
+- **Griddle now offers to restart Steam when it needs to.** Griddle sets up instant artwork applying
+  by writing a flag Steam reads *when it starts*, so on the first run with Steam already open,
+  neither instant applying nor the full **All games** list was available — and nothing said so. A
+  dialog now offers the restart, and **Settings → Startup** can turn the offer off. It never asks
+  about a Steam that Griddle or you started in the same session, since that one opens its port on
+  its own.
+
 ## 1.0.0 — 2026-08-03
 
 First release. Griddle can:

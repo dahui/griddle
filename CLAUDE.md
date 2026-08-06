@@ -721,6 +721,50 @@ something removed it; Millennium is known to.
 The file-write path stays as the floor of the ladder. It is what makes this shippable if Steam
 moves the API, and it needs no port at all.
 
+#### 🔴 Creating the file is not the same as having the port, and for a year nothing said so
+
+`[VERIFIED-BOX 2026-08-06]` Steam reads `.cef-enable-remote-debugging` **when it starts**. So on the
+launch that first creates it — which for a new user is with Steam already running — the port stays
+shut, and the two things that depend on it both degrade *silently*: artwork can only be written to
+disk, and **All games** falls back to the `localconfig.vdf` proxy, a few hundred games short. The
+maintainer reported it as the second symptom, which is the harder one to attribute.
+
+🔑 **`Sentinel::state` structurally cannot detect this**, which is why nothing caught it. It returns
+`PresentSteamRunning` from `exists() && is_running()` — both true here. Nothing on disk records
+whether Steam has restarted since the file appeared, so the only way to know is to **ask the port**.
+`steam_debug_ready` does, and the frontend offers a restart.
+
+🔴 **The trigger is "Steam is running and the port is unreachable", deliberately *not* "we just
+created the file".** The obvious design is to have `enable()` report created-vs-existed, and it is
+the wrong one twice over: it would silence itself forever for anyone who declined once, and it
+answers a question about *our* bookkeeping rather than the one the user has. `enable()` keeps its
+documented signature and `cdp::sentinel` is untouched.
+
+⚠️ **`fetch_version`, not `SteamJs::connect`.** `connect` also requires `SharedJSContext`, which does
+not exist for the first few seconds of a Steam start — so it reports "unreachable" during a window
+in which restarting Steam achieves nothing. The narrower question is the correct one, and it is one
+loopback GET rather than a second WebSocket beside `steam_library_ready`'s.
+
+🔴 **The real hazard is prompting about a Steam that was about to work by itself**, and a grace
+period is not a sufficient defence. `AutoStartSteam` and `StartSteamPrompt` both re-read the status
+seconds after launching Steam, so `steam_running` flips true while Steam is mid-boot and its port is
+legitimately closed. `App.tsx` therefore latches `steamWasUpAtLaunch` from the **first** status read
+and refuses to ask about any Steam that came up during this session. The ten-poll grace then only
+has to cover "Steam was already booting when Griddle opened", which it comfortably does — the realm
+answers at ~3 s, measured.
+
+⚠️ **Ten polls at 3 s is not 30 seconds, and the code said it was until it was timed.** A probe
+against a port with nothing listening does not fail instantly, so the measured figure is **45–51 s**
+from launch to dialog `[VERIFIED-BOX 2026-08-06]`. Left as it is rather than tuned down: the failure
+directions are not symmetric — late costs half a minute of a list nobody was looking at yet, early
+asks the user to restart a Steam that was about to work.
+
+🟢 **Verified end to end on the real client** `[VERIFIED-BOX 2026-08-06]`, by deleting the sentinel,
+restarting Steam so the port stayed shut, and launching Griddle. It recreated the file, showed
+**479 games** — the offline list, and the reported symptom exactly — raised the dialog, and on
+**Restart Steam** cycled the client; `SteamListWatcher` then reloaded to **680** with no further
+input. The negative case was checked first: with the port already open the dialog never appeared.
+
 ### Never destructively probe
 
 **Delete no file we did not write** — except the same-base-name art siblings inside `grid/`
@@ -765,6 +809,7 @@ architecture.
 | **M9** | 🟢 **The live library merge.** All-games was a `localconfig.vdf` proxy that missed every game owned and never launched here; with Steam up, `collectionStore` fills them in. **479 → 683 games**, one shared type policy, and silent degradation to the offline list when Steam is closed. |
 | **M10** | 🟢 **The startup Steam offer, and Settings → Startup.** With Steam closed a dialog offers to launch it; two switches control that — start it without asking (off), and otherwise offer (on). See below. |
 | **v1.0.0** | 🟢 **Tagged and shipped, 2026-08-03.** The first tag run exposed the `Get-ChildItem -Exclude` bug below — the build was clean and assembling the artifacts was not. The **NSIS installer has been installed and run by the maintainer and works.** |
+| **v1.0.1** | 🟢 **Two post-release bugs, 2026-08-06.** The library grid was never column-measured at all, so every direction moved one tile — `useFocusGrid` is a callback ref now. And the debugging sentinel was created silently with no way to notice Steam had not restarted since; `steam_debug_ready` detects it and a dialog offers the restart. Both are written up above, under the focus model and under the sentinel. |
 | **Next** | No feature work outstanding. What remains is the clean-machine docs walkthrough, the **signing** decision (SignPath Foundation is the free route; see S10), and the undecided **Experimental library tweaks**, which would need the module discovery that went with M6. |
 
 **The M4 changes worth remembering**, all detailed above: `librarycache` is indexed by
@@ -1445,8 +1490,10 @@ valuable feature is the least exposed to a Steam update. Worth keeping true.
 ### 🟢 Controller navigation — the focus model
 
 Three layers, split so the model is testable without a controller and the input source can change
-without touching it: `packages/shared/src/focusgrid.ts` (pure maths) → `apps/desktop/src/focus.tsx`
-(DOM: measurement, real focus, overlay stack) → the views, which register their controls.
+without touching it: `packages/shared/src/focusgrid.ts` (pure maths) → `apps/desktop/src/focus/`
+(DOM: measurement, real focus, overlay stack — `hooks`, `model`, `provider`) → the views, which
+register their controls. ⚠️ Both this line and `focusgrid.ts`'s own module doc said `focus.tsx`
+long after the readability pass turned it into a directory.
 
 **Sections stack vertically and are ordered by document position**, not by a hand-maintained index.
 Within a section, items sit at explicit row/column indices — except wrapping grids, which register
@@ -1468,6 +1515,40 @@ A stale count is invisible in the worst way: every tile renders correctly and on
 wrong, so pressing down moves two rows and it reads as the focus model being broken rather than as
 a measurement nobody retook. Pinned by a test in `focus.test.tsx`, confirmed to fail with
 `attributes` removed.
+
+#### 🔴 Both fixes above assumed the observers were attached. On the library grid they never were
+
+`[VERIFIED-BOX 2026-08-06]` Reported as *"up and down also move horizontally through the list"*, and
+that symptom is exactly what an **unmeasured** section looks like: `buildLayout` reads
+`columns.get(section) ?? 1`, so `flowPosition(index, 1)` gives every tile `{row: index, col: 0}` and
+all four directions step by one tile. Left/right happened to look right, which is why only up/down
+was reported.
+
+`useFocusGrid` read a `useRef` object from inside an effect keyed on `[ctx, section]` — **both
+permanently stable**, `ctx` deliberately so, per the two-context split. `Library` returns a
+`<Spinner>` on its first commit, so the one time that effect ever ran, `ref.current` was `null`. It
+bailed and was never invoked again: no measurement, no `ResizeObserver`, no `MutationObserver`, for
+the life of the process. `CurrentAssets` has the identical shape. `AssetBrowser` escaped only
+because its container happens to render on the first commit.
+
+🔑 **The stability that makes the model efficient is what made this unrecoverable**, and that is the
+generalisable part. The two-context split exists so a cursor move does not re-register 250 controls;
+the same guarantee means an effect that misses its chance never gets another. Anything reading
+`ref.current` under stable dependencies has this bug latent in it.
+
+It is a **callback ref** now, which cannot miss a node: React invokes it whenever one appears,
+changes or goes away. That also fixed a second defect the effect version had even after the
+container existed — `Library` swaps its `<ul>` for a spinner on every scope or sort change and for
+an empty state when the filter matches nothing, `CurrentAssets` for its spinner, `AssetBrowser`
+whenever the Current tab is left and re-entered. Each returning container is a **new element**, and
+a ref object cannot report that, so the observers stayed on the detached one.
+
+🔴 **The first version of the regression test passed against the broken hook**, and the reason is
+worth more than the test. `focus.test.tsx`'s `Spy` built its wrapped context object *inline*, so it
+had a new identity every render — which handed the old effect exactly the dependency churn it needed
+to recover. The spy had accidentally destroyed the property under test. It is `useMemo`'d now.
+**A test double that does not reproduce the real thing's stability guarantee cannot detect the class
+of bug that guarantee exists for.**
 
 #### 🟢 The logo positioner, and two things it did *not* need
 
@@ -2661,16 +2742,27 @@ above — the image and the prose were never read against each other.
 
 ### 🟢 Settings → Startup, and four decisions inside it
 
-Two settings, both about what Griddle does when it opens and Steam is closed:
-`auto_start_steam` (**off**, start it without asking) and `offer_to_start_steam` (**on**, show the
-dialog). The first supersedes the second.
+Two settings about what Griddle does when it opens and Steam is **closed**: `auto_start_steam`
+(**off**, start it without asking) and `offer_to_start_steam` (**on**, show the dialog). The first
+supersedes the second.
 
-🔴 **The two defaults are written differently and that asymmetry is the point.**
-`offer_to_start_steam` uses `#[serde(default = "default_true")]`, because a plain `bool` reads back
-`false` for anyone whose settings file predates the field and would silently disable the feature
-for every existing user — the `filters` trap again. `auto_start_steam` uses the plain default,
-because launching another program is a side effect nobody asked for and `false` is genuinely what
-an older file should mean.
+🔵 **A third was added 2026-08-06, and it is about Steam being *open*:** `offer_to_restart_steam`
+(**on**). Steam running is not the same as Griddle being able to reach it — see the sentinel section
+— so this is a genuinely separate question, not a variation on the first two. It is never hidden,
+which leaves rows `{0, 2}` in the `startup` section while automatic start is on; `rowsIn` builds its
+row list from the items present and steps it by index, so nothing assumes they are contiguous.
+
+🔴 **The defaults are written two different ways and that asymmetry is the point.** Both *offers*
+use `#[serde(default = "default_true")]`, because a plain `bool` reads back `false` for anyone whose
+settings file predates the field and would silently disable the feature for every existing user —
+the `filters` trap again, and for the restart offer that population is precisely the one with the
+problem. `auto_start_steam` uses the plain default, because launching another program is a side
+effect nobody asked for and `false` is genuinely what an older file should mean.
+
+⚠️ This is now two instances of that asymmetry rather than a one-off, and it had been *claimed* and
+never tested. `settings_tests.rs` pins all three, the `auto_start_steam` case as the control — a
+test asserting only the two `true`s would pass just as happily against a struct where every flag
+defaulted on.
 
 🔑 **Supersede, do not clamp.** Turning automatic start on leaves `offer_to_start_steam` exactly as
 the user left it and the exclusion happens where the two are *read*, in `App.tsx`. Writing the
