@@ -16,7 +16,7 @@ import { SCREEN_DEPTH, useFocusItem, useScreenActions } from './focus';
 import { NavSlotCtx } from './navSlot';
 
 const TABS: Tab[] = ['library', 'settings'];
-import { Library } from './views/Library';
+import { entryKey, Library } from './views/Library';
 import { AssetBrowser } from './views/AssetBrowser';
 import { Settings } from './views/Settings';
 import { RestartSteamPrompt } from './views/RestartSteamPrompt';
@@ -48,6 +48,10 @@ export function App() {
   // The library reloads on a change; see `SteamListWatcher` for why this is not just a status
   // refresh.
   const [steamListToken, setSteamListToken] = useState(0);
+  // The game last opened, so backing out of it returns to that tile instead of the top of the
+  // list. It lives here rather than in `Library` for the reason the position is lost at all:
+  // `Library` is unmounted for the whole time a game is open, so it cannot remember anything.
+  const [restoreKey, setRestoreKey] = useState<string | null>(null);
 
   // Whether Steam was up at the moment Griddle read its *first* status.
   //
@@ -80,6 +84,10 @@ export function App() {
   // Stable, or `SteamDebugWatcher`'s effect restarts its poll on every render of this component
   // and the count never reaches the threshold.
   const offerToRestart = useCallback(() => setOfferRestart(true), []);
+
+  // Stable for the same class of reason: it is in the restoring tile's effect dependencies, and
+  // an inline arrow would re-run that effect on every render of this component.
+  const clearRestoreKey = useCallback(() => setRestoreKey(null), []);
 
   // The outermost screen, so it answers the bumpers only when nothing more specific does — and B
   // only once every dialog and every inner screen has had its turn.
@@ -184,13 +192,21 @@ export function App() {
           <AssetBrowser
             entry={selected}
             onBack={() => {
+              // Remembered before the list is asked to rebuild, so it lands on the game just
+              // left rather than at the top of several hundred.
+              setRestoreKey(entryKey(selected));
               setSelected(null);
               // Re-read on the way back so newly applied art shows in the list.
               refresh();
             }}
           />
         ) : (
-          <Library onPick={setSelected} reloadToken={steamListToken} />
+          <Library
+            onPick={setSelected}
+            reloadToken={steamListToken}
+            restoreKey={restoreKey}
+            onRestored={clearRestoreKey}
+          />
         )}
       </NavSlotCtx.Provider>
     </Shell>

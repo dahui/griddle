@@ -71,10 +71,21 @@ jobs:
           $version = "${{ steps.version.outputs.version }}"
           New-Item -ItemType Directory -Force artifacts | Out-Null
 
+          # Every artifact is checked against the version resource it carries, because the whole
+          # class of failure here is *shipping the wrong file under the right name* -- and a
+          # correctly-named copy of the wrong build passes every other check there is.
+          function Assert-Version($path, $expected) {
+              $stamped = (Get-Item $path).VersionInfo.ProductVersion
+              if ($stamped -ne $expected) {
+                  throw "$path reports version '$stamped', expected '$expected'"
+              }
+          }
+
           # Renamed from griddle-app.exe: the crate name is an implementation detail and the
           # product is called Griddle. The installer already does this rename itself.
           $staging = "staging/Griddle"
           New-Item -ItemType Directory -Force $staging | Out-Null
+          Assert-Version target/release/griddle-app.exe $version
           Copy-Item target/release/griddle-app.exe "$staging/Griddle.exe"
           # Apache-2.0 section 4 requires LICENSE and NOTICE travel with every distribution, and
           # the crates linked into the exe require their own notices. A zip is a distribution.
@@ -83,9 +94,23 @@ jobs:
           $portable = "artifacts/Griddle-$version-portable.zip"
           Compress-Archive -Path "$staging/*" -DestinationPath $portable
 
-          $setup = Get-ChildItem target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
-          if (-not $setup) { throw "no NSIS installer was produced" }
-          Copy-Item $setup.FullName "artifacts/Griddle_${version}_x64-setup.exe"
+          # Pinned to the exact filename the version stamp produces -- never "the first match".
+          #
+          # This shipped broken once. `Get-ChildItem *-setup.exe | Select-Object -First 1` sorts
+          # ASCII-ascending, so a stale bundle left in `target/` by an earlier build wins:
+          # `Griddle_0.0.0_x64-setup.exe` sorts ahead of `Griddle_1.1.0_x64-setup.exe`, and the
+          # release then carries a months-old installer under the new version's name. `tauri
+          # build` does not clean this directory, and `Swatinem/rust-cache` can restore it, so
+          # "the checkout is fresh" is not the protection it looks like.
+          #
+          # The tell was ugly: the portable zip is built from `target/release/griddle-app.exe`
+          # directly, so it was correct, and only the installer was old. That reads as "the build
+          # embedded old code" rather than as a file-picking bug.
+          $setupName = "Griddle_${version}_x64-setup.exe"
+          $setup = "target/release/bundle/nsis/$setupName"
+          if (-not (Test-Path $setup)) { throw "no NSIS installer at $setup" }
+          Copy-Item $setup "artifacts/$setupName"
+          Assert-Version "artifacts/$setupName" $version
 
           # Written with names relative to the artifacts directory so `sha256sum -c` works after
           # downloading them into one folder.

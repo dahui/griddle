@@ -1550,6 +1550,32 @@ to recover. The spy had accidentally destroyed the property under test. It is `u
 **A test double that does not reproduce the real thing's stability guarantee cannot detect the class
 of bug that guarantee exists for.**
 
+#### 🟢 Coming back from a game returns to that game, not to the top
+
+`[VERIFIED-BOX 2026-08-06]` Reported as navigation being "very tedious": opening a game and backing
+out dropped the user at the top of a list of 677, every time.
+
+🔑 **The cause is the same structural fact that made the measurement bug unrecoverable** — `App`
+renders `AssetBrowser` **or** `Library`, never both, so the list is unmounted for the entire time a
+game is open and cannot remember anything. That is why `restoreKey` lives in `App`: it is the only
+thing on that path that survives the trip.
+
+**The tile is restored, not a scroll offset**, and that is the whole design. A pixel offset is wrong
+the moment the list length changes, and — more to the point — it would leave the *cursor* at the
+first tile, so the first D-pad press after coming back would still fling the user to the top. Taking
+DOM focus puts the scroll and the controller cursor back in one move.
+
+⚠️ **`queueMicrotask`, not a bare `.focus()` in the effect.** This is the welcome-screen trap
+exactly: React runs child effects before parent effects, so when the tile's effect fires, neither its
+own registration nor the provider's `focusin` listener is guaranteed to be installed. Two tests pin
+it and **both were confirmed to fail** with the microtask removed — the first asserts the model's
+`.focused` class lands on the right tile, and the second presses a direction afterwards, because the
+class alone would still be satisfied by a model that drew a ring and kept its cursor at tile 0. That
+second test is the one that actually describes the bug.
+
+`onRestored` clears the key once consumed, so a later reload — a scope change, or Steam's list
+arriving — cannot re-hijack the cursor.
+
 #### 🟢 The logo positioner, and two things it did *not* need
 
 The geometry was already written — `logo.rs` and `logo.ts` against one shared fixture — for the
@@ -1972,6 +1998,46 @@ explicit `throw` so an empty artifacts directory says so itself.
 steps are unexercised by every gate and CI run; the first execution of that code was the first
 release. Extracting the step into a script CI could run against a fixture directory is the obvious
 answer and has not been done.
+
+#### 🔴 The sibling bug, and this one actually shipped: `Select-Object -First 1` published a build from five days earlier
+
+`[VERIFIED-BOX 2026-08-06]` The v1.1.0 release went out with an installer that was **not** the
+build it was named after. `Griddle_1.1.0_x64-setup.exe` on the release page was a byte-for-byte
+copy of `Griddle_0.0.0_x64-setup.exe`, built on 2026-08-01 — before the logo work landed, and
+before v1.0.0 itself.
+
+The line was `Get-ChildItem target/release/bundle/nsis/*-setup.exe | Select-Object -First 1`.
+`Get-ChildItem` sorts ASCII-ascending, so `Griddle_0.0.0…` sorts **ahead of** `Griddle_1.1.0…`,
+and `tauri build` does not clean that directory. In CI the checkout is fresh — but
+`Swatinem/rust-cache` restores `target/`, so "fresh checkout" was never the protection it looked
+like, and it is not the protection at all for a maintainer building locally.
+
+🔑 **The symptom pointed at the compiler, not at the file picker.** The portable zip is built from
+`target/release/griddle-app.exe` by an exact path, so it was **correct**; only the installer was
+old. The report was *"multiple regressions, almost like it built old code"* — missing logo,
+missing settings toggles — which reads as a stale-frontend or bad-build problem, and there is a
+whole section above about exactly that (`cargo build --release` embedding a stale `dist`). Two
+artifacts from one build disagreeing is the tell: **when one artifact is right and another is
+wrong, the build is fine and the packaging is not.**
+
+⚠️ **It was found on a fresh-Windows handheld and was invisible here**, which is its own lesson.
+The dev machine had 1.0.0 installed and the maintainer had run `target/release/griddle-app.exe`
+directly — both correct. Only a machine with no prior Griddle, installing from the published
+installer, exercised the broken artifact.
+
+**Three things changed, and the third is the one that generalises:**
+
+| Fix | Why |
+|---|---|
+| The installer is selected by its **exact expected filename**, never a glob plus "first match" | A glob cannot express "the one I just built" |
+| `if (-not (Test-Path $setup)) { throw }` | A missing file must say so, not silently select a neighbour |
+| 🔑 **Every artifact is asserted against the version resource it carries** | This is the only check that a *correctly-named copy of the wrong build* cannot pass |
+
+That last one is the general principle: the failure class is **shipping the wrong file under the
+right name**, and every check keyed on the *name* — the filename, the size, the checksum computed
+after the copy — passes happily. `(Get-Item $path).VersionInfo.ProductVersion` was verified to read
+`0.0.0` from the stale installer and `1.1.0` from the real one, so the guard was fired against the
+real failure before being trusted. The same assertion now covers `griddle-app.exe` too.
 
 ### M1 spike — all resolved
 

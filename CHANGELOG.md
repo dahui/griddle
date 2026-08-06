@@ -6,6 +6,23 @@ that need a sentence rather than a line.
 
 Versions follow [semantic versioning](https://semver.org/).
 
+## 1.1.1 — 2026-08-06
+
+Fixed:
+
+- **Backing out of a game returns to that game in the list.** It used to reload the library at the
+  top, so getting back to where you were meant scrolling through hundreds of games again. The
+  controller cursor comes back with it, so the next press continues from that tile.
+- **The 1.1.0 installer briefly carried the wrong build.** The release step picked the first
+  installer it found in the build directory rather than the one it had just built, so for a short
+  window `Griddle_1.1.0_x64-setup.exe` was an old development build — no logo, and missing the
+  newer settings. The release has been rebuilt, and every artifact is now checked against the
+  version it reports before it is published.
+
+  An affected install is easy to spot: Add/Remove Programs lists it as **0.0.0** rather than
+  1.1.0, and the app shows no Griddle logo in its header. Reinstall from the latest release. The
+  portable zip was never affected.
+
 ## 1.1.0 — 2026-08-06
 
 Fixed:

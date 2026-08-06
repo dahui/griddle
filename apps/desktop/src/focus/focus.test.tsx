@@ -9,7 +9,7 @@ import { describe, expect, mock, test } from 'bun:test';
 import { act, cleanup, render } from '@testing-library/react';
 import { useContext, useEffect, useMemo, useRef } from 'react';
 import { FocusCtx, FocusProvider } from './provider';
-import { useFocusGrid, useFocusItem, useScreenActions } from './hooks';
+import { useFocusGrid, useFocusGridItem, useFocusItem, useScreenActions } from './hooks';
 import { SCREEN_DEPTH } from './model';
 
 /**
@@ -287,6 +287,66 @@ describe('Escape', () => {
       </FocusProvider>,
     );
     expect(press('Escape')).toBe(false);
+    cleanup();
+  });
+});
+
+describe('restoring the cursor to a particular tile', () => {
+  /**
+   * What a library tile does when the user comes back from the game they opened: it focuses
+   * *itself*, and the model has to end up agreeing that it is the cursor.
+   *
+   * `queueMicrotask` is the whole subtlety, and it is not decoration. React runs child effects
+   * before parent effects, so at the moment this effect fires neither this tile's own
+   * registration nor the provider's `focusin` listener is guaranteed to be in place. A microtask
+   * runs after the entire effect pass, by which point both are.
+   */
+  function Tile({ index, restore }: { index: number; restore: boolean }) {
+    const { ref, focused } = useFocusGridItem<HTMLButtonElement>('library', index);
+    useEffect(() => {
+      if (!restore) return;
+      queueMicrotask(() => ref.current?.focus({ preventScroll: true }));
+    }, [restore, ref]);
+    return (
+      <button
+        ref={ref}
+        type="button"
+        data-testid={`tile-${index}`}
+        className={focused ? 'focused' : ''}
+      />
+    );
+  }
+
+  function grid(restoreAt: number) {
+    return render(
+      <FocusProvider>
+        {[0, 1, 2, 3].map((i) => (
+          <Tile key={i} index={i} restore={i === restoreAt} />
+        ))}
+      </FocusProvider>,
+    );
+  }
+
+  test('a tile that focuses itself becomes the cursor', async () => {
+    grid(2);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(document.querySelector('.focused')?.getAttribute('data-testid')).toBe('tile-2');
+    cleanup();
+  });
+
+  test('and the next press continues from it, not from the top of the list', async () => {
+    // The assertion that matters. The `.focused` class alone would still be satisfied by a model
+    // that had drawn a ring somewhere and kept its cursor at the first tile -- which is exactly
+    // the "dropped at the top" complaint this restores from, just one press later.
+    grid(2);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    press('ArrowLeft');
+    expect(document.querySelector('.focused')?.getAttribute('data-testid')).toBe('tile-1');
     cleanup();
   });
 });

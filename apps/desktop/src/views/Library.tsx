@@ -39,9 +39,22 @@ const SORT_LABEL: Record<LibrarySort, string> = {
   most_played: 'Most played',
 };
 
+/**
+ * One entry's identity in this list.
+ *
+ * Shared with `App`, which remembers it across the trip into a game so the way back can land on
+ * the right tile. A Steam appid and a shortcut appid are different number spaces, so the kind has
+ * to be part of the key.
+ */
+export function entryKey(entry: LibraryEntry): string {
+  return `${entry.kind}-${entry.app_id}`;
+}
+
 export function Library({
   onPick,
   reloadToken = 0,
+  restoreKey = null,
+  onRestored,
 }: {
   onPick: (entry: LibraryEntry) => void;
   /**
@@ -49,6 +62,17 @@ export function Library({
    * see the effect below.
    */
   reloadToken?: number;
+  /**
+   * The game to land on, from [`entryKey`] — set when returning from one.
+   *
+   * This exists because `App` unmounts the whole list while a game is open, so coming back is a
+   * fresh mount with no scroll position and no cursor: the user was dropped at the top of a list
+   * of several hundred games, every time. Restoring the *tile* rather than a scroll offset also
+   * puts the controller cursor back, which a pixel offset could not.
+   */
+  restoreKey?: string | null;
+  /** Called once the restore has been consumed, so it cannot fire again on a later load. */
+  onRestored?: () => void;
 }) {
   const [entries, setEntries] = useState<LibraryEntry[] | null>(null);
   const [error, setError] = useState<UiError | null>(null);
@@ -209,9 +233,11 @@ export function Library({
         <ul className="library" ref={grid} style={{ '--tile': `${tile}rem` } as React.CSSProperties}>
           {shown.map((entry, index) => (
             <GameTile
-              key={`${entry.kind}-${entry.app_id}`}
+              key={entryKey(entry)}
               index={index}
               entry={entry}
+              restore={restoreKey !== null && entryKey(entry) === restoreKey}
+              onRestored={onRestored}
               onPick={() => onPick(entry)}
             />
           ))}
@@ -339,13 +365,38 @@ function SortOption({
 function GameTile({
   index,
   entry,
+  restore,
+  onRestored,
   onPick,
 }: {
   index: number;
   entry: LibraryEntry;
+  /** This is the game the user just came back from; take the cursor and scroll into view. */
+  restore: boolean;
+  onRestored?: () => void;
   onPick: () => void;
 }) {
   const { ref, focused } = useFocusGridItem<HTMLButtonElement>('library', index);
+
+  useEffect(() => {
+    if (!restore) return;
+    // `queueMicrotask`, not a bare call in this effect, and the distinction is load-bearing.
+    //
+    // The focus model learns about focus from a `focusin` listener that looks the element up in
+    // its registry, and React runs **child effects before parent effects** -- so at this point
+    // neither this tile's own registration effect nor the provider's listener has necessarily
+    // run. A microtask runs after the whole effect pass, by which point both hold. This is the
+    // same trap the welcome screen's caret hit, where it looked focused and the first D-pad
+    // press revealed the model had never been told.
+    queueMicrotask(() => {
+      // The scroll is ours: the browser's own focus scroll would put the tile at whichever edge
+      // it entered from, and `center` is what reads as "where you were".
+      ref.current?.focus({ preventScroll: true });
+      ref.current?.scrollIntoView({ block: 'center' });
+      onRestored?.();
+    });
+  }, [restore, onRestored, ref]);
+
   return (
     <li>
       <button
