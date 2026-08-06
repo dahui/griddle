@@ -6,7 +6,7 @@ that need a sentence rather than a line.
 
 Versions follow [semantic versioning](https://semver.org/).
 
-## Unreleased
+## 1.1.0 — 2026-08-06
 
 Fixed:
 
